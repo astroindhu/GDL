@@ -54,11 +54,13 @@ public:
   void Iconic();
   void DeIconic();
   bool GetGin(PLGraphicsIn *gin, int mode);
+  bool GetExtendedGin(PLGraphicsIn *gin, int mode);
   void WarpPointer(DLong x, DLong y);
   void Flush();
   void SetDoubleBuffering();
   void UnSetDoubleBuffering();
   bool HasDoubleBuffering();
+  bool HasSafeDoubleBuffering();
 };
 
 #endif

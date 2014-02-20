@@ -22,6 +22,8 @@
 #ifdef HAVE_LIBWXWIDGETS
 
 #include <wx/wx.h>
+#include <wx/treebase.h>
+#include <wx/treectrl.h>
 
 #include <deque>
 #include <map>
@@ -758,6 +760,8 @@ DLong tabMode   ;
 DString toolTip ; 
 DString value;  
   
+wxTreeItemId treeItemID;
+
 public:
   GDLWidgetTree( WidgetIDT parentID, EnvT* e, DString value_,
                    bool alignBottom_,
@@ -795,11 +799,14 @@ class GDLWidgetSlider: public GDLWidget
   DLong value; 
   DLong minimum; 
   DLong maximum;
+  DString title;
 public:
   GDLWidgetSlider( WidgetIDT parentID, EnvT* e,
 		   DLong value_, DLong minimum_, DLong maximum_,
 		   bool vertical,
-		   bool suppressValue);
+		   bool suppressValue,
+		   DString title
+ 		);
 
   ~GDLWidgetSlider();
 

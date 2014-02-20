@@ -179,7 +179,7 @@ namespace lib {
     // private fields
     private: SizeT _nParam;
     private: bool overplot;
-    private: bool isDB;
+    private: bool isDB; //see below why commented.
 
     // common helper methods
     protected: inline SizeT nParam() { return _nParam; }
@@ -199,7 +199,8 @@ namespace lib {
 
       GDLGStream* actStream = GraphicsDevice::GetDevice()->GetStream();
       if (actStream == NULL) e->Throw("Unable to create window.");
-      isDB = actStream->HasDoubleBuffering();
+      //double buffering kills the logic and operation of XOR modes. Use HasSafeDoubleBuffering() that tests this feature.)
+      isDB = actStream->HasSafeDoubleBuffering();
       if (isDB) actStream->SetDoubleBuffering();
       DString name = (*static_cast<DStringGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("NAME"), 0)))[0];
       if (name == "X") 
@@ -217,7 +218,7 @@ namespace lib {
 
       post_call(e, actStream);
       if (isDB) actStream->eop(); else actStream->flush();
-      if(isDB) actStream->UnSetDoubleBuffering();
+      if (isDB) actStream->UnSetDoubleBuffering();
       actStream->Update();
     } // }}}
   };

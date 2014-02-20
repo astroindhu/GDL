@@ -619,3 +619,10 @@
            - WSHOW works irregularly, depending on the window manager.
 
 
+0.9.5:
+           - lot of improvments in Widgets related code
+           - TIC and TOC
+           - adding !Const
+           - initial import of NetCDF-4 related codes:
+             NCDF_GROUPSINQ, NCDF_GROUPNAME, NCDF_GROUPDEF, NCDF_FULLGROUPNAME,
+             NCDF_GROUPPARENT, NCDF_DIMIDSINQ, NCDF_NCIDINQ, NCDF_VARIDSINQ

@@ -26,7 +26,7 @@
 ;                  These lines will be discarded as records, but are available
 ;                  with the header keyword
 ;
-;   delimeter      If set (or non equal to ''), the records will be split 
+;   delimiter      If set (or non equal to ''), the records will be split 
 ;                  according to the supplied delimiter locations and the length
 ;                  of the fields is not necessarily the same for all records. 
 ;                  Otherwise, template.fieldlocations will be used to identify 
@@ -99,6 +99,7 @@
 ;   06-APr-2008 : m_schellens: made data_start independent of header
 ;   15-Nov-2011 : A. Coulais : better management of dir/file and
 ;                 missing file
+;   05-Feb-2014 : G. Duvert : avoid unlawful tag names 
 ;
 ;-
 ; LICENCE:
@@ -317,6 +318,22 @@ endif
 fieldcount  = template.fieldcount
 fieldtypes  = template.fieldtypes
 fieldnames  = template.fieldnames
+;fieldnames must not begin with a Number; blanks will be replaced by '_'. fieldnames must not be reserved words.
+RWORDS=['AND','BEGIN','BREAK','CASE','COMMON','COMPILE_OPT','CONTINUE','DO',$
+'ELSE','END','ENDCASE','ENDELSE','ENDFOR','ENDFOREACH','ENDIF','ENDREP',$
+'ENDSWITCH','ENDWHILE','EQ','FOR','FOREACH','FORWARD_FUNCTION','FUNCTION',$
+'GE','GOTO','GT','IF','INHERITS','LE','LT','MOD','NE','NOT','OF','ON_IOERROR',$
+'OR','PRO','REPEAT','SWITCH','THEN','UNTIL','WHILE','XOR'] 
+for ifield=0L,n_elements(fieldnames)-1 do begin
+ if total(strmatch(RWORDS,fieldnames[ifield],/FOLD_CASE)) ne 0 then Message,'Illegal field name: '+fieldnames[ifield]
+ ;unblank blanks:
+  b=byte(fieldnames[ifield])
+  for ibyte=0L,n_elements(b)-1 do if b[ibyte] eq 32 then b[ibyte]=95
+  fieldnames[ifield]=string(b)
+ ; test unconsistencies:
+ if stregex(fieldnames[ifield],'[0123456789]') eq 0 then Message,'Illegal field name: '+fieldnames[ifield]
+ if stregex(fieldnames[ifield],'[^ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]',/FOLD_CASE) ne -1 then Message,'Illegal field name: '+fieldnames[ifield]
+end
 fieldlocs   = template.fieldlocations
 fieldgroups = template.fieldgroups
 

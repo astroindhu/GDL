@@ -1094,6 +1094,10 @@ namespace lib {
     SizeT nParam=e->NParam();
 
     BaseGDL* p0 = e->GetNumericParDefined( 0);
+
+    if (p0->Rank() == 0) 
+      e->Throw( "Expression must be an array in this context: " + e->GetParString(0));
+
     SizeT nEl = p0->N_Elements();
 
     if( p0->Type() == GDL_COMPLEX || p0->Type() == GDL_COMPLEXDBL)
@@ -3646,7 +3650,7 @@ namespace lib {
 	  res[j] = sign * sphPlm.val;
 	*/
 	res[j] = sign * gsl_sf_legendre_sphPlm(l, abs(m), cos(theta[j * step_theta]));
-	res[j] *= exp(complex<T_phi>(0., m * phi[j * step_phi]));
+	res[j] *= T_res(std::exp(complex<T_phi>(0., m * phi[j * step_phi])));
       }
   }
   template <class T_phi, class T_res>

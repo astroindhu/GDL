@@ -858,6 +858,20 @@ public:
     gestw.flags = InputHint;
     XSetWMHints(xwd->display, dev->window, &gestw);
     return true;
+  }  
+  
+  bool SetFocus()
+  {
+    PLStream* pls;
+    plgpls( &pls);
+    XwDev *dev = (XwDev *) pls->dev;
+    if( dev == NULL) return false;
+    XwDisplay *xwd = (XwDisplay *) dev->xwd;
+    XWMHints gestw;
+    gestw.input = TRUE;
+    gestw.flags = InputHint;
+    XSetWMHints(xwd->display, dev->window, &gestw);
+    return true;
   }
   bool EnableBackingStore(bool enable)
    {
@@ -1110,8 +1124,8 @@ public:
 
     DLong tru=0;
     e->AssureLongScalarKWIfPresent( "TRUE", tru);
-    if (rank < 2 || rank > 3) e->Throw("Image array must have rank 2 or 3");
-    if (rank == 2 && tru !=0 ) e->Throw("Array must have 3 dimensions: " +e->GetParString(0));
+    if (rank < 1 || rank > 3) e->Throw("Image array must have rank 1, 2 or 3");
+    if (rank <= 2 && tru !=0 ) e->Throw("Array must have 3 dimensions: " +e->GetParString(0));
     if (tru < 0 || tru > 3) e->Throw("Value of TRUE keyword is out of allowed range.");
     if (tru == 1 && xwd->depth < 24) e->Throw("Device depth must be 24 or greater for true color display");
 
@@ -1121,7 +1135,12 @@ public:
     DByteGDL* p0B;
     Guard<BaseGDL> guardP0B;
     int width, height;
-    if (rank == 2) {
+    if (rank == 1) {
+      p0B =static_cast<DByteGDL*>(p0->Convert2(GDL_BYTE,BaseGDL::COPY));     guardP0B.Init( p0B);
+      if (orderVal != 0) {p0B->Reverse(0);}
+      width = p0B->Dim(0);
+      height = 1;
+    } else if (rank == 2) {
       p0B =static_cast<DByteGDL*>(p0->Convert2(GDL_BYTE,BaseGDL::COPY));     guardP0B.Init( p0B);
       if (orderVal != 0) {p0B->Reverse(1);}
       width = p0B->Dim(0);

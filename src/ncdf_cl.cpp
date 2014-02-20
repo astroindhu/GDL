@@ -4,7 +4,7 @@
     begin                : March 24 2004
     copyright            : (C) 2004 by Christopher Lee
     email                : leec_gdl@publius.co.uk
- ***************************************************************************/
+***************************************************************************/
 
 /***************************************************************************
  *                                                                         *
@@ -27,22 +27,14 @@
 
 #include <string>
 #include <fstream>
-#include <memory>
-#include <gsl/gsl_sys.h>
-#include <gsl/gsl_linalg.h>
-#include <gsl/gsl_sf.h>
+#include <iostream>
 
 #include "datatypes.hpp"
-#include "math_utl.hpp"
 #include "envt.hpp"
 #include "dpro.hpp"
 #include "dinterpreter.hpp"
+
 #include "ncdf_cl.hpp"
-#include "terminfo.hpp"
-#include "typedefs.hpp"
-
-#include "time.h"
-
 
 #define GDL_DEBUG
 //#undef GDL_DEBUG
@@ -70,6 +62,9 @@ namespace lib {
 
   void ncdf_handle_error(EnvT *e, int status, const char *function)
   {
+    // function is no more used ... can we used it for extra informational purpose ??
+    // cout << function << endl;
+
     if(status != NC_NOERR)
       {
 	string error;
@@ -92,7 +87,7 @@ namespace lib {
 	else if(status==NC_EEXIST) 	/* netcdf file exists && NC_NOCLOBBER */
 	  {
 	    e->AssureScalarPar<DStringGDL>(0, s);
-	    error+="Unable to create the file, "  + s + ". ";
+	    error+="Unable to create the file \""  + s + "\". ";
 	    error+="(NC_ERROR=-35)";
 	  }
 	else if(status==NC_EINVAL) 	/* Invalid Argument */
@@ -145,30 +140,30 @@ namespace lib {
 	  }
 	else if(status==NC_EBADDIM)  	/* Invalid dimension id or name */  
 	  {
-		size_t nParam=e->NParam();
+	    size_t nParam=e->NParam();
 
-		if(nParam >= 3)
-		{
-			BaseGDL* v=e->GetParDefined(2);
-			DIntGDL* dim_in=static_cast<DIntGDL*>(v->Convert2(GDL_INT, BaseGDL::COPY));
-			Guard<DIntGDL> dim_in_guard( dim_in);
-			int var_ndims=dim_in->N_Elements();
-			if(var_ndims > NC_MAX_VAR_DIMS)
-                          e->Throw("NCDF internal error in error handler (too many dimension IDs).");
-			error += "No Dimension with ID = ";
-			for (int i=0; i<var_ndims;++i)
-				error += i2s((*dim_in)[i]) + " ";
-			error += "found. ";
-		}
-		else
-		{
-            DLong id;
-            e->AssureLongScalarPar( 0, id);
+	    if(nParam >= 3)
+	      {
+		BaseGDL* v=e->GetParDefined(2);
+		DIntGDL* dim_in=static_cast<DIntGDL*>(v->Convert2(GDL_INT, BaseGDL::COPY));
+		Guard<DIntGDL> dim_in_guard( dim_in);
+		int var_ndims=dim_in->N_Elements();
+		if(var_ndims > NC_MAX_VAR_DIMS)
+		  e->Throw("NCDF internal error in error handler (too many dimension IDs).");
+		error += "No Dimension with ID = ";
+		for (int i=0; i<var_ndims;++i)
+		  error += i2s((*dim_in)[i]) + " ";
+		error += "found. ";
+	      }
+	    else
+	      {
+		DLong id;
+		e->AssureLongScalarPar( 0, id);
 	    
-			error += "Invalid dimension or name.  ID = ";
+		error += "Invalid dimension or name.  ID = ";
 			
-			error += i2s(id) + " ";
-		}	    
+		error += i2s(id) + " ";
+	      }	    
 	    error+="(NC_ERROR=-46)";
 	  }
 	else if(status==NC_EUNLIMPOS) 	/* NC_UNLIMITED in the wrong index */ 
@@ -184,17 +179,17 @@ namespace lib {
 	  {
 	    error += "Variable enquiry failed, ";
             if (e->GetPar(1)->Type() == GDL_STRING)
-            {
-              DString id;
-              e->AssureStringScalarPar( 1, id);
-              error += "\"" + id + "\"";
-            }
+	      {
+		DString id;
+		e->AssureStringScalarPar( 1, id);
+		error += "\"" + id + "\"";
+	      }
             else
-            {
-              DLong id;
-              e->AssureLongScalarPar( 1, id);
-	      error += i2s(id);	    
-            }
+	      {
+		DLong id;
+		e->AssureLongScalarPar( 1, id);
+		error += i2s(id);	    
+	      }
 	    error += " is not a valid variable id. ";
 	    error += "(NC_ERROR=-49)";
 	  }
@@ -240,7 +235,7 @@ namespace lib {
 	    error+="(NC_ERROR=-58)";
 	  }
 	else if(status==NC_EBADNAME)	/* Attribute or variable name
-                                        contains illegal characters */  
+					   contains illegal characters */  
 	  {
 	    error+="(NC_ERROR=-59)";
 	  }
@@ -259,7 +254,7 @@ namespace lib {
 	  }
 	else 
 	  {
-	  /*unknown error*/
+	    /*unknown error*/
 	    error+=nc_strerror(status);
 	    error+=" (NC_ERROR="+i2s(status)+")";
 	  }
@@ -270,7 +265,14 @@ namespace lib {
 
   }
 
-  //open the ncdf file of given filename
+  // a way to test status of local file
+  bool is_readable( const std::string & file ) 
+  { 
+    std::ifstream fichier( file.c_str() ); 
+    return !fichier.fail(); 
+  }
+  
+  //open the ncdf file of given filename OR an URL+filename
   BaseGDL * ncdf_open(EnvT * e)
   {
     size_t nParam=e->NParam(1);
@@ -279,20 +281,52 @@ namespace lib {
     DString s;
     e->AssureScalarPar<DStringGDL>(0, s);
     WordExp(s);
-
+    
     int cdfid,status;
+    
     if(e->KeywordSet("WRITE") &&!e->KeywordSet("NOWRITE"))
-    {
-      status=nc_open(s.c_str(), NC_WRITE, &cdfid);
-    } else {
-      status=nc_open(s.c_str(), NC_NOWRITE, &cdfid);
+      {
+	status=nc_open(s.c_str(), NC_WRITE, &cdfid);
+      }
+    else
+      {
+	status=nc_open(s.c_str(), NC_NOWRITE, &cdfid);
+      }
+    
+    bool debug=FALSE;
+    if (debug) {
+      cout << "NCDF_OPEN: filename (or url) : " << s << endl;
+      cout << "NCDF_OPEN: status : " << status << endl;
     }
-
-    ncdf_handle_error(e,status,"NCDF_OPEN");
-
+    
+    // we try to add few extra informations to help to understand why the
+    // file or link was not opened
+    
+    if (status != 0) {
+      
+      if ((status == -31) | (status == 2)) 
+	{
+	  // before any NetCDF stuff, we check whether the file exists ...
+	  if (!is_readable(s))
+	    {
+	      Warning("NCDF_OPEN: file not found or not readable");
+	      e->Throw("Unable to open the file \""+s+"\". (NC_ERROR="+i2s(status)+")");
+	    }
+	}
+	  
+      if (status == -51) 
+	{
+	  Warning("NCDF_OPEN: file exists but not in NetCDF format(s)");
+#ifndef USE_NETCDF4
+	  Warning("NCDF_OPEN: GDL was compiled without support to new NetCDF-4 format(s)");
+#endif
+	  e->Throw("Unable to open the file \""+s+"\". (NC_ERROR=-51)");
+	} 
+	  
+      ncdf_handle_error(e,status,"NCDF_OPEN");
+    }
     return new DLongGDL(cdfid);
   }
-
 
   //close the NetCDF file
   void ncdf_close(EnvT* e)
@@ -343,45 +377,62 @@ namespace lib {
   BaseGDL * ncdf_create(EnvT * e)
   {
     size_t nParam=e->NParam(1);
-    if(nParam != 1) throw GDLException(e->CallingNode(),
-				       "NCDF_CREATE: Wrong number of arguments.");
-
     
     DString s;
     e->AssureScalarPar<DStringGDL>(0, s);
 
-
+    int format;
+    format = NC_FORMAT_CLASSIC;
+    if (e->KeywordSet("NETCDF3_64BIT")) 
+      {
+	Warning("keyword NETCDF3_64BIT not ready.");
+	format= NC_FORMAT_64BIT;
+      }
+    if (e->KeywordSet("NETCDF4_FORMAT"))
+      {
+#ifndef USE_NETCDF4
+	e->Throw("GDL was compiled without support to new NetCDF-4 format(s)");
+#endif
+	Warning("keyword NETCDF4_FORMAT experimental.");
+	format=NC_FORMAT_NETCDF4;
+      }
+ 
     int cdfid,status;
+
+    status=nc_set_default_format(format, NULL);
+
     if(e->KeywordSet("CLOBBER") &&!e->KeywordSet("NOCLOBBER"))
       {
 	status=nc_create(s.c_str(),
-		       NC_CLOBBER,
-		       &cdfid);
+			 NC_CLOBBER,
+			 &cdfid);
       } else {
-	status=nc_create(s.c_str(),
+      status=nc_create(s.c_str(),
 		       NC_NOCLOBBER,
 		       &cdfid);
+     
+      if (status == -35) {
+	Warning("NCDF_CREATE: the file already exists, use /CLOBBER to (try to) overwrite !");
       }
+    }
 
-      ncdf_handle_error(e,status,"NCDF_CREATE");
-
+    ncdf_handle_error(e,status,"NCDF_CREATE");
+    
     return new DLongGDL(cdfid);
-
-
   }
 
   void ncdf_control(EnvT* e)
   {
     /*keywords
- 0   ABORT = restores or deletes file
- 1   ENDEF = ends define mode, starts data mode
- 2   FILL = fills the netcdf file with certain values
- 3   NOFILL = opposite of FILL
- 4   VERBOSE = verbose error messages, hmm
- 5   NOVERBOSE = opposite of verbose
- 6   OLDFILL=variable ->result of last fill
- 7   REDEF = puts file into define mode
- 8   SYNC = update the file on disk
+      0   ABORT = restores or deletes file
+      1   ENDEF = ends define mode, starts data mode
+      2   FILL = fills the netcdf file with certain values
+      3   NOFILL = opposite of FILL
+      4   VERBOSE = verbose error messages, hmm
+      5   NOVERBOSE = opposite of verbose
+      6   OLDFILL=variable ->result of last fill
+      7   REDEF = puts file into define mode
+      8   SYNC = update the file on disk
     */
     size_t nParam=e->NParam(1);
     int status,omode;
@@ -399,11 +450,11 @@ namespace lib {
 
     status=NC_NOERR;
     if(e->KeywordSet(0))//ABORT
-	status=nc_abort(cdfid);
+      status=nc_abort(cdfid);
     else if(e->KeywordSet(1))//ENDEF
-	status=nc_enddef(cdfid);
+      status=nc_enddef(cdfid);
     else if(e->KeywordSet(2))//FILL 
-	status=nc_set_fill(cdfid,NC_FILL,&omode);
+      status=nc_set_fill(cdfid,NC_FILL,&omode);
     else if(e->KeywordSet(3))//NOFILL
       status=nc_set_fill(cdfid,NC_NOFILL,&omode);
     else if(e->KeywordSet(4))//VERBOSE
@@ -411,9 +462,9 @@ namespace lib {
     else if(e->KeywordSet(5))//NOVERBOSE
       ncdf_verbose=false;
     else if(e->KeywordSet(7))//REDEF
-	status=nc_redef(cdfid);
+      status=nc_redef(cdfid);
     else if(e->KeywordSet(8))//SYNC
-	status=nc_sync(cdfid);
+      status=nc_sync(cdfid);
     
     if(e->KeywordSet(7) && status==NC_EPERM)
       throw GDLException(e->CallingNode(),"NCDF_CONTROL: Attempt to reenter define mode (REDEF) failed, no write permission to the file.");
@@ -429,27 +480,6 @@ namespace lib {
       }
 
   }
-
-  // see also http://www.mathworks.com/help/techdoc/ref/cdflib.epochbreakdown.html
-  void cdf_epoch(EnvT* e)
-  {
-    if (e->KeywordSet("BREAKDOWN_EPOCH") && e->KeywordSet("COMPUTE_EPOCH"))
-       e->Throw( "sorry, mutualy exclusive keywords.");
-
-    if (e->KeywordSet("BREAKDOWN_EPOCH"))
-      {
-	//http://www.cplusplus.com/reference/clibrary/ctime/tm/
-	struct tm *t;
-	DLong epoch;	
-	e->AssureLongScalarPar( 0, epoch);
-	
-	t = gmtime ((time_t *)&epoch);
-	printf("The year is: %d\n", t->tm_year + 1900);
-	printf("The julian day is: %d\n", t->tm_yday + 1);
-      }
-    //conversion tm --> t_time
-    //    http://www.cplusplus.com/reference/clibrary/ctime/mktime/
-  };
 
 }
 #endif
