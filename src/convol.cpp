@@ -241,7 +241,7 @@ BaseGDL* Data_<Sp>::Convol( BaseGDL* kIn, BaseGDL* scaleIn, BaseGDL* biasIn,
 #pragma omp parallel if (nA >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= nA))
     {
 #pragma omp for
-    for( SizeT i=0; i<nA; ++i)  if (!gdlValid(ddP[i])) {doNan=true;}
+    for( OMPInt i=0; i<nA; ++i)  if (!gdlValid(ddP[i])) {doNan=true;}
     }
   }
 //same for invalid. a real gain of time if no values are invalid, a small loss if not.
@@ -251,7 +251,7 @@ BaseGDL* Data_<Sp>::Convol( BaseGDL* kIn, BaseGDL* scaleIn, BaseGDL* biasIn,
 #pragma omp parallel if (nA >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= nA))
     {
 #pragma omp for
-    for( SizeT i=0; i<nA; ++i)  if (ddP[i] == invalidValue) {doInvalid=true;}
+    for( OMPInt i=0; i<nA; ++i)  if (ddP[i] == invalidValue) {doInvalid=true;}
     }
   }
   // some loop constants
@@ -292,6 +292,7 @@ BaseGDL* Data_<Sp>::Convol( BaseGDL* kIn, BaseGDL* scaleIn, BaseGDL* biasIn,
 #define CONVOL_EDGE_ZERO
 #include "convol_inc1.cpp"
 #include "basegdl.hpp"
+#include "envt.hpp"
 #undef CONVOL_EDGE_ZERO
     }
 #undef INCLUDE_CONVOL_INC_CPP
@@ -420,11 +421,11 @@ namespace lib {
     /***********************************Parameter NAN****************************************/
 
     static int nanIx = e->KeywordIx( "NAN");
-    bool doNan = e->KeywordPresent( nanIx);
+    bool doNan = e->KeywordSet( nanIx);
     
     /***********************************Parameter MISSING************************************/
     static int missingIx = e->KeywordIx("MISSING");
-    bool doMissing = e->KeywordPresent(missingIx);
+    bool doMissing = e->KeywordSet(missingIx);
     BaseGDL* missing;
     Guard<BaseGDL> missGuard;
     if (doMissing) {
@@ -436,7 +437,7 @@ namespace lib {
     } else missing = p0->New(1, BaseGDL::ZERO);
    /***********************************Parameter INVALID************************************/
     static int invalidIx = e->KeywordIx("INVALID");
-    bool doInvalid = e->KeywordPresent( invalidIx );
+    bool doInvalid = e->KeywordSet( invalidIx );
     BaseGDL* invalid;
     Guard<BaseGDL> invalGuard;
     if (doInvalid) {

@@ -957,8 +957,6 @@ RetCode  PCALL_LIBNode::Run()
 
 RetCode  MPCALLNode::Run()
 {
-  // better than auto_ptr: auto_ptr wouldn't remove newEnv from the stack
-  StackGuard<EnvStackT> guard(ProgNode::interpreter->CallStack());
   BaseGDL *self;
   EnvUDT*   newEnv;
 	
@@ -978,12 +976,16 @@ RetCode  MPCALLNode::Run()
 			
   ProgNode::interpreter->parameter_def(_t, newEnv);
 
-  // push environment onto call stack
-  ProgNode::interpreter->callStack.push_back(newEnv);
-		
-  // make the call
-  ProgNode::interpreter->call_pro(static_cast<DSubUD*>(newEnv->GetPro())->GetTree());
+   { // this block is crucial as guard has to be destroyed before SetRetTree
+    // better than auto_ptr: auto_ptr wouldn't remove newEnv from the stack
+    StackGuard<EnvStackT> guard(ProgNode::interpreter->CallStack());
 
+    // push environment onto call stack
+    ProgNode::interpreter->callStack.push_back(newEnv);
+		  
+    // make the call
+    ProgNode::interpreter->call_pro(static_cast<DSubUD*>(newEnv->GetPro())->GetTree());
+   }
   ProgNode::interpreter->SetRetTree( this->getNextSibling());
   return RC_OK;
 }
@@ -992,8 +994,6 @@ RetCode  MPCALLNode::Run()
 
 RetCode  MPCALL_PARENTNode::Run()
 {
-  // better than auto_ptr: auto_ptr wouldn't remove newEnv from the stack
-  StackGuard<EnvStackT> guard(ProgNode::interpreter->callStack);
   BaseGDL *self;
   EnvUDT*   newEnv;
 
@@ -1019,13 +1019,16 @@ RetCode  MPCALL_PARENTNode::Run()
   ProgNode::interpreter->parameter_def(_t, newEnv);
 
   //if( this->getLine() != 0) ProgNode::interpreter->callStack.back()->SetLineNumber( this->getLine());
+   { // this block is crucial as guard has to be destroyed before SetRetTree
+    // better than auto_ptr: auto_ptr wouldn't remove newEnv from the stack
+    StackGuard<EnvStackT> guard(ProgNode::interpreter->callStack);
 
-  // push environment onto call stack
-  ProgNode::interpreter->callStack.push_back(newEnv);
-		
-  // make the call
-  ProgNode::interpreter->call_pro(static_cast<DSubUD*>(newEnv->GetPro())->GetTree());
-
+    // push environment onto call stack
+    ProgNode::interpreter->callStack.push_back(newEnv);
+		  
+    // make the call
+    ProgNode::interpreter->call_pro(static_cast<DSubUD*>(newEnv->GetPro())->GetTree());
+  }
   ProgNode::interpreter->SetRetTree( this->getNextSibling());
   //  ProgNode::interpreter->_retTree = this->getNextSibling();
   return RC_OK;
@@ -1033,11 +1036,6 @@ RetCode  MPCALL_PARENTNode::Run()
 
 RetCode  PCALLNode::Run()
 {
-  // better than auto_ptr: auto_ptr wouldn't remove newEnv from the stack
-  StackGuard<EnvStackT> guard(ProgNode::interpreter->callStack);
-  EnvUDT*   newEnv;
-	
-  // 			match(antlr::RefAST(_t),PCALL);
   ProgNodeP _t = this->getFirstChild();
   ProgNodeP p = _t;
   // 			match(antlr::RefAST(_t),IDENTIFIER);
@@ -1045,18 +1043,20 @@ RetCode  PCALLNode::Run()
 			
   ProgNode::interpreter->SetProIx( p);
 			
-  newEnv = new EnvUDT( p, proList[p->proIx]);
+  EnvUDT* newEnv = new EnvUDT( p, proList[p->proIx]);
 			
   ProgNode::interpreter->parameter_def(_t, newEnv);
 
-//     if( _t->getLine() != 0) 
-  //if( this->getLine() != 0) ProgNode::interpreter->callStack.back()->SetLineNumber( this->getLine());
-// push environment onto call stack
-  ProgNode::interpreter->callStack.push_back(newEnv);
-		
-  // make the call
-  ProgNode::interpreter->call_pro(static_cast<DSubUD*>(newEnv->GetPro())->GetTree());
+  { // this block is crucial as guard has to be destroyed before SetRetTree
+    // better than auto_ptr: auto_ptr wouldn't remove newEnv from the stack
+    StackGuard<EnvStackT> guard(ProgNode::interpreter->callStack);
 
+    // push environment onto call stack
+    ProgNode::interpreter->callStack.push_back(newEnv);
+		  
+    // make the call
+    ProgNode::interpreter->call_pro(static_cast<DSubUD*>(newEnv->GetPro())->GetTree());
+  }
   ProgNode::interpreter->SetRetTree( this->getNextSibling());
   //  ProgNode::interpreter->_retTree = this->getNextSibling();
   return RC_OK;

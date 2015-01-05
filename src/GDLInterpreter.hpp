@@ -3,7 +3,7 @@
 
 #include <antlr/config.hpp>
 #include "GDLInterpreterTokenTypes.hpp"
-/* $ANTLR 2.7.7 (20120518): "gdlc.i.g" -> "GDLInterpreter.hpp"$ */
+/* $ANTLR 2.7.7 (20130428): "gdlc.i.g" -> "GDLInterpreter.hpp"$ */
 #include <antlr/TreeParser.hpp>
 
 
@@ -172,6 +172,8 @@ protected:
     bool interruptEnable;
 
 public:
+
+    bool InterruptEnable() const { return interruptEnable;}
     // procedure (searchForPro == true) or function (searchForPro == false)
     static bool CompileFile(const std::string& f, 
                             const std::string& untilPro="",

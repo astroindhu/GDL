@@ -17,8 +17,10 @@
 
 #include "includefirst.hpp"
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 #include <sys/utsname.h>
+#else
+#include <tchar.h>
 #endif
 #include <cmath>
 
@@ -47,28 +49,48 @@ namespace SysVar
 
   using namespace std;
 
+
   // the index of some system variables
-  UInt nullIx, pathIx, promptIx, edit_inputIx, quietIx, 
-    dIx, pIx, xIx, yIx, zIx, vIx, gdlIx, cIx, MouseIx,
+  UInt nullIx, trueIx, falseIx, pathIx, promptIx, edit_inputIx, quietIx,
+    dIx, pIx, xIx, yIx, zIx, vIx, gdlWarningIx, gdlIx, cIx, MouseIx,
     errorStateIx, errorIx, errIx, err_stringIx, valuesIx,
-    journalIx, exceptIx, mapIx, cpuIx, dirIx, stimeIx, warnIx, usersymIx, orderIx;
+    journalIx, exceptIx, mapIx, cpuIx, dirIx, GshhsDirIx, stimeIx,
+    warnIx, usersymIx, orderIx;
 
   // !D structs
-  const int nDevices = 4;
-  DStructGDL* devices[ 4]; // X, PS, Z, SVG
+  const int nDevices = 5;
+  DStructGDL* devices[ 5]; // NULL, PS, Z, SVG, (X or WIN or nothing)
 
   // !STIME
   const SizeT MAX_STIME_STRING_LENGTH=80;
 
+  bool IsSTime( DVar* var)
+  { 
+// due to .RESET_SESSION we cannot use static here
+// but the effect will be minimal anyway    
+//     static DVar* varSTime = sysVarList[ stimeIx];
+    return var == sysVarList[ stimeIx];
+  }
+   
+  bool IsD( DVar* var)
+  { 
+    return var == sysVarList[ dIx];
+  }
+
   void SetGDLPath( const DString& newPath)
   {
     FileListT sArr;
+    #ifdef _WIN32
+      char pathsep[]=";";
+    #else
+      char pathsep[]=":";
+    #endif
 
     SizeT d;
     long   sPos=0;
     do
       {
-	d=newPath.find(':',sPos);
+	d=newPath.find(pathsep[0],sPos);
 	string act = newPath.substr(sPos,d-sPos);
 	
 	lib::ExpandPath( sArr, act, "*.pro");
@@ -87,7 +109,10 @@ namespace SysVar
     // set the path
     path = sArr[0];
     for( SizeT i=1; i<nArr; ++i)
-      path += ":" + sArr[i];
+      path += pathsep + sArr[i];
+    // GJ version    path = sArr[nArr-1];
+    // GJ version for( SizeT i=1; i<nArr; ++i)
+    // GJ version  path += pathsep + sArr[nArr-i-1];
   }
 
   // returns !DIR (as a plain DString)
@@ -117,6 +142,34 @@ namespace SysVar
     stime = st;
   }
 
+  DStructGDL* D()
+  {
+    DVar& var = *sysVarList[ dIx];
+    return static_cast<DStructGDL*>(var.Data());
+  }
+
+  // updates !D in all modes (should insure correct update if Win, XWidgets ...)
+  void UpdateD()
+  {
+    DStructGDL* dD = D();
+
+    DLong windowIdx=(*static_cast<DLongGDL*>(dD->GetTag(dD->Desc()->TagIndex("WINDOW"), 0)))[0];
+    if( windowIdx <0)  return;    
+    
+    GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
+    GDLGStream* actStream = actDevice->GetStream();
+
+    long xSizeGG,ySizeGG,xOff,yOff;
+    actStream->GetGeometry(xSizeGG,ySizeGG,xOff,yOff);
+    int debug=0;
+    if (debug) cout << "GetX11Geo in SysVar::UpdateD : " << xSizeGG <<" "<< ySizeGG <<" "<< xOff <<" "<< yOff << endl;
+    
+    (*static_cast<DLongGDL*>(dD->GetTag(dD->Desc()->TagIndex("X_SIZE"), 0)))[0] = xSizeGG;
+    (*static_cast<DLongGDL*>(dD->GetTag(dD->Desc()->TagIndex("Y_SIZE"), 0)))[0] = ySizeGG;
+    (*static_cast<DLongGDL*>(dD->GetTag(dD->Desc()->TagIndex("X_VSIZE"), 0)))[0] = xSizeGG;
+    (*static_cast<DLongGDL*>(dD->GetTag(dD->Desc()->TagIndex("Y_VSIZE"), 0)))[0] = ySizeGG;	    
+  }
+
   // returns array of path strings
   const StrArr& GDLPath()
   {
@@ -133,10 +186,15 @@ namespace SysVar
   
     SizeT d;
     long   sPos=0;
+   #ifdef _WIN32
+      char pathsep[]=";";
+    #else
+      char pathsep[]=":";
+    #endif
 
     do
       {
-	d=path.find(':',sPos);
+	d=path.find(pathsep[0],sPos);
 	sArr.push_back(path.substr(sPos,d-sPos));
 	sPos=d+1;
       }
@@ -161,6 +219,12 @@ namespace SysVar
   {
     DVar& qSysVar=*sysVarList[quietIx];
     return static_cast<DLongGDL&>(*qSysVar.Data())[0];
+  }
+
+  DLong GDL_Warning()
+  {
+    DVar& gwSysVar=*sysVarList[gdlWarningIx];
+    return static_cast<DLongGDL&>(*gwSysVar.Data())[0];
   }
 
   void SetC( DLong cVal)
@@ -208,6 +272,17 @@ namespace SysVar
     return (*static_cast<DLongGDL*>( pStruct->GetTag( tag)))[0];
   }
 
+  const DString& GshhsDir()
+  {
+    DVar& var = *sysVarList[GshhsDirIx];
+    return static_cast<DStringGDL&>(*var.Data())[0];
+  }
+
+  DStringGDL* STime()
+  {
+    DVar& var = *sysVarList[ stimeIx];
+    return static_cast<DStringGDL*>(var.Data());
+  }
   DStructGDL* X()
   {
     DVar& var = *sysVarList[ xIx];
@@ -258,12 +333,6 @@ namespace SysVar
     return static_cast<DStructGDL*>(sysVarList_cpuIx->Data());
   }
 
-  DStructGDL* D()
-  {
-    DVar& var = *sysVarList[ dIx];
-    return static_cast<DStructGDL*>(var.Data());
-  }
-
   DStructGDL* Warn()
   {
     DVar* sysVarList_warnIx = sysVarList[ warnIx];
@@ -311,7 +380,19 @@ namespace SysVar
     DVar *nullVar = new DVar( "NULL", nullInstance);
     nullIx=sysVarList.size();
     sysVarList.push_back(nullVar);
-   
+
+    // !TRUE
+    DByteGDL* trueData = new DByteGDL(1);
+    DVar *true_logical = new DVar( "TRUE", trueData );
+    trueIx=sysVarList.size();
+    sysVarList.push_back(true_logical);
+
+    // !FALSE
+    DByteGDL* falseData = new DByteGDL(0);
+    DVar *false_logical = new DVar( "FALSE", falseData );
+    falseIx=sysVarList.size();
+    sysVarList.push_back(false_logical);
+    
     // !PATH
     //    DString initPath(""); // set here the initial path
     DStringGDL* pathData=new DStringGDL( "");
@@ -364,7 +445,7 @@ namespace SysVar
     plt->NewTag("CHARSIZE", new DFloatGDL( 0.0)); 
     plt->NewTag("CHARTHICK", new DFloatGDL( 0.0)); 
     plt->NewTag("CLIP", p_clip); 
-    plt->NewTag("COLOR", new DLongGDL( 255)); 
+    plt->NewTag("COLOR", new DLongGDL( -1)); 
     plt->NewTag("FONT", new DLongGDL( -1)); 
     plt->NewTag("LINESTYLE", new DLongGDL( 0)); 
     plt->NewTag("MULTI", new DLongGDL( dimension( &multiDim, one))); 
@@ -397,6 +478,13 @@ namespace SysVar
     DVar *order = new DVar( "ORDER", orderData);
     orderIx     = sysVarList.size();
     sysVarList.push_back( order);
+
+    // !GDL_WARNING (to be used in VOIGT() and BeselIJKY() to warm on
+    // different behaviour between IDL and GDL
+    DLongGDL *gdlWarningData = new DLongGDL( 1 );
+    DVar *gdlWarning = new DVar( "GDL_WARNING", gdlWarningData);
+    gdlWarningIx     = sysVarList.size();
+    sysVarList.push_back( gdlWarning);
 
     // !GDL (to allow distinguish IDL/GDL with DEFSYSV, '!gdl', exists=exists )
     DStructGDL*  gdlStruct = new DStructGDL( "!GNUDATALANGUAGE");
@@ -604,23 +692,32 @@ namespace SysVar
 
     // !VERSION
     DStructGDL*  ver = new DStructGDL( "!VERSION");
-#ifdef _MSC_VER
-	const char* SysName = "windows";
+#ifdef _WIN32
+#ifdef __MINGW32__
+	typedef void (WINAPI *GetNativeSystemInfoFunc)(LPSYSTEM_INFO);
+	HMODULE hModule = LoadLibrary(_T("kernel32.dll"));
+	GetNativeSystemInfoFunc GetNativeSystemInfo =(GetNativeSystemInfoFunc) 
+            GetProcAddress(hModule, "GetNativeSystemInfo");
+#endif
+	const char* SysName = "Windows";
 	SYSTEM_INFO stInfo;
 	GetNativeSystemInfo( &stInfo );
 	DStringGDL *arch;
-	switch(stInfo.dwProcessorType) {
+	switch(stInfo.wProcessorArchitecture) {
 	case PROCESSOR_ARCHITECTURE_AMD64:
 		arch = new DStringGDL("x64");
 		break;
 	case PROCESSOR_ARCHITECTURE_INTEL:
 		arch = new DStringGDL("x86");
 		break;
+	case PROCESSOR_ARCHITECTURE_ARM:
+		arch = new DStringGDL("ARM");
+		break;
 	default:
-		arch = new DStringGDL("unknown cpu");
+		arch = new DStringGDL("unknown");
 	}
 	ver->NewTag("ARCH", arch); 
-    ver->NewTag("OS_FAMILY", new DStringGDL( "windows")); 
+    ver->NewTag("OS_FAMILY", new DStringGDL( "Windows")); 
 #else
     struct utsname uts;
     uname(&uts);
@@ -673,7 +770,7 @@ namespace SysVar
     DVar *errorVar = new DVar( "ERROR", errorData );
     errorIx            = sysVarList.size();
     sysVarList.push_back( errorVar);
-    sysVarRdOnlyList.push_back( errorVar);
+    //sysVarRdOnlyList.push_back( errorVar); !error is (no more?) a readonly variable.
 
     // !ERR
     DLongGDL *errData = new DLongGDL( 0 );
@@ -687,7 +784,7 @@ namespace SysVar
     DVar *err_stringVar = new DVar( "ERR_STRING", err_stringData );
     err_stringIx        = sysVarList.size();
     sysVarList.push_back( err_stringVar );
-    sysVarRdOnlyList.push_back( err_stringVar);
+    sysVarRdOnlyList.push_back( err_stringVar); //!err_string IS a readonly variable!
 
     // !VALUES
     DStructGDL*  valuesData = new DStructGDL( "!VALUES");
@@ -702,8 +799,11 @@ namespace SysVar
 	valuesData->NewTag("F_INFINITY", new DFloatGDL((float)1.0/0.0)); 
 #endif
       }
-
-    valuesData->NewTag("F_NAN", new DFloatGDL(-sqrt((float) -1.0))); 
+#ifdef NAN
+    valuesData->NewTag("F_NAN", new DFloatGDL(NAN));
+#else
+    valuesData->NewTag("F_NAN", new DFloatGDL(sqrt((float) -1.0))); //sign depends on the architecture, dangerous way to define a +Nan!
+#endif
 
     if( std::numeric_limits< DDouble>::has_infinity)
       {
@@ -717,7 +817,11 @@ namespace SysVar
 #endif
       }
 
-    valuesData->NewTag("D_NAN", new DDoubleGDL(-sqrt((double) -1.0)));
+#ifdef NAN
+    valuesData->NewTag("D_NAN", new DDoubleGDL(NAN));
+#else
+    valuesData->NewTag("D_NAN", new DDoubleGDL(-sqrt((double) -1.0))); //sign depends on the architecture, dangerous way to define a +Nan!
+#endif
     DVar *values       = new DVar( "VALUES", valuesData);
     valuesIx           = sysVarList.size();
     sysVarList.push_back(values);
@@ -786,11 +890,12 @@ namespace SysVar
     cpuData->NewTag("HW_NCPU", new DLongGDL( 1)); 
 #endif
     cpuData->NewTag("TPOOL_NTHREADS", new DLongGDL( CpuTPOOL_NTHREADS));
-    //if use DLong64 here, please update basic_pro.cpp (function cpu()) and
+
+    //if use DLong64 below, please update basic_pro.cpp (function cpu()) and
     //add an 'assureLong64Kw()' function in envt.cpp. Otherwise the program will
-    //crash in cpu().
-    cpuData->NewTag("TPOOL_MIN_ELTS", new DLongGDL( CpuTPOOL_MIN_ELTS)); 
-    cpuData->NewTag("TPOOL_MAX_ELTS", new DLongGDL( CpuTPOOL_MAX_ELTS)); 
+    //crash in cpu(). (should have been done on 2014 March 18 by AC (tested).)
+    cpuData->NewTag("TPOOL_MIN_ELTS", new DLong64GDL( CpuTPOOL_MIN_ELTS)); 
+    cpuData->NewTag("TPOOL_MAX_ELTS", new DLong64GDL( CpuTPOOL_MAX_ELTS)); 
 
     DVar *cpu=new DVar( "CPU", cpuData);
     cpuIx=sysVarList.size();
@@ -800,6 +905,11 @@ namespace SysVar
 #ifdef _OPENMP
     if( omp_get_dynamic())
 	omp_set_dynamic( 1);
+#endif
+#if defined (_WIN32)
+
+#define realpath(N,R) _fullpath((R),(N),_MAX_PATH) 
+// ref:http://sourceforge.net/p/mingw/patches/256/ Keith Marshall 2005-12-02
 #endif
 
     // !DIR
@@ -818,6 +928,27 @@ namespace SysVar
     dirIx=sysVarList.size();
     sysVarList.push_back( dir);
 
+    // !GSHHS_DATA_DIR 
+    string tmpDir=GetEnvString("GSHHS_DATA_DIR");
+    if( tmpDir == "") tmpDir = string(GDLDATADIR) + "/../gshhs/";
+    //    cout << "1 GSHHS data dir : " << tmpDir << endl;
+    // is the path a true path ?
+    char *symlinkpath =const_cast<char*> (tmpDir.c_str());
+
+#ifdef _MSC_VER
+	#define PATH_MAX MAX_PATH
+#endif
+
+    char actualpath [PATH_MAX+1];
+    char *ptr;
+    ptr = realpath(symlinkpath, actualpath);
+    if( ptr != NULL ) tmpDir=string(ptr)+lib::PathSeparator(); else tmpDir="";
+    //cout << "2 GSHHS data dir : " << tmpDir << endl;
+    DStringGDL *GshhsDataDir =  new DStringGDL( tmpDir);
+    DVar *GshhsDir = new DVar("GSHHS_DATA_DIR", GshhsDataDir);
+    GshhsDirIx=sysVarList.size();
+    sysVarList.push_back(GshhsDir);
+   
     // !STIME
     DStringGDL *stimeData = new DStringGDL( "");
     DVar *stime = new DVar( "STIME", stimeData);

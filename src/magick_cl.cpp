@@ -39,7 +39,6 @@
 #include "basic_fun_cl.hpp"
 #include "terminfo.hpp"
 #include "typedefs.hpp"
-#include "math_utl.hpp"
 #include "magick_cl.hpp"
 
 #define GDL_DEBUG
@@ -123,6 +122,7 @@ namespace lib {
       {
         cerr << warning_.what() << endl;
       }
+      if ((a.rows()*a.columns())==0) e->Throw("Error reading image dimensions!");
       a.flip();
       unsigned int mid;
       mid=magick_image(e, a);
@@ -223,7 +223,7 @@ namespace lib {
       // Despite Type is NOT useful without a a.read(), it is OK for Palette !
       // This should be reliable (OK with ImageMagick AND GraphicsMagick)
       DInt has_palette=0;
-      if (a.type() == 4 | a.type() == 5) has_palette=1;
+      if (a.type() == PaletteType | a.type() == PaletteMatteType) has_palette=1;
 
       // TODO: 
       // - JP2->JPEG2000 ?      
@@ -414,8 +414,16 @@ namespace lib {
 	  IndexPacket* index;
 	  pixel=image.getPixels(0,0,columns,rows);
 	  index=image.getIndexes();
-	  string txt="(FIXME!) Magick's getIndexes() returned NULL for: ";
-	  if (index == NULL) e->Throw(txt + e->GetParString(0));
+
+	  if (index == NULL) {
+	  string txt="Warning -- Magick's getIndexes() returned NULL for: ";
+	  string txt2=", using unsafe patch.";
+      //PATCH to get something until we understand what's going on
+        cerr<<(txt + e->GetParString(0)+txt2)<<endl;
+	  string map="R";
+	  image.write(0,0,columns,rows,map, CharPixel,&(*bImage)[0]);
+	  return bImage;
+      }
 	  unsigned int cx, cy;
 	  for (cy=0;cy<rows;++cy)
 	    for (cx=0;cx<columns;++cx)
@@ -538,7 +546,7 @@ namespace lib {
 	
 	columns=image.columns();
 	rows=image.rows();
-	
+    if ((rows*columns)==0) e->Throw("Error reading image dimensions!");
 	string map="BGR";
 	if(e->GetKW(0) != NULL)//RGB
 	  {
@@ -589,7 +597,6 @@ namespace lib {
 	c[1] = wx;
 	c[2] = wy;
 	dimension dim(c,3);	  
-
 	if(image.depth() == 8)
 	  {
 	    DByteGDL *bImage=new DByteGDL(dim,BaseGDL::NOZERO);

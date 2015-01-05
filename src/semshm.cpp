@@ -14,13 +14,19 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-
+/*! \brief semshm.cpp  functions to handle semaphores
+  \typedef sem_data_t
+  \struct  sem_data_t
+  \namespace lib
+ */
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
 #endif
 #include "includefirst.hpp"
-
-#ifdef _MSC_VER
+// Greg Jung 
+// These windows calls are not found in gnu/mingw compiler but 
+// it does bring a semaphore.h in
+#if defined(_WIN32) && !defined(__CYGWIN__)
 #define sem_trywait(sem) (WaitForSingleObject(sem, 0) == WAIT_OBJECT_0 ? 0 : -1) 
 #define sem_post(sem) (ReleaseSemaphore(sem, 1, NULL) ? 0 : -1) 
 #else
@@ -37,7 +43,7 @@ namespace lib {
 
   // map: semaphore_name -> semaphore_data
   typedef struct {
-#ifdef _MSC_VER
+#if defined(_WIN32) && !defined(__CYGWIN__)
     HANDLE sem;
 #else
     sem_t *sem;
@@ -90,7 +96,8 @@ namespace lib {
     sem_map().erase(name);
   }
 
-  static inline void sem_add(const DString &name, const sem_data_t &data)
+  static inline void sem_add(const DString &name,
+         const sem_data_t &data)
   {
     sem_map_t &map = sem_map();
     sem_map_t::iterator it = map.find(name);
@@ -124,7 +131,7 @@ namespace lib {
     {
       if (sem_is_deletable(it->second))
       {
-#ifdef _MSC_VER
+#if defined(_WIN32) && !defined(__CYGWIN__)
         CloseHandle(it->second.sem);
 #else
         sem_unlink(it->first.c_str());
@@ -152,8 +159,13 @@ namespace lib {
     }
 
     bool owner = true;
-#ifdef _MSC_VER
-    HANDLE sem = CreateSemaphore(NULL,1,1,name.c_str());
+#if defined(_WIN32) && !defined(__CYGWIN__)
+    // TODO: Needs error handling with name length > 256
+    const char* cname = name.c_str();
+    TCHAR tname[256] = {0,};
+
+    MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, cname, strlen(cname),(LPWSTR) tname, 256);
+    HANDLE sem = CreateSemaphore(NULL,1,1,tname);
     if (sem == NULL) {
 	owner = false;
 	return new DIntGDL(0);
@@ -161,11 +173,11 @@ namespace lib {
 #else
     sem_t *sem = sem_open(name.c_str(), O_CREAT | O_EXCL, 0666, 1);
     if (sem == SEM_FAILED)
-    {
+    {  // semaphore exists. make another one, locked (value=0)
       owner = false;
       if (errno == EEXIST)
       {
-        sem = sem_open(name.c_str(), 0);
+        sem = sem_open(name.c_str(), O_CREAT ,0666, 0);
       }
       if (sem == SEM_FAILED)
       {
@@ -200,7 +212,7 @@ namespace lib {
     e->AssureStringScalarPar(0, name);
 
     const sem_data_t &data = sem_get_data(name, e);
-#ifdef _MSC_VER
+#if defined(_WIN32) && !defined(__CYGWIN__)
     CloseHandle(data.sem);
 #else
     sem_close(data.sem);

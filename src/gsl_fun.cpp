@@ -1830,6 +1830,31 @@ namespace lib {
     BaseGDL* p0 = e->GetParDefined(0);
     if (p0->Rank() < nParam - 1)
       e->Throw("Number of parameters must agree with dimensions of argument.");
+    
+    //Ok, Ranks are compatible, but check if last parameter(s) have dimension 1.
+    //interpol is unable to interpolate on a zero-size dimension. We will downgrade the number
+    //of dimensions to be interpolated, and duplicate the result to the size of the last parameter(s).
+    SizeT lastDim=0;
+    bool needsLastDims=false;
+    dimension dimIni=p0->Dim();
+    dimension dimEnd=p0->Dim();
+    dimEnd.Purge();
+    SizeT RankDiff=dimIni.Rank()-dimEnd.Rank(); //number of 1-sized dimensions consecutive at end
+    SizeT resDimInit[ MAXRANK];
+    SizeT iAddRank=0;
+    for (iAddRank=0;iAddRank<dimEnd.Rank();++iAddRank) resDimInit[iAddRank]=dimEnd[iAddRank];
+    //All of the above not useful if grid is not set!
+    if (grid && RankDiff>0) {
+      for (SizeT i=RankDiff; i>=1; --i){
+        lastDim=(e->GetParDefined(nParam-i))->Dim(0);
+        if (lastDim > 1) needsLastDims=true; //correct behaviour: last dim=1 is trimmed anyway.
+        resDimInit[iAddRank]=(lastDim==0)?1:lastDim;
+        iAddRank++;
+        }
+      nParam-=RankDiff;
+    }
+
+    
     if (p0->Type() == GDL_COMPLEX) {
         complexity=2;
         DComplexGDL* c0 = static_cast<DComplexGDL*> (p0);
@@ -1860,7 +1885,7 @@ namespace lib {
 	p0D[0] = static_cast<DDoubleGDL*>(p0->Convert2( GDL_DOUBLE, BaseGDL::COPY));
 	guard00.Init(p0D[0]);
       }
-
+    
     BaseGDL* p1 = e->GetParDefined(1);
     if (p1->Type() == GDL_DOUBLE) p1D = static_cast<DDoubleGDL*>(p1);
     else
@@ -1894,8 +1919,8 @@ namespace lib {
     DDoubleGDL* res[2];
     for (int iloop=0; iloop<complexity; ++iloop)
     {
-
-
+        // 0D Interpolation (special case with needLastDims=true)
+        if (nParam < 2) res[iloop]=p0D[iloop]->Dup();
         // 1D Interpolation
         if (nParam == 2) {
           //   res[iloop]=interpolate_1dim(e,p0D[iloop],p1D,cubic,use_missing,missing);
@@ -1903,16 +1928,27 @@ namespace lib {
           else if (cubic)   res[iloop]=interpolate_1dim(e,gdl_interp1d_cubic,p0D[iloop],p1D,use_missing,missing,gamma);
           else         res[iloop]=interpolate_1dim(e,gdl_interp1d_linear,p0D[iloop],p1D,use_missing,missing,0.0);
         }
-
+        // 2D Interpolation
         if (nParam == 3) {
           if (nnbor)        res[iloop]=interpolate_2dim(e,gdl_interp2d_binearest,p0D[iloop],p1D,p2D,grid,use_missing,missing,0.0);
           else if (cubic)   res[iloop]=interpolate_2dim(e,gdl_interp2d_bicubic,p0D[iloop],p1D,p2D,grid,use_missing,missing,gamma);
           else              res[iloop]=interpolate_2dim(e,gdl_interp2d_bilinear,p0D[iloop],p1D,p2D,grid,use_missing,missing,0.0);
         }
+        // 3D Interpolation
         if (nParam == 4) {
           res[iloop]=interpolate_3dim(e,gdl_interp3d_trilinear,p0D[iloop],p1D,p2D,p3D,grid,use_missing,missing);
         }
+      //special case where last dimension of input was 1
+      if (needsLastDims){
+        dimension dim=(res[iloop])->Dim();
+        for (SizeT i=0; i<(res[iloop])->Rank(); ++i){
+          resDimInit[i]=dim[i]; //put back first dimensions of interpolated result
+        }
+        dimension resDim( resDimInit, iAddRank); //change as Dimension...
+        res[iloop]= static_cast<DDoubleGDL*>(res[iloop]->Rebin(resDim, true)); //Rebin to the extra number of dims.
+      }
     }
+    
     if (p0->Type() == GDL_DOUBLE)
       {
 	return res[0];
@@ -2662,7 +2698,11 @@ namespace lib {
 
     // sanity check (for number of parameters)
     SizeT nParam = e->NParam();
-    if(e->KeywordSet("MIDEXP"))
+
+    static int midexpIx=e->KeywordIx("MIDEXP");
+    bool do_midexp=e->KeywordSet(midexpIx);
+    
+    if (do_midexp)
       {
 	if (nParam < 2) e->Throw("Incorrect number of arguments.");
 	if (nParam > 2) e->Throw("Too many arguments.");
@@ -2681,7 +2721,7 @@ namespace lib {
 
     BaseGDL* p2 = NULL;
     BaseGDL* par2 = NULL;
-    if (!e->KeywordSet("MIDEXP"))
+    if (!do_midexp)
       {
 	// 3-th argument : final bound
 	p2 = e->GetParDefined(2);
@@ -2691,7 +2731,7 @@ namespace lib {
 
     // do we need to compute/return in double ?
     bool isDouble =  e->KeywordSet("DOUBLE") || p1->Type() == GDL_DOUBLE;
-    if (!e->KeywordSet("MIDEXP")) 
+    if (!do_midexp)
       if (p2->Type() == GDL_DOUBLE) isDouble=true;
 
     // 1-st argument : name of user function defining the system
@@ -2737,11 +2777,11 @@ namespace lib {
 
     SizeT nEl1=par1->N_Elements();
     SizeT nEl2=nEl1;
-    if (!e->KeywordSet("MIDEXP")) 
+    if (!do_midexp)
       nEl2=par2->N_Elements();
     SizeT nEl=nEl1;
     DDoubleGDL* res;
-    if (!e->KeywordSet("MIDEXP")) {
+    if (!do_midexp) {
       if (nEl1 == 1 || nEl2 == 1) {
 	if (nEl1 == 1) {
 	  nEl=nEl2;
@@ -2794,17 +2834,17 @@ namespace lib {
     GDLGuard<gsl_integration_workspace> g1( w, gsl_integration_workspace_free);
 
     first=(*static_cast<DDoubleGDL*>(par1))[0];
-    if (!e->KeywordSet("MIDEXP")) last =(*static_cast<DDoubleGDL*>(par2))[0];
+    if (!do_midexp) last =(*static_cast<DDoubleGDL*>(par2))[0];
     
     for( SizeT i=0; i<nEl; i++) {
       if (nEl1 > 1) {first=(*static_cast<DDoubleGDL*>(par1))[i];}
-      if ((!e->KeywordSet("MIDEXP")) && (nEl2 > 1))
+      if ((!do_midexp) && (nEl2 > 1))
 	{last =(*static_cast<DDoubleGDL*>(par2))[i];}
       
       if (debug) cout << "Boundaries : "<< first << " " << last <<endl;
       
       // intregation on open range [first,+inf[
-      if (e->KeywordSet("MIDEXP"))
+      if (do_midexp)
 	{	 
 	  gsl_integration_qagiu(&F, first, 0, eps, 
 				wsize, w, &result, &error);
@@ -2954,18 +2994,18 @@ namespace lib {
   
     //3-rd argument : number of iteration
     DLong max_iter =100;
-    if (e->KeywordSet("ITMAX"))
+    static int itmaxIx = e->KeywordIx("ITMAX");
+    if (e->KeywordSet(itmaxIx))
       { 
-	int pos = e->KeywordIx("ITMAX");
-	e->AssureLongScalarKWIfPresent(pos, max_iter);
+	e->AssureLongScalarKWIfPresent(itmaxIx, max_iter);
       }
   
     //4-th argument : stopping criterion
     DLong stop = 0;
-    if (e->KeywordSet("STOP"))
+    static int stopIx = e->KeywordIx("STOP");
+    if (e->KeywordSet(stopIx))
       {
-	int pos = e->KeywordIx("STOP");
-	e->AssureLongScalarKWIfPresent(pos, stop);
+	e->AssureLongScalarKWIfPresent(stopIx, stop);
       }
   
     if (stop != 0 || stop != 1 || isfinite(stop) == 0)
@@ -2975,10 +3015,10 @@ namespace lib {
   
     //5-th argument : tolerance criterion
     DDouble tol = 0.0001;
-    if (e->KeywordSet("TOL"))
+    static int tolIx = e->KeywordIx("TOL");
+    if (e->KeywordSet(tolIx))
       {
-	int pos = e->KeywordIx("TOL");
-	e->AssureDoubleScalarKWIfPresent(pos, tol);
+	e->AssureDoubleScalarKWIfPresent(tolIx, tol);
       }
     if (isfinite(tol) == 0)
       {
@@ -2993,12 +3033,16 @@ namespace lib {
     complex<double> x2((*init)[2].real(),(*init)[2].imag());
   
     //Security tests
-    if ( (x0.real() == x1.real() && x0.imag() == x1.imag()) || (x0.real() == x2.real() && x0.imag() == x2.imag()) || (x1.real() == x2.real() && x1.imag() == x2.imag()) )
+    if ( (x0.real() == x1.real() && x0.imag() == x1.imag()) || 
+	 (x0.real() == x2.real() && x0.imag() == x2.imag()) || 
+	 (x1.real() == x2.real() && x1.imag() == x2.imag()) )
       {
 	e->Throw("Initial parameters must be different");
       }
   
-    if ((isfinite(x0.real()) == 0 || isfinite(x0.imag()) == 0) || (isfinite(x1.real()) == 0 || isfinite(x1.imag()) == 0) || (isfinite(x2.real()) == 0 || isfinite(x2.imag()) == 0))
+    if ((isfinite(x0.real()) == 0 || isfinite(x0.imag()) == 0) || 
+	(isfinite(x1.real()) == 0 || isfinite(x1.imag()) == 0) ||
+	(isfinite(x2.real()) == 0 || isfinite(x2.imag()) == 0))
       {
 	e->Throw("Not a number and Infinity are not supported");
       }

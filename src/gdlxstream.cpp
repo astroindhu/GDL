@@ -20,33 +20,29 @@
 
 #include "graphicsdevice.hpp"
 #include "gdlxstream.hpp"
+#include "devicex.hpp"
 
 #ifndef HAVE_X
 #else
 
 using namespace std;
 
-// bool GDLXStream::plstreamInitCalled = false;
-
 void GDLXStream::Init() {
   // plstream::init() calls exit() if it cannot establish a connection with X-server
+  bool okToRevertToTerminal=false;
+  int revert_to;
   {
     Display* display = XOpenDisplay(NULL);
     if (display == NULL) {
       valid = false;
       ThrowGDLException("Cannot connect to X server");
     }
+    XGetInputFocus(display, &term_window, &revert_to);
     XCloseDisplay(display);
   }
 
-  //      if( !plstreamInitCalled)
-  //    {
   this->plstream::init();
-  //  		plstreamInitCalled = true;
-  // 	}
 
-  //  set_stream(); // private
-  plgpls(&pls);
   XwDev *dev = (XwDev *) pls->dev;
   XwDisplay *xwd = (XwDisplay *) dev->xwd;
 
@@ -54,26 +50,28 @@ void GDLXStream::Init() {
   wm_delete_window = XInternAtom(xwd->display, "WM_DELETE_WINDOW", false);
 
   XSetWMProtocols(xwd->display, dev->window, &wm_delete_window, 1);
+  //give back focus to caller -- hopefully the terminal.
+  XWindowAttributes from_attr;
+  if(term_window) {
+    XGetWindowAttributes(xwd->display,term_window,&from_attr);
+    if(from_attr.map_state==IsViewable) okToRevertToTerminal=true;
+  }
+  if ( okToRevertToTerminal ) XSetInputFocus(xwd->display,term_window,RevertToParent,CurrentTime);
+  else UnsetFocus(); //desperate method, since it prevents iconifying etc...
   XFlush(xwd->display);
+  GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
+  //current cursor:
+  CursorStandard(actDevice->getCursorId());
+  //current graphics function
+  SetGraphicsFunction(actDevice->GetGraphicsFunction());
+  //BackingStore 
+  SetBackingStore(actDevice->getBackingStore());
 }
 
 void GDLXStream::EventHandler() {
   if (!valid) return;
 
-  // dummy call to get private function set_stream() called
-  //   char dummy;
-  //   gesc( &dummy);
-  // 
-  //   plgpls( &pls);
-
   XwDev *dev = (XwDev *) pls->dev;
-
-  // 	if( dev == NULL)
-  // 		this->plstream::init();
-  // 
-  //   plgpls( &pls);
-  //   
-  //   dev = (XwDev *) pls->dev;
 
   if (dev == NULL) {
     cerr << "X window invalid." << endl;
@@ -104,79 +102,187 @@ void GDLXStream::EventHandler() {
   plstream::cmd(PLESC_EH, NULL);
 }
 
-void GDLXStream::GetGeometry(long& xSize, long& ySize, long& xoff, long& yoff) {
-  // plplot does not return the real size
-  XwDev *dev = (XwDev *) pls->dev;
-  XwDisplay *xwd = (XwDisplay *) dev->xwd;
-
-  XWindowAttributes win_attr;
-
-  /* query the window's attributes. */
-  Status rc = XGetWindowAttributes(xwd->display,
-          dev->window,
-          &win_attr);
-  xSize = win_attr.width;
-  ySize = win_attr.height;
-  xoff = win_attr.x; //false with X11
-  yoff = win_attr.y; //false with X11
-  PLFLT xp;
-  PLFLT yp;
-  PLINT xleng;
-  PLINT yleng;
-  PLINT plxoff;
-  PLINT plyoff;
-  plstream::gpage(xp, yp, xleng, yleng, plxoff, plyoff);
-  //warning neither X11 nor plplot give the good value for the position of the window!!!!
-  xoff = plxoff; //not good either!!!
-  yoff = plyoff; // idem
-  if (GDL_DEBUG_PLSTREAM) fprintf(stderr, "GDLXStream::GetGeometry(%ld %ld %ld %ld)\n", xSize, ySize, xoff, yoff);
+bool GDLXStream::SetGraphicsFunction( long value) {
+    XGCValues gcValues;
+    gcValues.function = (value<0)?0:(value>15)?15:value;
+    XwDev *dev = (XwDev *) pls->dev;
+    XwDisplay *xwd = (XwDisplay *) dev->xwd;
+    return XChangeGC( xwd->display, dev->gc, GCFunction, &gcValues );
 }
 
+bool GDLXStream::GetWindowPosition(long& xpos, long& ypos ) {
+  XwDev *dev = (XwDev *) pls->dev;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  XWindowAttributes wa;
+  int addx, addy;
+  Window child;
+  XGetWindowAttributes( xwd->display, dev->window, &wa );
+  if ( XTranslateCoordinates( xwd->display, dev->window, wa.root, 0, 0, &addx, &addy, &child ) ) {
+    xpos = addx - wa.x;
+    ypos = DisplayHeight( xwd->display, DefaultScreen( xwd->display ) ) - wa.height + 1 - (addy - wa.y) + 1;
+    return true;
+  } else return false;
+}
+
+void GDLXStream::GetGeometry(long& xSize, long& ySize, long& xOffset, long& yOffset) {
+
+  XwDev *dev = (XwDev *) pls->dev;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  XWindowAttributes wa;
+  /* query the window's attributes. */
+  if (XGetWindowAttributes(xwd->display, dev->window, &wa)){
+    int addx,addy;
+    Window child;
+    XTranslateCoordinates( xwd->display, dev->window, wa.root, 0, 0, &addx, &addy, &child );
+    xSize=wa.width;
+    ySize=wa.height;
+    xOffset = addx-wa.x;
+    yOffset = dev->height-addy+wa.y+1;
+  } else GDLGStream::GetGeometry(xSize, ySize, xOffset, yOffset);
+  
+  int debug=0;
+  if (debug) {
+    int screen_num, screen_width, screen_height;
+    screen_num = DefaultScreen(xwd->display);
+    screen_width = DisplayWidth(xwd->display, screen_num);
+    screen_height = DisplayHeight(xwd->display, screen_num);
+    cout << "---- Begin Inside GetX11Geometry ----" << endl;
+    cout << "display size : " << screen_width << " " << screen_height << endl;
+    cout << "win_attributes W/H: " << wa.width << " " << wa.height << endl;
+    cout << "win_attributes border width: " << wa.border_width << endl;
+    cout << "win_attributes X/Y: " << wa.x << " " << wa.y << endl;
+    cout << "results: " << endl;
+    cout << "xSize/ySize: " << xSize << " " << ySize << endl;
+    cout << "xOffset/yOffset: " << xOffset << " " << yOffset << endl;
+    cout << "---- End Inside GetX11Geometry ----" << endl;
+  }
+
+}
+
+  bool GDLXStream::CursorStandard(int cursorNumber)
+  {
+    int num=max(0,min(XC_num_glyphs-1,cursorNumber));
+    XwDev *dev = (XwDev *) pls->dev;
+    XwDisplay *xwd = (XwDisplay *) dev->xwd;
+    XDefineCursor(xwd->display,dev->window,XCreateFontCursor(xwd->display,num));
+    return true;
+  }
+  
 // plplot 5.3 does not provide the clear function for c++
 
 void GDLXStream::Clear() {
   // dummy call to get private function set_stream() called
-  //  PLFLT a=0.0,b=0.0,c=0.0,d,e,f;
-  //  RGB_HLS( a,b,c,&d,&e,&f);
-  char dummy;
-  gesc(&dummy);
-  // this mimics better the *DL behaviour.
+  // gd: tested, fail to see why use this dummy call ?
+//  char dummy;
+//  gesc(&dummy);
+  // this mimics better the *DL behaviour but plbob create a new page, etc..
   ::c_plbop();
-  //plclear clears only the current subpage.
-  //  ::c_plclear();
+  //plclear clears only the current subpage. But it clears it. One has
+  //just to set the number of subpages to 1
+  ::c_plclear();
 }
 
-void GDLXStream::Clear(DLong bColor) {
-  // dummy call to get private function set_stream() called
-  //  PLFLT a=0.0,b=0.0,c=0.0,d,e,f;
-  //  RGB_HLS( a,b,c,&d,&e,&f);
-  char dummy;
-  gesc(&dummy);
-
-  PLINT r0, g0, b0;
-  PLINT r1, g1, b1;
-  DByte rb, gb, bb;
-
-  // Get current background color
-  plgcolbg(&r0, &g0, &b0);
-
-  // Get desired background color
-  GDLCT* actCT = GraphicsDevice::GetCT();
-  actCT->Get(bColor, rb, gb, bb);
-
-  // Convert to PLINT from GDL_BYTE
-  r1 = (PLINT) rb;
-  g1 = (PLINT) gb;
-  b1 = (PLINT) bb;
-  // this mimics better the *DL behaviour.
-  ::c_plbop();
-  plscolbg(r1, g1, b1);
-
-  //plclear clears only the current subpage.
-  //  ::c_plclear();
-  //
-  //  plscolbg (r0, g0, b0);
+void GDLXStream::Clear(DLong chan) {
+  static const int planemask[3]={0x0000FF,0x00FF00,0xFF0000};
+//fill screen with background (since plotting erase has called background) on channel chan
+  XwDev *dev = (XwDev *) pls->dev;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  XSetForeground(xwd->display,dev->gc,xwd->cmap0[0].pixel);
+  XSetPlaneMask(xwd->display,dev->gc,planemask[chan]);
+  if (dev->write_to_pixmap)
+    XFillRectangle(xwd->display, dev->pixmap, dev->gc, 0, 0, dev->width, dev->height);
+  if (1) // not (dev->write_to_window): always!
+    XFillRectangle(xwd->display, dev->window, dev->gc, 0, 0, dev->width, dev->height);
+  XSetForeground(xwd->display,dev->gc,dev->curcolor.pixel);
+  XSetPlaneMask(xwd->display,dev->gc,AllPlanes);
 }
+  
+unsigned long GDLXStream::GetWindowDepth() {
+  XwDev *dev = (XwDev *) pls->dev;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  return xwd->depth;
+}
+DLong GDLXStream::GetVisualDepth() {
+  XwDev *dev = (XwDev *) pls->dev;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  XWindowAttributes wa;
+  if(XGetWindowAttributes( xwd->display, dev->window, &wa )) return (long)wa.depth;
+  else return -1;
+}
+DString GDLXStream::GetVisualName() {
+  static const char* visual_classes_names[] = {
+   "StaticGray" , 
+   "GrayScale" ,
+   "StaticColor" ,
+    "PseudoColor" ,
+   "TrueColor" ,
+   "DirectColor" };
+  XwDev *dev = (XwDev *) pls->dev;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  XWindowAttributes wa;
+  if(XGetWindowAttributes( xwd->display, dev->window, &wa )) {
+    /* need some works to go to Visual Name */
+    int junk;
+    XVisualInfo vistemplate, *vinfo; 
+    vistemplate.visualid = XVisualIDFromVisual(wa.visual);
+    vinfo = XGetVisualInfo(xwd->display, VisualIDMask, &vistemplate, &junk);
+    if (vinfo->c_class < 5){
+        std::string ret;
+        ret=std::string(visual_classes_names[vinfo->c_class]);
+        return ret;
+    } else return "";
+  }
+  else return "";
+  }
+
+  bool GDLXStream::UnsetFocus()
+  {
+    XwDev *dev = (XwDev *) pls->dev;
+    if( dev == NULL) return false;
+    XwDisplay *xwd = (XwDisplay *) dev->xwd;
+    if(term_window) {
+      XWindowAttributes from_attr;
+      XGetWindowAttributes(xwd->display,term_window,&from_attr);
+      if(from_attr.map_state==IsViewable) XSetInputFocus(xwd->display,term_window,RevertToParent,CurrentTime);
+    } 
+    else 
+    { 
+      XSetInputFocus(xwd->display, DefaultRootWindow(xwd->display),RevertToParent,CurrentTime);
+    }
+    return true;
+  }  
+  
+// This helps cursor window leave focus.
+//
+  bool GDLXStream::setFocus(bool value=true)
+  {
+    XwDev *dev = (XwDev *) pls->dev;
+    if( dev == NULL) return false;
+    XwDisplay *xwd = (XwDisplay *) dev->xwd;
+    XWMHints gestw;
+    gestw.input = value;
+    gestw.flags = InputHint;
+    XSetWMHints(xwd->display, dev->window, &gestw);
+    return true;
+  }
+  
+  bool GDLXStream::SetBackingStore(int value)
+  {
+    XwDev *dev = (XwDev *) pls->dev;
+    if( dev == NULL) return false;
+    XwDisplay *xwd = (XwDisplay *) dev->xwd;
+    XSetWindowAttributes attr;
+    if (value > 0)
+    {
+      attr.backing_store = Always;
+    }
+    else
+    {
+      attr.backing_store = NotUseful;
+    }
+    XChangeWindowAttributes(xwd->display, dev->window,CWBackingStore,&attr);
+    return true;
+  }
 
 void GDLXStream::Raise() {
   XwDev *dev = (XwDev *) pls->dev;
@@ -194,6 +300,7 @@ void GDLXStream::Iconic() {
   XwDev *dev = (XwDev *) pls->dev;
   XwDisplay *xwd = (XwDisplay *) dev->xwd;
   XIconifyWindow(xwd->display, dev->window, xwd->screen);
+// really hides the window  XWithdrawWindow(xwd->display, dev->window, xwd->screen);
 }
 
 void GDLXStream::DeIconic() {
@@ -202,6 +309,14 @@ void GDLXStream::DeIconic() {
   XMapWindow(dev->xwd->display, dev->window);
 }
 
+void GDLXStream::UnMapWindow() {
+  //Used for /PIXMAP windows: 1) insure write_to_pixmap and not write_to_window, and 2) hide the window.
+  XwDev *dev = (XwDev *) pls->dev;
+  dev->write_to_pixmap=TRUE;
+  dev->write_to_window=FALSE;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  XWithdrawWindow(xwd->display, dev->window, xwd->screen);
+}
 void GDLXStream::Flush() {
   XwDev *dev = (XwDev *) pls->dev;
   XwDisplay *xwd = (XwDisplay *) dev->xwd;
@@ -272,6 +387,7 @@ bool GDLXStream::GetGin(PLGraphicsIn *gin, int mode) {
   if (ostate & Button4Mask) gin->button = 4;
   if (ostate & Button5Mask) gin->button = 5; //IDL does not support buttons 4-5 but we may?
   //return if NOWAIT
+  setFocus(false);  // first try to get out of focus.
   if (mode == NOWAIT) return true;
   
   unsigned long event_mask = (PointerMotionMask|ButtonMotionMask);
@@ -531,6 +647,205 @@ unsigned long event_mask = (EnterWindowMask| LeaveWindowMask | KeyPressMask  | K
   if(kbgrabbed)   XUngrabKeyboard(xwd->display,CurrentTime);
   XFlush(xwd->display);
   return status;
+}
+#define ToXColor(a) (((0xFF & (a)) << 8) | (a))
+
+bool GDLXStream::PaintImage(unsigned char *idata, PLINT nx, PLINT ny, DLong *pos,
+        DLong trueColorOrder, DLong chan) {
+
+  PLINT ix, iy;
+  XwDev *dev = (XwDev *) pls->dev;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  XImage *ximg = NULL;
+
+  int x, y;
+  XFlush(xwd->display);
+
+  int (*oldErrorHandler)(Display*, XErrorEvent*);
+  oldErrorHandler = XSetErrorHandler(DeviceX::GetImageErrorHandler);
+  if (dev->write_to_pixmap) {
+    ximg = XGetImage(xwd->display, dev->pixmap, 0, 0,
+            dev->width, dev->height,
+            AllPlanes, ZPixmap);
+  } else {
+    ximg = XGetImage(xwd->display, dev->window, 0, 0,
+          dev->width, dev->height,
+          AllPlanes, ZPixmap);
+  }
+  if (ximg == NULL) { //last chance!!!
+    XSync(xwd->display, 0);
+    x = 0;
+    y = 0;
+    if (dev->write_to_pixmap) {
+      XCopyArea(xwd->display, dev->pixmap, dev->window, dev->gc,
+              x, y, dev->width, dev->height, x, y);
+      XSync(xwd->display, 0);
+    }
+  }
+  XSetErrorHandler(oldErrorHandler);
+  if (ximg == NULL) {
+    cerr<<"Unhandled unsuccessful XCopyArea, returning."<<endl; 
+    return false; 
+  }
+  int ncolors;
+  PLINT iclr1, ired, igrn, iblu;
+  if (trueColorOrder == 0 && chan == 0) {
+
+    ncolors = 256;
+
+    if (xwd->ncol1 != ncolors) {
+      //was free_mem from plplotP.h which is forbidden - thanks to GJ for pointing this.
+      if ( xwd->cmap1 != NULL ) { free( (void *)  xwd->cmap1); xwd->cmap1 = NULL; } 
+      xwd->cmap1 = (XColor *) calloc(ncolors, (size_t) sizeof (XColor));
+    }
+    //#endif
+
+    for (SizeT i = 0; i < ncolors; i++) {
+
+      xwd->cmap1[i].red = ToXColor(pls->cmap0[i].r);
+      xwd->cmap1[i].green = ToXColor(pls->cmap0[i].g);
+      xwd->cmap1[i].blue = ToXColor(pls->cmap0[i].b);
+      xwd->cmap1[i].flags = DoRed | DoGreen | DoBlue;
+
+      if (XAllocColor(xwd->display, xwd->map, &xwd->cmap1[i]) == 0)
+        break;
+    }
+    xwd->ncol1 = ncolors;
+  }
+  PLINT xoff = (PLINT) pos[0]; //(pls->wpxoff / 32767 * dev->width + 1);
+  PLINT yoff = (PLINT) pos[2]; //(pls->wpyoff / 24575 * dev->height + 1);
+  PLINT kx, ky;
+
+  XColor curcolor;
+
+  PLINT kxLimit = dev->width - xoff;
+  PLINT kyLimit = dev->height - yoff;
+
+  if (nx < kxLimit) kxLimit = nx;
+  if (ny < kyLimit) kyLimit = ny;
+
+  /*#ifdef _OPENMP
+  SizeT nOp = kxLimit * kyLimit;
+#endif
+  #pragma omp parallel if (nOp >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= nOp)) private(ired,igrn,iblu,kx,ky,iclr1,curcolor)
+  {
+  #pragma omp for*/
+  for (ix = 0; ix < kxLimit; ++ix) {
+    for (iy = 0; iy < kyLimit; ++iy) {
+
+      kx = xoff + ix;
+      ky = yoff + iy;
+
+      if (trueColorOrder == 0 && chan == 0) {
+        iclr1 = idata[iy * nx + ix];
+
+        if (xwd->color)
+          curcolor = xwd->cmap1[iclr1];
+        else
+          curcolor = xwd->fgcolor;
+
+        //	  printf("ix: %d  iy: %d  pixel: %d\n", ix,iy,curcolor.pixel);
+
+      } else {
+        if (chan == 0) {
+          if (trueColorOrder == 1) {
+            ired = idata[3 * (iy * nx + ix) + 0];
+            igrn = idata[3 * (iy * nx + ix) + 1];
+            iblu = idata[3 * (iy * nx + ix) + 2];
+          } else if (trueColorOrder == 2) {
+            ired = idata[nx * (iy * 3 + 0) + ix];
+            igrn = idata[nx * (iy * 3 + 1) + ix];
+            iblu = idata[nx * (iy * 3 + 2) + ix];
+          } else if (trueColorOrder == 3) {
+            ired = idata[nx * (0 * ny + iy) + ix];
+            igrn = idata[nx * (1 * ny + iy) + ix];
+            iblu = idata[nx * (2 * ny + iy) + ix];
+          }
+          curcolor.pixel = ired * 256 * 256 + igrn * 256 + iblu;
+        }else{
+          unsigned long pixel = XGetPixel(ximg, kx, dev->height - 1 - ky);
+          if (chan == 1) {
+            pixel &= 0x00ffff;
+            ired = idata[1 * (iy * nx + ix) + 0];
+            curcolor.pixel = ired * 256 * 256 + pixel;
+          } else if (chan == 2) {
+            pixel &= 0xff00ff;
+            igrn = idata[1 * (iy * nx + ix) + 1];
+            curcolor.pixel = igrn * 256 + pixel;
+          } else if (chan == 3) {
+            pixel &= 0xffff00;
+            iblu = idata[1 * (iy * nx + ix) + 2];
+            curcolor.pixel = iblu + pixel;
+          }
+        }
+      }
+
+      //std::cout << "XPutPixel: "<<kx<<"  "<< dev->height-ky-1 << std::endl;
+      // TODO check if XPutPixel() and XGetPixel() are thread save
+      // do not forget to invert Y:
+      if (ky < dev->height && kx < dev->width)
+        XPutPixel(ximg, kx, dev->height - 1 - ky, curcolor.pixel);
+    }
+  }
+  //}
+
+  if (dev->write_to_pixmap)
+    XPutImage(xwd->display, dev->pixmap, dev->gc, ximg, 0, 0,
+          0, 0, dev->width, dev->height);
+
+  if (1) //(dev->write_to_window) //always write
+    XPutImage(xwd->display, dev->window, dev->gc, ximg, 0, 0,
+          0, 0, dev->width, dev->height);
+
+  XDestroyImage(ximg);
+  return true;
+}
+#undef ToXColor
+//Read X11 bitmapdata -- normally on 4BPP=Allplanes, return 3BPP ignoring Alpha plane.
+DByteGDL* GDLXStream::GetBitmapData() {
+  plstream::cmd( PLESC_FLUSH, NULL );
+  GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
+  
+  XwDev *dev = (XwDev *) pls->dev;
+  XwDisplay *xwd = (XwDisplay *) dev->xwd;
+  XImage *ximg = NULL;
+  XWindowAttributes win_attr;
+
+  /* query the window's attributes. */
+  Status rc = XGetWindowAttributes(xwd->display, dev->window, &win_attr);
+  unsigned int nx = win_attr.width;
+  unsigned int ny = win_attr.height;
+
+    int (*oldErrorHandler)(Display*, XErrorEvent*);
+    oldErrorHandler = XSetErrorHandler(DeviceX::GetImageErrorHandler);
+    if (dev->write_to_pixmap) {
+      ximg = XGetImage(xwd->display, dev->pixmap, 0, 0, nx, ny, AllPlanes, ZPixmap);
+    } else {
+      ximg = XGetImage( xwd->display, dev->window, 0, 0, nx, ny, AllPlanes, ZPixmap);
+    }
+    XSetErrorHandler(oldErrorHandler);
+    
+    if (ximg == NULL) return NULL;
+    if (ximg->bits_per_pixel != 32) return NULL;
+
+    SizeT datadims[3];
+    datadims[0] = nx;
+    datadims[1] = ny;
+    datadims[2] = 3;
+    dimension datadim(datadims, (SizeT) 3);
+    DByteGDL *bitmap = new DByteGDL( datadim, BaseGDL::NOZERO);
+    //PADDING is 4BPP -- we take 3BPP and revert Y to respect IDL default
+    SizeT kpad = 0;
+    for ( SizeT iy =0; iy < ny ; ++iy ) {
+      for ( SizeT ix = 0; ix < nx; ++ix ) {
+        (*bitmap)[3 * ((ny-1-iy) * nx + ix) + 2] = ximg->data[kpad++];
+        (*bitmap)[3 * ((ny-1-iy) * nx + ix) + 1] = ximg->data[kpad++];
+        (*bitmap)[3 * ((ny-1-iy) * nx + ix) + 0] = ximg->data[kpad++];
+        kpad++; //pad to 4
+      }
+    }
+    XDestroyImage(ximg);
+    return bitmap;
 }
 
 #endif

@@ -48,6 +48,9 @@ namespace lib {
 
    BaseGDL* list__toarray( EnvUDT* e);
 
+   BaseGDL* list__isempty( EnvUDT* e);
+   BaseGDL* list__count( EnvUDT* e);
+   BaseGDL* list__where( EnvUDT* e);
 }
 
 #endif

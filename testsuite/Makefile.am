@@ -61,8 +61,14 @@ TESTS = \
   test_bug_3559291.pro \
   test_bug_3572473.pro \
   test_bug_3595172.pro \
+  test_bug_n000542.pro \
   test_bug_n000580.pro \
   test_bug_n000581.pro \
+  test_bug_n000587.pro \
+  test_bug_n000597.pro \
+  test_bug_n000599.pro \
+  test_bug_n000607.pro \
+  test_bug_n000608.pro \
   test_call_function.pro \
   test_call_procedure.pro \
   test_ce.pro \
@@ -70,6 +76,7 @@ TESTS = \
   test_common.pro \
   test_congrid.pro \
   test_constants.pro \
+  test_convert_coord.pro \
   test_correlate.pro \
   test_deriv.pro \
   test_device.pro \
@@ -102,9 +109,12 @@ TESTS = \
   test_image_statistics.pro \
   test_interpol.pro \
   test_interpolate_missing.pro \
+  test_isa.pro \
+  test_list.pro \
   test_ludc_lusol.pro \
   test_matrix_multiply.pro \
   test_memory.pro \
+  test_modulo.pro \
   test_moment.pro \
   test_mpfit.pro \
   test_multiroots.pro \
@@ -112,6 +122,7 @@ TESTS = \
   test_nestedloop.pro \
   test_netcdf.pro \
   test_null.pro \
+  test_obj_new.pro \
   test_plotting_ranges.pro \
   test_pmulti.pro \
   test_product.pro \
@@ -127,6 +138,7 @@ TESTS = \
   test_readf.pro \
   test_rebin.pro \
   test_rk4.pro \
+  test_routine_names.pro \
   test_same_name.pro \
   test_scope_varfetch.pro \
   test_sem.pro \
@@ -144,9 +156,12 @@ TESTS = \
   test_suite.pro \
   test_systime.pro \
   test_trisol.pro \
+  test_typename.pro \
   test_url.pro \
+  test_voigt.pro \
   test_wait.pro \
   test_wavelet.pro \
+  test_where.pro \
   test_zeropoly.pro \
   test_zip.pro \
   checks

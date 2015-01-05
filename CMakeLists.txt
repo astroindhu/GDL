@@ -14,7 +14,7 @@ cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
 project(GDL)
 
 # X.X.X CVS becomes release X.X.X+1
-set(VERSION "0.9.4 CVS")
+set(VERSION "0.9.5 CVS")
 enable_testing()
 
 include(CheckIncludeFile)
@@ -30,79 +30,82 @@ include(FindPackageHandleStandardArgs)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/CMakeModules)
 
 #### Default cached values
-set(PYTHON_MODULE OFF CACHE BOOL "Build GDL as a Python module ?")
+set(PYTHON_MODULE OFF CACHE BOOL "GDL: Build GDL as a Python module ?")
 
-set(X11 ON CACHE BOOL "Enable X11 ?") 
-set(X11DIR "" CACHE PATH "Specify X11 directory tree")
+set(X11 ON CACHE BOOL "GDL: Enable X11 ?") 
+set(X11DIR "" CACHE PATH "GDL: Specify X11 directory tree")
 
-set(READLINE ON CACHE BOOL "Enable GNU Readline ?")
-set(READLINEDIR "" CACHE PATH "Specify the GNU readline directory tree")
+set(READLINE ON CACHE BOOL "GDL: Enable GNU Readline ?")
+set(READLINEDIR "" CACHE PATH "GDL: Specify the GNU readline directory tree")
 
-set(OLDPLPLOT OFF CACHE BOOL "Enable old plplot ?")
-set(PLPLOTDIR "" CACHE PATH "Specify the plplot directory tree")
+set(OLDPLPLOT OFF CACHE BOOL "GDL: Enable old plplot ?")
+set(PLPLOTDIR "" CACHE PATH "GDL: Specify the plplot directory tree")
 
-set(GSLDIR "" CACHE PATH "Specify the GSL directory tree")
+set(GSLDIR "" CACHE PATH "GDL: Specify the GSL directory tree")
 
-set(ZLIBDIR "" CACHE PATH "specify the Zlib directory tree")
+set(ZLIBDIR "" CACHE PATH "GDL: Specify the Zlib directory tree")
 
-set(WXWIDGETS ON CACHE BOOL "Enable WxWidgets ?")
-set(WXWIDGETSDIR "" CACHE PATH "Specify WxWidgets directory tree")
+set(WXWIDGETS ON CACHE BOOL "GDL: Enable WxWidgets ?")
+set(WXWIDGETSDIR "" CACHE PATH "GDL: Specify WxWidgets directory tree")
 
-set(UDUNITS OFF CACHE BOOL "Enable UDUNITS-2 ?")
-set(UDUNITSDIR "" CACHE PATH "Specify the UDUNITS-2 directory tree")
+set(UDUNITS OFF CACHE BOOL "GDL: Enable UDUNITS-2 ?")
+set(UDUNITSDIR "" CACHE PATH "GDL: Specify the UDUNITS-2 directory tree")
 
-set(EIGEN3 ON CACHE BOOL "Enable Eigen3 ?")
-set(EIGEN3DIR "" CACHE PATH "Specify the Eigen3 directory tree")
+set(EIGEN3 ON CACHE BOOL "GDL: Enable Eigen3 ?")
+set(EIGEN3DIR "" CACHE PATH "GDL: Specify the Eigen3 directory tree")
 
-set(PSLIB ON CACHE BOOL "Enable pslib ?")
-set(PSLIBDIR "" CACHE PATH "Specify the pslib directory tree")
+set(PSLIB ON CACHE BOOL "GDL: Enable pslib ?")
+set(PSLIBDIR "" CACHE PATH "GDL: Specify the pslib directory tree")
 
-set(GRIB OFF CACHE BOOL "Enable Grib ?")
-set(GRIBDIR "" CACHE PATH "Specifiy the GRIB directory tree")
+set(PNGLIB ON CACHE BOOL "GDL: Enable libpng ?")
+set(PNGLIBDIR "" CACHE PATH "GDL: Specify the libpng directory tree")
+
+set(GRIB OFF CACHE BOOL "GDL: Enable Grib ?")
+set(GRIBDIR "" CACHE PATH "GDL: Specifiy the GRIB directory tree")
 
 
-set(MAGICK ON CACHE BOOL "Enable ImageMagick ?")
-set(MAGICKDIR "" CACHE PATH "Specifiy the ImageMagick directory tree")
+set(MAGICK ON CACHE BOOL "GDL: Enable ImageMagick ?")
+set(MAGICKDIR "" CACHE PATH "GDL: Specifiy the ImageMagick directory tree")
 
 # GraphicsMagick is a good alternative to ImageMagick
-set(GRAPHICSMAGICK ON CACHE BOOL "Enable GraphicsMagick ?")
-set(GRAPHICSMAGICKDIR "" CACHE PATH "Specify the GraphicsMagick directory tree")
+set(GRAPHICSMAGICK ON CACHE BOOL "GDL: Enable GraphicsMagick ?")
+set(GRAPHICSMAGICKDIR "" CACHE PATH "GDL: Specify the GraphicsMagick directory tree")
 
-set(NETCDF ON CACHE BOOL "Enable NetCDF ?")
-set(NETCDFDIR "" CACHE PATH "Specifiy the netCDF directory tree")
+set(NETCDF ON CACHE BOOL "GDL: Enable NetCDF ?")
+set(NETCDFDIR "" CACHE PATH "GDL: Specifiy the netCDF directory tree")
 
-set(HDF ON CACHE BOOL "Enable Hdf ?")
-set(HDFDIR "" CACHE PATH "Specifiy the HDF directory tree")
+set(HDF ON CACHE BOOL "GDL: Enable Hdf ?")
+set(HDFDIR "" CACHE PATH "GDL: Specifiy the HDF directory tree")
 
-set(HDF5 ON CACHE BOOL "Enable Hdf5 ?")
-set(HDF5DIR "" CACHE PATH "Specifiy the HDF5 directory tree")
+set(HDF5 ON CACHE BOOL "GDL: Enable Hdf5 ?")
+set(HDF5DIR "" CACHE PATH "GDL: Specifiy the HDF5 directory tree")
 
-set(FFTW ON CACHE BOOL "Enable FFTW ?")
-set(FFTWDIR "" CACHE PATH "Specifiy the FFTW directory tree")
+set(FFTW ON CACHE BOOL "GDL: Enable FFTW ?")
+set(FFTWDIR "" CACHE PATH "GDL: Specifiy the FFTW directory tree")
 
-set(LIBPROJ4 OFF CACHE BOOL "Enable LIBPROJ4 ?")
-set(LIBPROJ4DIR "" CACHE PATH "Specifiy the LIBPROJ4 directory tree")
+set(LIBPROJ4 OFF CACHE BOOL "GDL: Enable LIBPROJ4 ?")
+set(LIBPROJ4DIR "" CACHE PATH "GDL: Specifiy the LIBPROJ4 directory tree")
 
-set(MPICH OFF CACHE BOOL "Enable MPICH ?")
-set(MPICHDIR "" CACHE PATH "Specify the MPICH (experimental) directory tree")
+set(MPICH OFF CACHE BOOL "GDL: Enable MPICH ?")
+set(MPICHDIR "" CACHE PATH "GDL: Specify the MPICH (experimental) directory tree")
 
-set(PYTHON ON CACHE BOOL "Enable Python ?")
-set(PYTHONDIR "" CACHE PATH "Specifiy the use Python directory tree")
-set(PYTHONVERSION "" CACHE STRING "Specify the Python version to use")
+set(PYTHON ON CACHE BOOL "GDL: Enable Python ?")
+set(PYTHONDIR "" CACHE PATH "GDL: Specifiy the use Python directory tree")
+set(PYTHONVERSION "" CACHE STRING "GDL: Specify the Python version to use")
 
-set(GSHHS OFF CACHE BOOL "Enable GSHHS ?")
-set(GSHHSDIR "" CACHE PATH "Specifiy the GSHHS directory tree")
+set(GSHHS ON CACHE BOOL "GDL: Enable GSHHS ?")
+set(GSHHSDIR "" CACHE PATH "GDL: Specifiy the GSHHS directory tree")
 
-set(NCURSESDIR "" CACHE PATH "Specify the ncurses (or curses) directory tree")
+set(NCURSESDIR "" CACHE PATH "GDL: Specify the ncurses (or curses) directory tree")
 
-set(OPENMP ON CACHE BOOL "Enable OpenMP ?")
+set(OPENMP ON CACHE BOOL "GDL: Enable OpenMP ?")
 
 # Third party libraries
-set(JASPERDIR "" CACHE PATH "Specify the JasPer directory tree")
-set(JPEGDIR "" CACHE PATH "Specify the JPEG directory tree")
-set(SZIPDIR "" CACHE PATH "Specify the SZip directory tree")
+set(JASPERDIR "" CACHE PATH "GDL: Specify the JasPer directory tree")
+set(JPEGDIR "" CACHE PATH "GDL: Specify the JPEG directory tree")
+set(SZIPDIR "" CACHE PATH "GDL: Specify the SZip directory tree")
 
-set(GDL_DATA_DIR "/share/gnudatalanguage" CACHE PATH "Choose data install directory relative to CMAKE_INSTALL_PREFIX")
+set(GDL_DATA_DIR "/share/gnudatalanguage" CACHE PATH "GDL: data directory relative to CMAKE_INSTALL_PREFIX")
 
 
 # check for 64-bit OS
@@ -171,30 +174,46 @@ check_include_file(mpi.h HAVE_MPI_H)
 #     version of antlr in system-wide directories
 include_directories(src)
 
-# Ncurses MANDATORY
-# -DNCURSESDIR=DIR
-set(CMAKE_PREFIX_PATH ${NCURSESDIR})	
-set(CURSES_NEED_NCURSES TRUE)
-find_package(Curses QUIET COMPONENTS initscr)
-mark_as_advanced(CURSES_CURSES_H_PATH CURSES_FORM_LIBRARY CURSES_HAVE_CURSES_H)
-if(CURSES_FOUND)
-	set(HAVE_LIBNCURSES 1)
-	set(LIBRARIES ${LIBRARIES} ${CURSES_LIBRARIES})
-	include_directories(${CURSES_INCLUDE_DIR})
-else(CURSES_FOUND)
-	# search for curses
-	set(CURSES_NEED_NCURSES FALSE)
-	find_package(Curses COMPONENTS initscr)
-	set(HAVE_LIBCURSES ${CURSES_FOUND})
+if(WIN32 AND NOT CYGWIN)
+	# For Win32 find Pdcureses instead of (N)Curses
+	# -DPDCURSESDIR=DIR
+	set(CMAKE_PREFIX_PATH ${PDCURSESDIR})
+	find_package(Pdcurses)
+	if(PDCURSES_FOUND)
+		set(LIBRARIES ${LIBRARIES} ${PDCURSES_LIBRARIES})
+		include_directories(${PDCURSES_INCLUDE_DIR})
+		set(HAVE_LIBPDCURSES 1)
+	else(PDCURSES_FOUND)
+		message("${PDCURSES_LIBRARIES}\n${PDCURSES_LIBRARY}\n${PDCURSES_INCLUDE_DIR}\n")
+		message(FATAL_ERROR "PDCurses was not found.\n"
+			"Use -DPDCURSESDIR=DIR to specify the curses directory tree.\n")
+	endif(PDCURSES_FOUND)
+else(WIN32 AND NOT CYGWIN)
+	# Ncurses MANDATORY
+	# -DNCURSESDIR=DIR
+	set(CMAKE_PREFIX_PATH ${NCURSESDIR})	
+	set(CURSES_NEED_NCURSES TRUE)
+	find_package(Curses QUIET COMPONENTS initscr)
+	mark_as_advanced(CURSES_CURSES_H_PATH CURSES_FORM_LIBRARY CURSES_HAVE_CURSES_H)
 	if(CURSES_FOUND)
+		set(HAVE_LIBNCURSES 1)
 		set(LIBRARIES ${LIBRARIES} ${CURSES_LIBRARIES})
 		include_directories(${CURSES_INCLUDE_DIR})
 	else(CURSES_FOUND)
-		message(FATAL_ERROR "(N)Curses was not found.\n"
-		"Use -DNCURSESDIR=DIR to specify the (n)curses directory tree.\n"
-                "(suitable Debian/Ubuntu package: libncurses-dev)\n")
+		# search for curses
+		set(CURSES_NEED_NCURSES FALSE)
+		find_package(Curses COMPONENTS initscr)
+		set(HAVE_LIBCURSES ${CURSES_FOUND})
+		if(CURSES_FOUND)
+			set(LIBRARIES ${LIBRARIES} ${CURSES_LIBRARIES})
+			include_directories(${CURSES_INCLUDE_DIR})
+		else(CURSES_FOUND)
+			message(FATAL_ERROR "(N)Curses was not found.\n"
+				"Use -DNCURSESDIR=DIR to specify the curses directory tree.\n"
+				"(suitable Debian/Ubuntu package: libncurses-dev)\n")
+		endif(CURSES_FOUND)
 	endif(CURSES_FOUND)
-endif(CURSES_FOUND)
+endif(WIN32 AND NOT CYGWIN)
 
 # Readline
 # -DREADLINE=ON|OFF
@@ -237,6 +256,26 @@ else(ZLIB_FOUND)
         "(suitable Debian/Ubuntu package: zlib1g-dev)\n"
         "(suitable Fedora package: zlib-devel)")
 endif(ZLIB_FOUND)
+
+# libpng
+# -DPNGLIB=ON|OFF
+# -DPNGLIBDIR=DIR
+if(PNGLIB)
+	set(CMAKE_PREFIX_PATH ${PNGLIBDIR})
+	find_package(PNG QUIET)
+	set(USE_PNGLIB ${PNG_FOUND})
+	if(PNG_FOUND)
+		set(LIBRARIES ${LIBRARIES} ${PNG_LIBRARIES})
+		set(LINK_DIRECTORIES ${LINK_DIRECTORIES} ${PNG_LIBRARY_DIRS})
+		include_directories(${PNG_INCLUDE_DIRS})
+	else(PNG_FOUND)
+		message(FATAL_ERROR "libpng is required but was not found.\n"
+		"Use -DPNGLIBDIR=DIR to specify the libpng directory tree.\n"
+		"Use -DPNGLIB=OFF to not use it.\n"
+                "(suitable Debian/Ubuntu package: libpng-dev)\n"
+                "(suitable Fedora package: libpng-devel)")
+	endif(PNG_FOUND)
+endif(PNGLIB)
 
 # openmp
 # -DOPENMP=ON|OFF
@@ -333,13 +372,17 @@ if(PLPLOT_FOUND)
 	endif(HAVE_PLPLOT_SLABELFUNC)
 	set(CMAKE_REQUIRED_INCLUDES "${PLPLOT_INCLUDE_DIR}")
 	set(CMAKE_REQUIRED_LIBRARIES "${PLPLOT_LIBRARIES}")
-	check_cxx_source_compiles("
-#include <plplot/plstream.h>
-int main(int argc, char **argv) {
-  plstream *p = new plstream();
-  PLFLT w = 0.5;
-  p->width(w);
-}" HAVE_PLPLOT_WIDTH)
+#the following does not work with clang (???)
+#	check_cxx_source_compiles("
+##include <plplot/plstream.h>
+#int main(int argc, char **argv) {
+#  plstream *p = new plstream();
+#  PLFLT w = 0.5;
+#  p->width(w);
+#}" HAVE_PLPLOT_WIDTH)
+
+#give it a 2nd try...
+	 check_library_exists("${PLPLOT_LIBRARIES}" c_plwidth "" HAVE_PLPLOT_WIDTH)
 	if(HAVE_PLPLOT_WIDTH)
 	  set(HAVE_PLPLOT_WIDTH 1)
 	endif(HAVE_PLPLOT_WIDTH)
@@ -391,7 +434,7 @@ endif(GRAPHICSMAGICK_FOUND)
 if(MAGICK) # support Magick
 	check_library_exists("${PLPLOT_LIBRARIES}" plGetDrvDir "" HAVE_PLGETDRVDIR)
 	if(HAVE_PLGETDRVDIR)
-		message(STATUS "WARNING: Dynamic drivers have to be disabled in plplot.\n"
+		message(STATUS "WARNING: Dynamic drivers may have to be disabled in plplot.\n"
 		"To make plplot work with ImageMagick:\n"
 		"use -DENABLE_DYNDRIVERS=OFF cmake option when compiling plplot or\n"
 		"use -DMAGICK=OFF here to not use ImageMagick in GDL.")
@@ -401,9 +444,10 @@ endif(MAGICK)
 # wxWdigets
 # -DWXWIDGET=ON|OFF
 # -DWXWIDGETDIR=DIR
+set(wxWidgets_USE_DEBUG OFF) # Use release build
 if(WXWIDGETS)
 	set(CMAKE_PREFIX_PATH ${WXWIDGETSDIR})
-	find_package(wxWidgets QUIET)
+	find_package(wxWidgets QUIET REQUIRED base core adv)
 	set(HAVE_LIBWXWIDGETS ${wxWidgets_FOUND})
 	if(wxWidgets_FOUND)
 		set(LIBRARIES ${LIBRARIES} ${wxWidgets_LIBRARIES})
@@ -544,7 +588,7 @@ if(HDF5)
 		"Use -DHDF5DIR=DIR to specify the HDF5 directory tree.\n"
 		"Use -DHDF5=OFF to not use it.\n"
                 "(suitable Debian/Ubuntu package: libhdf5-serial-dev)\n"
-                "(suitable Fedora package: hdf-devel)")
+                "(suitable Fedora package: hdf5-devel)")
 	endif(HDF5_FOUND)
 endif(HDF5)
 
@@ -679,13 +723,11 @@ if(PYTHON OR PYTHON_MODULE)
                   message("-- Found Python executable: ${PYTHON_EXECUTABLE}")
                 endif()
 	else()
-		if(PYTHONVERSION)
-			set(PythonLibs_FIND_VERSION ${PYTHONVERSION})
-		else()
-			set(PythonLibs_FIND_VERSION 2)
+		if(NOT PYTHONVERSION)
+			set(PYTHONVERSION 2)
 		endif()
-		find_package(PythonLibs)
-		include(FindPythonInterp)
+		find_package(PythonInterp)
+		find_package(PythonLibs ${PYTHONVERSION})
 	endif()
 	set(USE_PYTHON ${PYTHONLIBS_FOUND})
 	if(PYTHONLIBS_FOUND)
@@ -786,36 +828,50 @@ endif(GRIB)
 
 # gshhs
 # -DGSHHS=ON|OFF
-# -DGSHHSDIR=DIR
-if(GSHHS)
-	set(CMAKE_PREFIX_PATH ${GSHHSDIR})
-	find_path(GSHHS_INCLUDE_DIR gshhs.h)
-	mark_as_advanced(GSHHS_INCLUDE_DIR)
-	set(USE_GSHHS ${GSHHS_INCLUDE_DIR})
-	if(USE_GSHHS)
-		include_directories(${GSHHS_INCLUDE_DIR})
-	else(USE_GSHHS)
-		message(FATAL_ERROR "GSHHS is required but gshhs.h was not found.\n"
-		"Use -DGSHHSDIR=DIR to specify the GSHHS directory tree.\n"
-		"Use -DGSHHS=OFF to not use it.")
-	endif(USE_GSHHS)
+if(GSHHS) 	
+    set(USE_GSHHS 1)
 endif(GSHHS)
-
+# -DGSHHSDIR=DIR
+#not needed anymore, gshhs include is in src/
+#	set(CMAKE_PREFIX_PATH ${GSHHSDIR} src/)
+#	find_path(GSHHS_INCLUDE_DIR gshhs.h)
+#	mark_as_advanced(GSHHS_INCLUDE_DIR)
+#	set(USE_GSHHS ${GSHHS_INCLUDE_DIR})
+#	if(USE_GSHHS)
+#		include_directories(${GSHHS_INCLUDE_DIR})
+#	else(USE_GSHHS)
+#		message(FATAL_ERROR "GSHHS is required but gshhs.h was not found.\n"
+#		"Use -DGSHHSDIR=DIR to specify the GSHHS directory tree.\n"
+#		"Use -DGSHHS=OFF to not use it.")
+#	endif(USE_GSHHS)
+#endif(GSHHS)
+#
 # X11
 if(X11)
 	set(CMAKE_PREFIX_PATH ${X11DIR})
-	find_package(X11 QUIET)
-	set(HAVE_X ${X11_FOUND})
-	if(X11_FOUND)
-		set(LIBRARIES ${LIBRARIES} ${X11_LIBRARIES})
-		include_directories(${X11_INCLUDE_DIR})
-	else(X11_FOUND)
-		message(FATAL_ERROR "X11 is required but was not found.\n"
-		"Use -DX11DIR=DIR to specify the X11 directory tree.\n"
-		"Use -DX11=OFF to not use it.")
-	endif(X11_FOUND)
+	if(WIN32 AND NOT CYGWIN)
+		find_package(XPORTMINGW QUIET)
+		set(HAVE_X ${XPORTMINGW_FOUND})
+		if(XPORTMINGW_FOUND)
+			set(LIBRARIES ${LIBRARIES} ${XPORTMINGW_LIBRARIES})
+			include_directories(${XPORTMINGW_INCLUDE_DIR})
+		else(XPORTMINGW_FOUND)
+			message("X11 was not found.\n"
+			"Use -DX11DIR=DIR to specify the X11 directory tree.")
+		endif(XPORTMINGW_FOUND)
+	else(WIN32 AND NOT CYGWIN)
+		find_package(X11 QUIET)
+		set(HAVE_X ${X11_FOUND})
+		if(X11_FOUND)
+			set(LIBRARIES ${LIBRARIES} ${X11_LIBRARIES})
+			include_directories(${X11_INCLUDE_DIR})
+		else(X11_FOUND)
+			message(FATAL_ERROR "X11 is required but was not found.\n"
+			"Use -DX11DIR=DIR to specify the X11 directory tree.\n"
+			"Use -DX11=OFF to not use it.")
+		endif(X11_FOUND)
+	endif(WIN32 AND NOT CYGWIN)
 endif(X11)
-
 add_subdirectory(src)
 if(NOT PYTHON_MODULE)
 	add_subdirectory(testsuite)
@@ -862,13 +918,13 @@ IF(NOT CMAKE_BUILD_TYPE)
     FORCE)
 ENDIF(NOT CMAKE_BUILD_TYPE)
 
-if(WIN32 AND NOT CYGWIN)
-SET(MACHINE_ARCH ${MSVC_C_ARCHITECTURE_ID})
-IF(NOT MACHINE_ARCH)
+if(MSVC)
+	SET(MACHINE_ARCH ${MSVC_C_ARCHITECTURE_ID})
+	IF(NOT MACHINE_ARCH)
   SET(MACHINE_ARCH ${MSVC_CXX_ARCHITECTURE_ID})
-ENDIF(NOT MACHINE_ARCH)
-set_target_properties(gdl PROPERTIES LINK_FLAGS "/machine:${MACHINE_ARCH}")
-endif(WIN32 AND NOT CYGWIN)
+	ENDIF(NOT MACHINE_ARCH)
+	set_target_properties(gdl PROPERTIES LINK_FLAGS "/machine:${MACHINE_ARCH}")
+endif(MSVC)
 
 # AC, 12-oct-2011, solved by Marc 
 # set_target_properties(gdl PROPERTIES LINK_FLAGS "-Wl,-z,muldefs")
@@ -921,7 +977,12 @@ module(GRIB      "GRIB       ")
 set(GSHHS_LIBRARIES ${GSHHS_INCLUDE_DIR})
 module(GSHHS     "GSHHS      ")
 module(PSLIB	 "pslib      ")
+if(WIN32 AND NOT CYGWIN)
+module(XPORTMINGW	 "XPortMinGW (Win32 Xlib)       ")
+else(WIN32 AND NOT CYGWIN)
 module(X11	 "Xlib       ")
+endif(WIN32 AND NOT CYGWIN)
+module(PNGLIB    "libpng     ")
 message("")
 message(STATUS "Mandatory modules")
 set(PLPLOT ON)
@@ -934,5 +995,5 @@ module(OLDPLPLOT "Old Plplot ")
 module(READLINE  "Readline   ")
 module(GSL       "GSL        ")
 module(ZLIB      "Zlib       ")
-module(CURSES    "Ncurses    ")
+module(CURSES    "(N or PD)curses    ")
 message("")

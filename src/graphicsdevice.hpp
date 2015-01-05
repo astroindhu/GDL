@@ -21,7 +21,7 @@ renamed from: graphics.hpp
 GDL Graphic subsytem:
 
 GraphicsDevice - base subsystem class
-DeviceXXX - dervived from Graphics, subsystem for device XXX
+DeviceXXX - derived from Graphics, subsystem for device XXX
 
 
 GDLGStream - base graphic stream class (= windows, printer page)
@@ -37,7 +37,7 @@ Devices are (note that on a given platform not all devices are available):
 X   - X windows (GDLXStream, GDLWXStream)
 WIN - Windows
 PS  - postscript output
-...
+SVG - a SVG compliant file.
 
 */
 
@@ -115,9 +115,11 @@ class GraphicsDevice
   static GraphicsDevice*    actDevice;
   static DeviceListT  deviceList;
   static GraphicsDevice*    actGUIDevice;
-
+  
   static void DefineDStructDesc(); // modifies structList
-
+  unsigned char* CopyBuffer;
+  SizeT CopyBufferSize;
+  
 protected:
   static int wTag, xSTag, ySTag, xVSTag, yVSTag, n_colorsTag; // !D tag indices
 
@@ -146,21 +148,34 @@ public:
   static void HandleEvents();
 
   static void LoadCT(UInt iCT);
-
+  
   static GDLCT*      GetCT() { return &actCT;}
   static GDLCT*      GetCT( SizeT ix) { return &CT[ix];}
   static SizeT       N_CT() { return CT.size();}
+  static void        ListDevice();
+  static bool        ExistDevice( const string& device, int &index);
   static bool        SetDevice( const std::string& devName);
   static GraphicsDevice*   GetDevice() { return actDevice;}
   static GraphicsDevice*   GetGUIDevice() { return actGUIDevice;}
   static DStructGDL* DStruct()   { return actDevice->dStruct;} 
-  
+
   const DString     Name() { return name;}
 
+  unsigned char* GetCopyBuffer() {return CopyBuffer;}
+  SizeT GetCopyBufferSize() {return CopyBufferSize;}
+  unsigned char* SetCopyBuffer(SizeT size) 
+  {
+    if (CopyBufferSize != 0) {free (CopyBuffer); CopyBufferSize = 0;}
+    CopyBuffer=(unsigned char*)calloc(size, sizeof(char)); //set to zero
+    CopyBufferSize = size;
+    return CopyBuffer;
+  }
+
+  
   virtual GDLGStream* GetStreamAt( int wIx) const     { return NULL;}
   virtual GDLGStream* GetStream( bool open=true)      { return NULL;}
   virtual bool WSet( int ix)                          { return false;}
-  virtual int  WAdd()                                 { return false;}
+  virtual int  WAddFree()                                 { return false;}
 
   // for WIDGET_DRAW
   virtual bool GUIOpen( int wIx, int xSize, int ySize) { return false;} 
@@ -178,18 +193,47 @@ public:
   virtual int  MaxWin()                               { return 0;}
   virtual int  ActWin()                               { return -1;}
   virtual void EventHandler() {}
-
+  virtual void DefaultXYSize(DLong *xsize, DLong *ysize) {
+							*xsize=640, *ysize=480; return;}
+  virtual void MaxXYSize(DLong *xsize, DLong *ysize) {
+							*xsize=1200, *ysize=800; return;}
+  virtual DLong GetDecomposed()                       { return -1;}
+  virtual DLong GetGraphicsFunction()                 { return -1;}
+  virtual DIntGDL* GetPageSize()                      { return NULL;}
+  virtual DLong GetPixelDepth()                       { return -1;}
+  virtual DDoubleGDL* GetScreenResolution(char* disp=NULL)  //fake a basic screen if not implemented:
+  {
+    DDoubleGDL* res;
+    res = new DDoubleGDL(2, BaseGDL::NOZERO);
+    (*res)[0]=1.0;
+    (*res)[1]=1.0;
+    return res;
+  }
+//  virtual DFloatGDL* GetScreenSize(char* disp=NULL)     { return NULL;}
+  virtual DIntGDL* GetScreenSize(char* disp=NULL) //fake a basic screen if not implemented:
+  {
+    DIntGDL* res;
+    res = new DIntGDL(2, BaseGDL::NOZERO);
+    (*res)[0]=640;
+    (*res)[1]=480;
+    return res;
+  }
+  virtual DLong GetVisualDepth()                      { return -1;}
+  virtual DString GetVisualName()                     { return "";}
+  virtual DIntGDL* GetWindowPosition()                { return NULL;}
+  virtual DLong GetWriteMask()                        { return -1;}
+  virtual DByteGDL* WindowState()                     { return NULL;}
   virtual bool CloseFile()                            { return false;}
   virtual bool SetFileName( const std::string& f)     { return false;}
-  virtual bool  Decomposed( bool value)               { return false;}
-  virtual DLong GetDecomposed()                       { return -1;}
-  virtual bool  SetGraphicsFunction( DLong value)     { return false;}
-  virtual DLong GetGraphicsFunction()                 { return -1;}
+  virtual bool Decomposed( bool value)                { return false;}
+  virtual bool SetGraphicsFunction( DLong value)      { return false;}
   virtual bool CursorStandard( int value)             { return false;}
   virtual bool CursorCrosshair()                      { return false;}
+  virtual int  getCursorId()                             { return -1;}
   virtual bool UnsetFocus()                           { return false;}
   virtual bool SetFocus()                             { return false;}
-  virtual bool EnableBackingStore(bool enable)        { return false;}
+  virtual bool SetBackingStore(int value)          { return false;}
+  virtual int  getBackingStore()                      { return -1;}
   virtual bool SetXPageSize( const float xs)          { return false;}
   virtual bool SetYPageSize( const float ys)          { return false;}
   virtual bool SetColor(const long color=0)           { return false;}
@@ -199,21 +243,23 @@ public:
   virtual bool SetPortrait()                          { return false;}
   virtual bool SetLandscape()                         { return false;}
   virtual bool SetEncapsulated(bool)                  { return false;}
+  virtual bool Hide()                                 { return false;}
+  virtual bool CopyRegion(DLongGDL* me)               { return false;}
 
   // Z buffer device
   virtual bool ZBuffering( bool yes)                  { return false;}
   virtual bool SetResolution( DLong nx, DLong ny)     { return false;}
 
-  // TVRD function for a device
-  virtual BaseGDL* TVRD( EnvT* e) 
-  {
-    throw GDLException( "Device "+Name()+" does not support TVRD.");
-  }
+//  // TVRD function for a device
+//  virtual BaseGDL* TVRD( EnvT* e) 
+//  {
+//    throw GDLException( "Device "+Name()+" does not support TVRD.");
+//  }
   
-  virtual void TV( EnvT* e)
-  {
-    throw GDLException( "Device "+Name()+" does not support TV.");
-  }
+//  virtual void TV( EnvT* e)
+//  {
+//    throw GDLException( "Device "+Name()+" does not support TV.");
+//  }
 
   virtual void ClearStream( DLong bColor)
   {

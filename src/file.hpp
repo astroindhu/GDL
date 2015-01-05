@@ -23,13 +23,13 @@ namespace lib {
   // library functions
   BaseGDL* file_test( EnvT* e);
 
+  std::string PathSeparator();
   void cd_pro( EnvT* e);
 
   BaseGDL* expand_path( EnvT* e);
 
-#ifndef _MSC_VER
+  BaseGDL* file_expand_path( EnvT* e);
   BaseGDL* file_search( EnvT* e);
-#endif
 
   BaseGDL* file_same( EnvT* e);
 

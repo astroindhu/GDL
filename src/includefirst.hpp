@@ -18,6 +18,12 @@
 #ifndef INCLUDEFIRST_HPP_
 #define INCLUDEFIRST_HPP_
 
+#ifdef __CYGWIN__
+//  std::cerr is  broken in gcc/cygwin64 - for gdl, anyways.
+#define cerr cout
+#endif
+// #undef cerr if you want to try it.
+
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -26,6 +32,7 @@
 //#endif
 #ifdef _MSC_VER
 #define NOMINMAX
+#define _WINSOCKAPI_
 #endif
 
 // Python.h must be included before everything else

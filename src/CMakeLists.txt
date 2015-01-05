@@ -42,10 +42,6 @@ basic_fun_cl.hpp
 basic_fun_jmg.cpp
 basic_fun_jmg.hpp
 basic_op.cpp
-basic_pro.cpp
-basic_pro.hpp
-basic_pro_jmg.cpp
-basic_pro_jmg.hpp
 cformat.g
 color.cpp
 color.hpp
@@ -65,8 +61,6 @@ dcompiler.hpp
 default_io.cpp
 deviceps.hpp
 devicesvg.hpp
-devicewin.hpp
-devicex.hpp
 devicez.hpp
 dimension.hpp
 dinterpreter.cpp
@@ -104,6 +98,27 @@ gdlexception.cpp
 gdlexception.hpp
 gdlgstream.cpp
 gdlgstream.hpp
+)
+if(WIN32)
+set(SOURCES
+${SOURCES}
+gdlwinstream.cpp
+gdlwinstream.hpp
+gtdhelper.cpp
+gtdhelper.hpp
+devicewin.hpp
+devicewin.cpp
+)
+else(WIN32)
+set(SOURCES
+${SOURCES}
+devicex.hpp
+gdlxstream.cpp
+gdlxstream.hpp
+)
+endif(WIN32)
+set(SOURCES
+${SOURCES}
 gdljournal.cpp
 gdljournal.hpp
 gdlpsstream.cpp
@@ -116,18 +131,18 @@ gdlwidget.cpp
 gdlwidgeteventhandler.cpp
 gdlwidget.hpp
 gdlwidgetdraw.cpp
-gdlwinstream.cpp
-gdlwinstream.hpp
 gdlwxstream.cpp
 gdlwxstream.hpp
-gdlxstream.cpp
-gdlxstream.hpp
 gdlzstream.cpp
 gdlzstream.hpp
 getfmtast.cpp
 getfmtast.hpp
 graphicsdevice.cpp
 graphicsdevice.hpp
+basic_pro.cpp
+basic_pro.hpp
+basic_pro_jmg.cpp
+basic_pro_jmg.hpp
 grib.cpp
 grib.hpp
 gshhs.cpp
@@ -206,6 +221,7 @@ plotting_convert_coord.cpp
 plotting_cursor.cpp
 plotting_device.cpp
 plotting_erase.cpp
+plotting_image.cpp
 plotting_map_proj.cpp
 plotting_misc.cpp
 plotting_oplot.cpp
@@ -230,6 +246,8 @@ semshm.cpp
 semshm.hpp
 sigfpehandler.cpp
 sigfpehandler.hpp
+smooth.cpp
+smooth.hpp
 specializations.hpp
 str.cpp
 str.hpp
@@ -243,14 +261,6 @@ typetraits.hpp
 widget.cpp
 widget.hpp
 )
-
-if(WIN32 AND NOT CYGWIN)
-set(SOURCES
-${SOURCES}
-gtdhelper.cpp
-gtdhelper.hpp
-)
-endif(WIN32 AND NOT CYGWIN)
 
 add_subdirectory(antlr)
 
@@ -267,6 +277,9 @@ endif(PYTHON_MODULE)
 
 add_dependencies(gdl antlr) # be sure that antlr is built before gdl
 target_link_libraries(gdl antlr) # link antlr against gdl
+if (MINGW)
+target_link_libraries(gdl ws2_32)
+endif (MINGW)
 target_link_libraries(gdl ${LIBRARIES})
 add_definitions(-DHAVE_CONFIG_H)
 

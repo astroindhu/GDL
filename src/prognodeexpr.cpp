@@ -32,6 +32,8 @@
 #include "basic_fun.hpp"
 #include "basic_fun_jmg.hpp"
 
+#include "initsysvar.hpp"
+
 using namespace std;
 
 
@@ -421,7 +423,7 @@ BaseGDL* VARPTRNode::Eval()
 }
 BaseGDL* SYSVARNode::Eval()
 {
-	return this->EvalNC()->Dup();
+  return this->EvalNC()->Dup();
 }
 
 BaseGDL* VARNode::EvalNC()
@@ -479,6 +481,38 @@ BaseGDL* SYSVARNode::EvalNC()
 		throw GDLException( this, "Not a legal system variable: !"+
 			    this->getText(),true,false);
     }
+
+  // we have these two variables which need to be update before returning
+
+//   if(this->getText() == "STIME") 
+  if( SysVar::STime() == this->var->Data())
+    SysVar::UpdateSTime();
+
+  // note by AC on March 10, 2014: I tried to use #include "graphicsdevice.hpp"
+  // but the compilation fails after, in "ProgNodeP QUESTIONNode::GetThisBranch()" around line 770: 
+  //             error: expected unqualified-id before numeric constant
+  //             error: expected `)' before numeric constant
+
+//   if(this->getText() == "D")
+  if( SysVar::D() == this->var->Data())
+    {
+//       DString name = (*static_cast<DStringGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("NAME"), 0)))[0];
+//       if (name == "X") 
+// 	{
+// 	  DLong windowIdx=(*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("WINDOW"), 0)))[0];
+// 	  if (windowIdx >=0) {
+// 	    long xSize,ySize;
+	    SysVar::UpdateD();//xSize,ySize);
+// 	    int debug=0;
+// 	    if (debug) cout << "GetX11Geo in SYSVARNode::EvalNC() : " << xSize <<" "<< ySize << endl;
+// 	    (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("X_SIZE"), 0)))[0] = xSize;
+// 	    (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("Y_SIZE"), 0)))[0] = ySize;
+// 	    (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("X_VSIZE"), 0)))[0] = xSize;
+// 	    (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("Y_VSIZE"), 0)))[0] = ySize;	    
+// 	  }
+// 	}
+    }
+  
   // system variables are always defined
   return this->var->Data(); 
 }
@@ -858,10 +892,16 @@ BaseGDL* EQ_OPNode::Eval()
       // order is critical: overload might just be defined for one of the object types
       // use e2 only if e1 is no object
       BaseGDL* res=e2->EqOp(e1.get());
+      if( e1.Get() == NullGDL::GetSingleInstance())
+	e1.Release();
       return res;
     }
   }
   BaseGDL* res=e1->EqOp(e2.get());
+  if( e1.Get() == NullGDL::GetSingleInstance())
+    e1.Release();
+  if( e2.Get() == NullGDL::GetSingleInstance())
+    e2.Release();
   return res;
 }
 BaseGDL* NE_OPNode::Eval()
@@ -876,10 +916,16 @@ BaseGDL* NE_OPNode::Eval()
       // order is critical: overload might just be defined for one of the object types
       // use e2 only if e1 is no object
       BaseGDL* res=e2->NeOp(e1.get());
+      if( e1.Get() == NullGDL::GetSingleInstance())
+	e1.Release();
       return res;
     }
   }
   BaseGDL* res=e1->NeOp(e2.get());
+  if( e1.Get() == NullGDL::GetSingleInstance())
+    e1.Release();
+  if( e2.Get() == NullGDL::GetSingleInstance())
+    e2.Release();
   return res;
 }
 BaseGDL* LE_OPNode::Eval()
@@ -3180,6 +3226,42 @@ BaseGDL** FCALL_LIBNode::EvalRefCheck( BaseGDL*& rEval)
 
     ProgNode::interpreter->parameter_def_nocheck(this->getFirstChild(), newEnv);
     Guard<EnvT> guardEnv( newEnv);
+
+    // make the call
+    static DSub* scopeVarfetchPro = libFunList[ LibFunIx("SCOPE_VARFETCH")];
+    static DSub* routine_namesPro = libFunList[ LibFunIx("ROUTINE_NAMES")];
+    if( scopeVarfetchPro == this->libFun)//newEnv->GetPro())
+    {
+        BaseGDL**  sV = lib::scope_varfetch_reference( newEnv);
+        if( sV == NULL)
+	{
+	  rEval = lib::scope_varfetch_value( newEnv);
+	  return NULL;
+	}
+	rEval = *sV;
+	if( newEnv->InLoc(sV))
+	{
+	  *sV = NULL; // steal local value
+	  return NULL; // return as not global
+	}
+	return sV;
+    }
+    if( routine_namesPro == this->libFun)// newEnv->GetPro())
+    {
+        BaseGDL**  sV = lib::routine_names_reference( newEnv);
+        if( sV == NULL)
+	{
+	  rEval = lib::routine_names_value( newEnv);
+	  return NULL;
+	}
+	rEval = *sV;
+	if( newEnv->InLoc(sV))
+	{
+	  *sV = NULL; // steal local value
+	  return NULL; // return as not global
+	}
+	return sV;
+    }
 
     // make the call
 //     rEval = static_cast<DLibFun*>(newEnv->GetPro())->Fun()(newEnv);

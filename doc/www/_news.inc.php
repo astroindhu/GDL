@@ -1,3 +1,15 @@
+<h2>GDL 0.9.5 released</h2>
+<p>
+ <span class="align-right"><a href="http://sourceforge.net/projects/gnudatalanguage/files/gdl/0.9.5/README/download">release notes</a> | <a href="downloads.php">downloads</a></span><br/>
+  2014-10-12: <a href="http://www.freshports.org/science/gnudatalanguage/">FreeBSD port updated</a><br />
+  2014-10-13: <a href="https://admin.fedoraproject.org/updates/FEDORA-2014-12674/gdl-0.9.5-1.fc21">FC21</a>,<a href="https://admin.fedoraproject.org/updates/FEDORA-2014-12611/gdl-0.9.5-1.fc20">FC20</a>, <a href="https://admin.fedoraproject.org/updates/FEDORA-EPEL-2014-3278/gdl-0.9.5-1.el7">EL7</a> Fedora updated<br />
+</p>
+
+<h2>First GDL workshop</h2>
+<p>
+  2014-06-(10--13): <a href="http://cias.obspm.fr/fr/activities/details.php?id=103">Workshop at CIAS</a><br />
+</p>
+
 <h2>GDL 0.9.4 released</h2>
 <p>
   2013-10-11: <a href="http://www.freshports.org/science/gnudatalanguage/">FreeBSD port updated</a><br />

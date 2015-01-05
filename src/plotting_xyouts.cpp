@@ -17,7 +17,6 @@
 
 #include "includefirst.hpp"
 #include "plotting.hpp"
-#include "math_utl.hpp"
 
 #define DPI (double)(4*atan(1.0))
 #define DEGTORAD DPI/180.0
@@ -38,12 +37,12 @@ namespace lib
     Guard<DDoubleGDL> xval_guard, yval_guard, zval_guard;
     DStringGDL* strVal;
     SizeT xEl, yEl, zEl, strEl;
+    SizeT minEl;
     bool xLog, yLog, zLog;
     bool doClip, restoreClipBox;
     PLFLT savebox[4];
     bool kwWidth;
     PLFLT width;
-    DLong minEl;
     DLongGDL *color;
     DFloatGDL *spacing,*orientation,*charthick,*alignement,*size;
     Guard<BaseGDL> alignement_guard, orientation_guard,size_guard;
@@ -169,18 +168,6 @@ namespace lib
       gdlGetAxisType("Y", yLog);
       gdlGetAxisType("Z", zLog);
 
-      bool mapSet=false;
-#ifdef USE_LIBPROJ4
-      get_mapset(mapSet);
-      if ( mapSet )
-      {
-        ref=map_init();
-        if ( ref==NULL )
-        {
-          e->Throw("Projection initialization failed.");
-        }
-      }
-#endif
       restoreClipBox=false;
       int noclipvalue=1;
       e->AssureLongScalarKWIfPresent( "NOCLIP", noclipvalue);
@@ -230,10 +217,37 @@ namespace lib
         for ( int i=0; i<4; ++i ) (*static_cast<DLongGDL*>(pStruct->GetTag(clipTag, 0)))[i]=tempbox[i];
       }
 
+      actStream->OnePageSaveLayout(); // one page
+
+      bool mapSet=false;
+#ifdef USE_LIBPROJ4
+      get_mapset(mapSet);
+      mapSet=(mapSet && coordinateSystem==DATA);
+      if ( mapSet )
+      {
+        ref=map_init();
+        if ( ref==NULL )
+        {
+          e->Throw("Projection initialization failed.");
+        }
+        DDouble *sx, *sy;
+        GetSFromPlotStructs( &sx, &sy );
+
+        DFloat *wx, *wy;
+        GetWFromPlotStructs( &wx, &wy );
+
+        DDouble xStart, xEnd, yStart, yEnd;
+        DataCoordLimits( sx, sy, wx, wy, &xStart, &xEnd, &yStart, &yEnd, true );
+
+        actStream->vpor( wx[0], wx[1], wy[0], wy[1] );
+        actStream->wind( xStart, xEnd, yStart, yEnd );
+        }
+#endif
+
+
       PLFLT wun, wdeux, wtrois, wquatre;
       actStream->pageWorldCoordinates(wun, wdeux, wtrois, wquatre);
 
-      actStream->OnePageSaveLayout(); // one page
       actStream->vpor(0, 1, 0, 1); //set full viewport
 
       if ( coordinateSystem==DEVICE )
@@ -308,8 +322,8 @@ namespace lib
 
       // *** start drawing by defalut values
       gdlSetGraphicsForegroundColorFromKw(e, actStream);
-      gdlSetPlotCharthick(e, actStream);
-      gdlSetPlotCharsize(e, actStream, true); //accept SIZE kw!
+      if (!docharthick) gdlSetPlotCharthick(e, actStream);
+      if (!docharsize) gdlSetPlotCharsize(e, actStream, true); //accept SIZE kw!
 
       if ( doT3d ) //convert X,Y,Z in X',Y' as per T3D perspective.
       {
@@ -344,24 +358,16 @@ namespace lib
 
         //following obviously wrong if T3D...
 #ifdef USE_LIBPROJ4
-        if ( mapSet&& coordinateSystem==DATA )
+        if ( mapSet )
         {
           LPTYPE idata;
           XYTYPE odata;
-#ifdef USE_LIBPROJ4_NEW
           idata.u=x * DEG_TO_RAD;
           idata.v=y * DEG_TO_RAD;
           odata=PJ_FWD(idata, ref);
           x=odata.u;
           y=odata.v;
-#else
-          idata.lam=x * DEG_TO_RAD;
-          idata.phi=y * DEG_TO_RAD;
-          odata=PJ_FWD(idata, ref);
-          x=odata.x;
-          y=odata.y;
-#endif	
-         }
+        }
 #endif
 
         if( xLog ) x=log10(x);
@@ -372,12 +378,8 @@ namespace lib
 
         //plot!
         if (docharsize) actStream->sizeChar(( *size )[i%size->N_Elements ( )]);
-        if (docolor) actStream->Color ( ( *color )[i%color->N_Elements ( )], decomposed, 2);
-#ifdef HAVE_PLPLOT_WIDTH
-        if (docharthick) actStream->width( static_cast<PLFLT>(( *charthick )[i%charthick->N_Elements()]));
-#else
-	if (docharthick) actStream->wid( static_cast<PLINT>(( *charthick )[i%charthick->N_Elements()]));
-#endif
+        if (docolor) actStream->Color ( ( *color )[i%color->N_Elements ( )], decomposed);
+        if (docharthick) actStream->Thick(( *charthick )[i%charthick->N_Elements()]);
 
 	//orientation word is not orientation page depending on axes increment direction [0..1] vs. [1..0]
         PLFLT oriD=(( *orientation )[i%orientation->N_Elements ( )]); //ori DEVICE
@@ -406,7 +408,7 @@ namespace lib
         {
           width=actStream->gdlGetmmStringLength(out.c_str()); //in mm
           //we want normed size:
-          width=actStream->m2dx(width);
+          width=actStream->mm2ndx(width);
           //save position - compute must be in DEVICE coords, or in normed*aspect!
           actStream->WorldToNormedDevice(x, y, dx, dy); //normed
           actStream->NormedDeviceToWorld(dx+(1.0-align)*width*cosOriD,dy+(1.0-align)*width*sinOriD/aspectd,dispx,dispy);

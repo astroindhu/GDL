@@ -19,21 +19,18 @@
 #define GDLXSTREAM_HPP_
 
 #include "gdlgstream.hpp"
-
-#ifndef HAVE_X
-#else
+#ifdef HAVE_X
+#  include <plplot/plxwd.h>
 
 class GDLXStream: public GDLGStream
 {
   Atom wm_protocols;
   Atom wm_delete_window;
-
-  PLStream* pls;
-
+  Window term_window;
 public:
   GDLXStream( int nx, int ny)
     : GDLGStream( nx, ny, "xwin")
-//    , plstreamInitCalled( false)
+    , term_window(0)
   {
   }
 
@@ -46,9 +43,18 @@ public:
   static int   GetImageErrorHandler(Display *display, XErrorEvent *error);
 
   void GetGeometry( long& xSize, long& ySize, long& xoff, long& yoff);
+  unsigned long GetWindowDepth();
+  DLong GetVisualDepth();
+  DString GetVisualName();
+  bool setFocus(bool value);
 
+  bool UnsetFocus();
+  bool SetBackingStore(int value);
+  bool SetGraphicsFunction(long value );
+  bool GetWindowPosition(long& xpos, long& ypos );
+  bool CursorStandard(int cursorNumber);
   void Clear();
-  void Clear( DLong bColor);
+  void Clear( DLong chan);
   void Raise();
   void Lower();
   void Iconic();
@@ -61,6 +67,10 @@ public:
   void UnSetDoubleBuffering();
   bool HasDoubleBuffering();
   bool HasSafeDoubleBuffering();
+  bool PaintImage(unsigned char *idata, PLINT nx, PLINT ny,  DLong *pos, DLong tru, DLong chan);
+  virtual bool HasCrossHair() {return true;}
+  void UnMapWindow();
+  DByteGDL* GetBitmapData();
 };
 
 #endif

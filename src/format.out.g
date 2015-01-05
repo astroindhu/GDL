@@ -68,14 +68,17 @@ public:
     {
         std::ostringstream* osLocal;
         std::auto_ptr<std::ostream> osLocalGuard;
-        if( *os_ == std::cout)
+        //if( *os_ == std::cout) // SA: this did not work with win32
+        if( os_->rdbuf() == std::cout.rdbuf())
             {
+                // e.g. print, 1, f='(A)'
                 osLocal = new std::ostringstream();
                 osLocalGuard.reset( osLocal);
                 os = osLocal;
             }
         else
             {
+                // e.g. print, string(1, f='(A)')
                 os = os_;
             }
 
@@ -85,7 +88,7 @@ public:
     
         GDLStream* j = lib::get_journal();
 
-        if( j != NULL && j->OStream() == (*os)) 
+        if( j != NULL && j->OStream().rdbuf() == os->rdbuf()) 
             (*os) << lib::JOURNALCOMMENT;
 
         format( fmt);
@@ -98,7 +101,7 @@ public:
         {
            (*os) << '\n';
             
-            if( j != NULL && j->OStream() == (*os)) 
+            if( j != NULL && j->OStream().rdbuf() == os->rdbuf()) 
                 (*os) << lib::JOURNALCOMMENT;
 
             format_reversion( reversionAnker);            
@@ -115,7 +118,7 @@ public:
             }
         (*os) << std::flush;
 
-        if( *os_ == std::cout)
+        if( os_->rdbuf() == std::cout.rdbuf()) // SA: see note above
             {
                 os = os_;
                 (*os) << osLocal->str();
@@ -268,7 +271,7 @@ q
             {
                 // only one newline to journal file
                 GDLStream* j = lib::get_journal();
-                if( j != NULL && j->OStream() == (*os))
+                if( j != NULL && j->OStream().rdbuf() == os->rdbuf())
                     (*os) << '\n' << lib::JOURNALCOMMENT;
                 else
                     for( int r=s->getRep(); r > 0; r--) (*os) << '\n';

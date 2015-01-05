@@ -177,8 +177,8 @@ void ThrowGDLException( const std::string& str);
 // for OpenMP (defined in objects.cpp - must be declared here)
 extern DLong CpuHW_NCPU;
 extern DLong CpuTPOOL_NTHREADS;
-extern DLong CpuTPOOL_MIN_ELTS;
-extern DLong CpuTPOOL_MAX_ELTS;
+extern DLong64 CpuTPOOL_MIN_ELTS;
+extern DLong64 CpuTPOOL_MAX_ELTS;
 
 // convert something to string
 template <typename T>
@@ -318,7 +318,7 @@ public:
   
   void Reset( T* newGuarded)
   {
-    delete guarded;
+    delete[] guarded;
     guarded = newGuarded;
   }  
   void Release()

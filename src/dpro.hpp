@@ -315,6 +315,11 @@ public:
   void SetTree( ProgNodeP t) { tree = t;}
 
   void AddCommon(DCommonBase* c) { common.push_back(c);}
+  void DeleteLastAddedCommon()
+  {
+    delete common.back();
+    common.pop_back();
+  }
   
   void ResolveAllLabels();
   LabelListT& LabelList() { return labelList;}
@@ -384,20 +389,9 @@ public:
     return key[ix];
   }
 
-  bool GetCommonVarName(const BaseGDL* p, std::string& varName)
-  {
-    for( CommonBaseListT::iterator c=common.begin();
-	 c != common.end(); c++)
-      {
-	int vIx = (*c)->Find( p);
-	if( vIx >= 0) 
-	  {
-	    varName=(*c)->VarName( vIx);
-	    return true;
-	  }
-      }
-    return false;
-  }
+  bool GetCommonVarName(const BaseGDL* p, std::string& varName);
+  bool GetCommonVarName4Help(const BaseGDL* p, std::string& varName);
+
   BaseGDL** GetCommonVarPtr(const BaseGDL* p)
   {
     for( CommonBaseListT::iterator c=common.begin();
@@ -466,6 +460,9 @@ public:
     DSubUD(n,o,f)
   {}
   
+  const std::string ToString();
+
+
   ~DPro() {}; 
 };
 
@@ -475,7 +472,9 @@ public:
   DFun(const std::string& n,const std::string& o="",const std::string& f=""): 
     DSubUD(n,o,f)
   {} 
-  
+
+  const std::string ToString();
+
   ~DFun() {};
 };
 

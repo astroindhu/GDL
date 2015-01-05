@@ -20,8 +20,6 @@
 #include <iostream>
 #ifdef _MSC_VER
 #include <io.h> // isatty, windows
-#define feclearexcept(e)
-#define FE_ALL_EXCEPT
 #else
 #include <unistd.h> // isatty
 #endif
@@ -109,7 +107,7 @@ DInterpreter::DInterpreter(): GDLInterpreter()
 // at main level
 RetCode GDLInterpreter::NewInterpreterInstance( SizeT lineOffset)
 {
-  if( callStack.size() <= 1) return RC_ABORT; // stay in main loop 
+  if( callStack.size() <= 1 && lineOffset == 0) return RC_ABORT; // stay in main loop 
   
   assert( dynamic_cast<DInterpreter*>( this) != NULL);
   return static_cast<DInterpreter*>( this)->InnerInterpreterLoop(lineOffset);
@@ -402,7 +400,7 @@ DStructDesc* GDLInterpreter::GetStruct(const string& name, ProgNodeP cN)
   int proIx=ProIx(proName);
   if( proIx == -1)
     {
-					throw GDLException(cN, "Procedure not found: "+proName, true, false);
+	throw GDLException(cN, "Procedure not found: "+proName, true, false);
     }
   
   // 'guard' call stack
@@ -794,17 +792,18 @@ DInterpreter::CommandCode DInterpreter::ExecuteCommand(const string& command)
     cmdstr = cmdstr.substr(0, sppos);
   }
     
-  //  cout << "Execute command: " << command << endl;
+  //   cout << "Execute command: " << command << endl;
 
   String_abbref_eq cmd( StrUpCase( cmdstr));
 
-  if( cmd( "COMPILE"))
-    {
-      return CmdCompile( command);
-    }
+  // AC: Continue before Compile to have ".c" giving ".continue"
   if( cmd( "CONTINUE"))
     {
       return CC_CONTINUE;
+    }
+  if( cmd( "COMPILE"))
+    {
+      return CmdCompile( command);
     }
   if( cmd( "EDIT"))
     {
@@ -843,32 +842,7 @@ DInterpreter::CommandCode DInterpreter::ExecuteCommand(const string& command)
       cout << "RNEW not implemented yet." << endl;
       return CC_OK;
     }
-  if( cmd( "SIZE"))
-    {
-      cout << "SIZE not implemented yet." << endl;
-      return CC_OK;
-    }
-  if( cmd( "SKIP"))
-    {
-      DLong sCount;
-      if( args == "")
-      {
-	  sCount = 1;
-      }
-      else
-      {
-	const char* cStart=args.c_str();
-	char* cEnd;
-	sCount = strtol(cStart,&cEnd,10);
-	if( cEnd == cStart)
-	{
-	  cout << "Type conversion error: Unable to convert given STRING: '"+args+"' to LONG." << endl;
-	  return CC_OK;
-	}
-      }
-      stepCount = sCount;
-      return CC_SKIP;
-    }
+  // GD:Here to have ".s" giving ".step"
   if( cmd( "STEP"))
     {
       DLong sCount;
@@ -891,9 +865,36 @@ DInterpreter::CommandCode DInterpreter::ExecuteCommand(const string& command)
 	debugMode = DEBUG_STEP;
 	return CC_STEP;
     }
+
+  if( cmd( "SKIP"))
+    {
+      DLong sCount;
+      if( args == "")
+      {
+	  sCount = 1;
+      }
+      else
+      {
+	const char* cStart=args.c_str();
+	char* cEnd;
+	sCount = strtol(cStart,&cEnd,10);
+	if( cEnd == cStart)
+	{
+	  cout << "Type conversion error: Unable to convert given STRING: '"+args+"' to LONG." << endl;
+	  return CC_OK;
+	}
+      }
+      stepCount = sCount;
+      return CC_SKIP;
+    }
   if( cmd( "STEPOVER"))
     {
       cout << "STEPOVER not implemented yet." << endl;
+      return CC_OK;
+    }
+  if( cmd( "SIZE"))
+    {
+      cout << "SIZE not implemented yet." << endl;
       return CC_OK;
     }
   if( cmd( "TRACE"))
@@ -911,14 +912,15 @@ DInterpreter::CommandCode DInterpreter::ExecuteCommand(const string& command)
 void DInterpreter::ExecuteShellCommand(const string& command)
 {
   string commandLine = command;
-  if(commandLine == "") 
-  { 
-    commandLine = GetEnvString("SHELL");
-    if (commandLine == "")
-    {
-      cout << "Error managing child process. Environment variable SHELL not set." << endl;
+  if(commandLine == "") {
+     char* shellEnv = getenv("SHELL");
+	 if (shellEnv == NULL) shellEnv = getenv("COMSPEC");
+	 if (shellEnv == NULL) {
+        cout << "Error managing child process. " <<
+		" Environment variable SHELL or COMSPEC not set." << endl;
       return;
     }
+	 commandLine = shellEnv;
   }
 
   int ignored = system( commandLine.c_str());
@@ -949,7 +951,7 @@ DInterpreter::CommandCode DInterpreter::ExecuteLine( istream* in, SizeT lineOffs
 {
   string line = (in != NULL) ? ::GetLine(in) : GetLine();
 
-  //  cout << "ExecuteLine: " << line << endl;
+  // cout << "ExecuteLine: " << line << endl;
 
   string firstChar = line.substr(0,1);
 
@@ -959,7 +961,7 @@ DInterpreter::CommandCode DInterpreter::ExecuteLine( istream* in, SizeT lineOffs
       return ExecuteCommand( line.substr(1));
     }
 
-  // command
+  //  online help (if possible, start a browser)
   if( firstChar == "?") 
     {
       // later, we will have to check whether we have X11/Display or not
@@ -973,6 +975,65 @@ DInterpreter::CommandCode DInterpreter::ExecuteLine( istream* in, SizeT lineOffs
       }
     }
   
+  // shell command
+  if( firstChar == "#") 
+    {
+      if (line.substr(1).length() > 0) {
+	line=line.substr(1);
+	StrTrim(line);
+	line=StrUpCase(line);
+	//cout << "yes ! >>"<<StrUpCase(line)<<"<<" << endl;
+	SizeT nProFun;
+	int nbFound=0;
+	// looking in internal procedures
+	nProFun=libProList.size();
+	for( SizeT i = 0; i<nProFun; ++i)
+	  {
+	    if (line.compare(libProList[ i]->Name()) == 0) {
+	      cout << "Internal PROCEDURE : " << libProList[ i]->ToString() << endl;
+	      nbFound++;
+	      break;
+	    }
+	  }
+	// looking in internal functions
+	nProFun = libFunList.size();
+	for( SizeT i = 0; i<nProFun; ++i)
+	  {
+	    if (line.compare(libFunList[ i]->Name()) == 0) {
+	      cout << "Internal FUNCTION : " << libFunList[ i]->ToString() << endl;
+	      nbFound++;
+	      break;
+	    }
+	  }
+	// looking in compiled functions
+	nProFun = funList.size();
+	for( SizeT i = 0; i<nProFun; ++i)
+	  {
+	    if (line.compare(funList[ i]->Name()) == 0) {
+	      cout << "Compiled FUNCTION : " << funList[ i]->ToString() << endl;
+	      nbFound++;
+	      break;
+	    }
+	  }
+	// looking in compiled procedures
+	nProFun = proList.size();
+	for( SizeT i = 0; i<nProFun; ++i)
+	  {
+	    if (line.compare(proList[ i]->Name()) == 0) {
+	      cout << "Compiled PROCEDURE : " << proList[ i]->ToString() << endl;
+	      nbFound++;
+	      break;
+	    }
+	  }
+	if (nbFound == 0) {
+	  cout << "No Procedure/Function, internal or compiled, with name : "<< line << endl;
+	}
+      } else {
+	cout << "Please provide a pro/fun name !" << endl;
+      }
+      return CC_OK;
+    }
+
   // shell command
   if( firstChar == "$") 
     {
@@ -1318,7 +1379,11 @@ RetCode DInterpreter::InnerInterpreterLoop(SizeT lineOffset)
 {
   ProgNodeP retTreeSave = _retTree;
   for (;;) {
+#if defined (_MSC_VER) && _MSC_VER < 1800
+	_clearfp();
+#else
     feclearexcept(FE_ALL_EXCEPT);
+#endif
 
     DInterpreter::CommandCode ret=ExecuteLine(NULL, lineOffset);
 
@@ -1357,7 +1422,11 @@ bool DInterpreter::RunBatch( istream* in)
 
   while( in->good())
     {
+#if defined (_MSC_VER) && _MSC_VER < 1800
+	  _clearfp();
+#else
       feclearexcept(FE_ALL_EXCEPT);
+#endif
       
       try
 	{
@@ -1400,7 +1469,11 @@ void DInterpreter::ExecuteFile( const string& file)
   bool runCmd = false;
   while( in.good())
     {
+#if defined (_MSC_VER) && _MSC_VER < 1800
+	  _clearfp();
+#else
       feclearexcept(FE_ALL_EXCEPT);
+#endif 
 
       try
  	{
@@ -1482,7 +1555,11 @@ RetCode DInterpreter::InterpreterLoop( const string& startup,
 	{
 	  while( in.good())
 	    {
+#if defined (_MSC_VER) && _MSC_VER < 1800
+		  _clearfp();
+#else
 	      feclearexcept(FE_ALL_EXCEPT);
+#endif
 
 	      try
 		{
@@ -1571,9 +1648,10 @@ RetCode DInterpreter::InterpreterLoop( const string& startup,
   // http://www.delorie.com/gnu/docs/readline/rlman.html
   char rlName[] = "GDL";
   rl_readline_name = rlName;
-  //removed our handler. takes too long and is called each time we stop the cursor
-  //when editing the command line. (bug 562). used also in gdl.cpp 
-  //rl_event_hook = GDLEventHandler;
+  //Our handler takes too long
+  //when editing the command line with ARROW keys. (bug 562). (used also in gdl.cpp)
+  //but... without it we have no graphics event handler! FIXME!!!
+  rl_event_hook = GDLEventHandler;
   {
     int edit_input = SysVar::Edit_Input();
     stifle_history(edit_input == 1 || edit_input < 0 ? 200 : edit_input);
@@ -1583,7 +1661,11 @@ RetCode DInterpreter::InterpreterLoop( const string& startup,
   // we do not make one commun function with the save side
   // because on the save side we may need to create the .gdl/ PATH ...
   int result, debug=0;
+#ifdef _WIN32
+  char *homeDir = getenv( "HOMEPATH");
+#else
   char *homeDir = getenv( "HOME");
+#endif
   if (homeDir != NULL)
   {
     string pathToGDL_history;
@@ -1613,7 +1695,11 @@ historyIntialized = true;
 
   // go into main loop
   for (;;) {
+#if defined (_MSC_VER) && _MSC_VER < 1800
+    _clearfp();
+#else
     feclearexcept(FE_ALL_EXCEPT);
+#endif
 
     try
       {

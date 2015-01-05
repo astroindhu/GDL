@@ -7,10 +7,10 @@
 ;
 ; CALLING SEQUENCE:
 ;
-; XMANAGER, NAME, ID, /NO_BLOCK, GROUP_LEADER=groupLeader
+; XMANAGER, NAME, ID, /NO_BLOCK, GROUP_LEADER=groupLeader, CLEANUP=Cleanup
 ;
 ;
-; INPUTS:
+; inputs:
 ;
 ; OPTIONAL INPUTS:  none
 ;
@@ -36,25 +36,66 @@
 ;-
 ;
 
-pro XMANAGER, name, id, NO_BLOCK = noBlock, GROUP_LEADER=groupLeader, EVENT_HANDLER=eventHandler
+pro tidyManagedCommon
+
+common managed_by_gdl, ids, names
+catch,falseinfo
+; if ids contains only unknown widget ids, remove silently the list
+; after catching the error:
+if falseinfo ne 0 then begin
+  ids=0
+  names=0
+  catch,/cancel
+  return
+endif
+
+if (n_elements(ids) eq 0) then begin ids=0 & names=0 & endif
+if (ids[0] eq 0) then return
+keep=where(widget_info(ids,/managed),count)
+if ( count gt 0 ) then begin
+  ids=(temporary(ids))[keep]
+  names=(temporary(names))[keep]
+endif else begin
+  ids = 0
+  names = 0
+endelse
+return
+
+end
+
+pro XMANAGER, name, id, NO_BLOCK = noBlock, GROUP_LEADER=groupLeader, EVENT_HANDLER=eventHandler, CLEANUP=Cleanup
+
+common managed_by_gdl, ids, names
+
+tidyManagedCommon
 
 if not keyword_set(eventHandler) then begin
   eventHandler = name + '_event'
 endif
  
 widget_control, id, event_pro=eventHandler
-
+widget_control, id, /managed
+; add to common
+if (ids[0] ne 0) then begin
+ ids = [ids, id]
+ names = [names, name]
+endif else begin
+ ids = id
+ names = name
+endelse
 
 if keyword_set(groupLeader) then begin
    widget_control, id, GROUP_LEADER=groupLeader
 endif
+; cleanup is implemented now
+if n_elements(cleanup) then begin
+   widget_control, id, KILL_NOTIFY=Cleanup
+endif
 
 if keyword_set(noBlock) then begin
-
    widget_control, /XMANAGER_ACTIVE_COMMAND, id
 endif else begin
-
-   tmp = widget_event(/XMANAGER_BLOCK)
+   tmp = widget_event(/XMANAGER_BLOCK) ; will block until TLB widget is closed
 endelse
 
 end

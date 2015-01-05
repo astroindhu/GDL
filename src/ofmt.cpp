@@ -134,7 +134,7 @@ template<class Sp> SizeT
 Data_<Sp>::OFmtA( ostream* os, SizeT offs, SizeT r, int w) 
 {
   DStringGDL* stringVal = static_cast<DStringGDL*>
-    ( this->Convert2( GDL_STRING, BaseGDL::COPY));
+    ( this->Convert2( GDL_STRING, BaseGDL::COPY_BYTE_AS_INT));
   SizeT retVal = stringVal->OFmtA( os, offs, r, w);
   delete stringVal;
   return retVal;
@@ -567,7 +567,10 @@ template <typename longT>
 void ZeroPad( ostream* os, int w, int d, char f, longT dd)
 {
   std::ostringstream ossF;
-  ossF << noshowpoint << setprecision(0) << dd;
+  ossF << noshowpoint << setprecision(0);
+  if (f == '+') 
+    ossF << "+";
+  ossF << dd;
   int ddLen = ossF.str().size();
 
   if (w == 0) w = ddLen; // I0 -> auto width
@@ -591,7 +594,7 @@ void ZeroPad( ostream* os, int w, int d, char f, longT dd)
 	(*os) << " ";
 
       int nZero = d-ddLen;
-      if (nZero > 0 && dd < 0) // preventing "00-1.00"
+      if (nZero > 0 && dd < 0) // preventing "00-1.00" (instead of -001.00)
       {
         skip = 1;
         (*os) << "-";

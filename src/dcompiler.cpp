@@ -360,8 +360,17 @@ void DCompiler::CommonVar(DCommonBase* c, const string& N)
       DCommonBase* c1st = pro->FindCommon( N);
       // several definition/declaration of the same common block are ok
       if( c1st == NULL || c1st->Name() != c->Name())
-	throw( GDLException("Variable: "+N+" ("+c->Name()+") already defined"
-			    " with a conficting definition."));
+      {
+	// Common block deletion (needed in case variable declaration fails)
+	string cName = c->Name(); // c is deleted in DeleteLastAddedCommon()
+	if( !ownCommonList.empty() && ownCommonList.back() == c) // only if added here
+	  ownCommonList.pop_back();
+	pro->DeleteLastAddedCommon(); // always
+	string append = " with a conficting definition.";
+	if( c1st != NULL)
+	  append = " in common block "+ c1st->Name()+".";
+	throw( GDLException("Variable: "+N+" ("+cName+") already defined"+append));
+      }
     }
   c->AddVar(N);
 }

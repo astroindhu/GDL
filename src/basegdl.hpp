@@ -21,13 +21,13 @@
 #include "includefirst.hpp"
 
 //#include <list>
-#ifndef _MSC_VER
-#  include <rpc/rpc.h>
-#  include <algorithm>
-#else
+#if defined(__CYGWIN__) || defined(_WIN32)
 #  include <rpc/xdr.h>
+#else
+#  include <rpc/rpc.h>
 #endif
 
+#include <algorithm>
 #include "dimension.hpp"
 #include "gdlexception.hpp"
 

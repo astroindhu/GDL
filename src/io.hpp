@@ -18,6 +18,7 @@
 #ifndef IO_HPP_
 #define IO_HPP_
 
+#include "includefirst.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -26,8 +27,7 @@
 #include <cassert>
 
 #include <sys/types.h>
-#ifdef _MSC_VER
-	#include <winsock2.h>
+#if defined(_WIN32) && !defined(__CYGWIN__)
 #else
 	#include <sys/socket.h>
 	#include <netinet/in.h>

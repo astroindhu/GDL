@@ -31,7 +31,7 @@
 
 //#include "format.g"
 
-#ifdef _MSC_VER
+#if defined(_WIN32) && !defined(__CYGWIN__)
 #include <io.h>
 #define isatty _isatty
 #endif
@@ -143,6 +143,11 @@ namespace lib {
       {
 	DString fmtString;
 	e->AssureScalarKW<DStringGDL>( 0, fmtString);
+
+	// removing "$" in input format : not used
+	std::size_t found =fmtString.find("$");
+	if (found!=std::string::npos)
+	  fmtString.erase(found,1); 
 
 	RefFMTNode fmtAST = GetFMTAST( fmtString);
 
@@ -334,6 +339,11 @@ namespace lib {
       {
 	DString fmtString;
 	e->AssureScalarKW<DStringGDL>( 0, fmtString);
+
+	// removing "$" in input format : not used
+	std::size_t found =fmtString.find("$");
+	if (found!=std::string::npos)
+	  fmtString.erase(found,1); 
 
 	RefFMTNode fmtAST = GetFMTAST( fmtString);
 

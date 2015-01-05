@@ -27,7 +27,7 @@
 #define SETOPT setopt
 #endif
 
-#ifdef _MSC_VER
+#if defined (_MSC_VER) && (_MSC_VER < 1800)
 /* replacement of Unix rint() for Windows */
 static int rint (double x)
 {
@@ -49,46 +49,7 @@ class DeviceZ: public GraphicsDevice
 
   char*  memBuffer;
   DInt*  zBuffer;
-
-  void plimage_gdl(unsigned char *idata, PLINT nx, PLINT ny, 
-		   PLINT xLL, PLINT yLL, DLong tru, DLong chan)
-  {
-    DLong xsize = (*static_cast<DLongGDL*>( dStruct->GetTag( xSTag)))[0];
-    DLong ysize = (*static_cast<DLongGDL*>( dStruct->GetTag( ySTag)))[0];
-
-    PLINT ix, iy; //, xm, ym;
-
-    PLINT ired; //, igrn, iblu;
-    for(ix = 0; ix < nx; ++ix) {
-      for(iy = 0; iy < ny; ++iy) {
-
-	  if (tru == 0) {
-	    ired = idata[iy*nx+ix];
-	  } else if (tru == 1) {
-	    ired = idata[3*(iy*nx+ix)+0];
-	    //	    igrn = idata[3*(iy*nx+ix)+1];
-	    //	    iblu = idata[3*(iy*nx+ix)+2];
-	    //	    curcolor.pixel = ired*256*256+igrn*256+iblu;
-	  } else if (tru == 2) {
-	    ired = idata[nx*(iy*3+0)+ix];
-	    //	    igrn = idata[nx*(iy*3+1)+ix];
-	    //	    iblu = idata[nx*(iy*3+2)+ix];
-	    //	    curcolor.pixel = ired*256*256+igrn*256+iblu;
-	  } else if (tru == 3) {
-	    ired = idata[nx*(0*ny+iy)+ix];
-	    //	    igrn = idata[nx*(1*ny+iy)+ix];
-	    //	    iblu = idata[nx*(2*ny+iy)+ix];
-	    //	    curcolor.pixel = ired*256*256+igrn*256+iblu;
-	  }
-
-	  SizeT baseIx = ((ysize-1-(iy+yLL))*xsize+(ix+xLL)) * 3;
-	  memBuffer[ baseIx+0] = ired;
-	  memBuffer[ baseIx+1] = ired;
-	  memBuffer[ baseIx+2] = ired;
-      }
-    }
-  }
-
+  
   void SetZBuffer( DLong x, DLong y)
   {
     delete[] zBuffer;
@@ -274,97 +235,7 @@ public:
       memBuffer[i] = bColor;
   }
 
-
-  BaseGDL* TVRD( EnvT* e)
-  {
-    DLong xsize = (*static_cast<DLongGDL*>( dStruct->GetTag( xSTag, 0)))[0];
-    DLong ysize = (*static_cast<DLongGDL*>( dStruct->GetTag( ySTag, 0)))[0];
-
-    if( memBuffer == NULL)
-      {
-	return new DByteGDL( dimension( xsize, ysize));
-      }
-      
-    DByteGDL* res = new DByteGDL( dimension( xsize, ysize), 
-				  BaseGDL::NOZERO);
-    
-    for( SizeT x=0; x<xsize; ++x)
-      for( SizeT y=0; y<ysize; ++y)
-	(*res)[ y*xsize+x] = memBuffer[ ((ysize-y-1)*xsize+x) * 3];
-    
-    return res;
-  }
-
-  void TV( EnvT* e)
-  {
-    //    Graphics* actDevice = Graphics::GetDevice();
-    SizeT nParam=e->NParam( 1); 
-
-    GDLGStream* actStream = GetStream();
-
-    //    actStream->NextPlot( false); // JMG
-
-    DLong xsize = (*static_cast<DLongGDL*>( dStruct->GetTag( xSTag, 0)))[0];
-    DLong ysize = (*static_cast<DLongGDL*>( dStruct->GetTag( ySTag, 0)))[0];
-
-    DLong xLL=0, yLL=0, pos=0;
-    if (nParam == 2) {
-      e->AssureLongScalarPar( 1, pos);
-    } else if (nParam >= 3) {
-      DDouble xLLf, yLLf;
-      if (e->KeywordSet(1)) { // NORMAL
-	e->AssureDoubleScalarPar( 1, xLLf);
-	e->AssureDoubleScalarPar( 2, yLLf);
-	xLL = (DLong) rint(xLLf * xsize);
-	yLL = (DLong) rint(yLLf * ysize);
-      } else {
-	e->AssureLongScalarPar( 1, xLL);
-	e->AssureLongScalarPar( 2, yLL);
-      }
-    }
-
-    actStream->vpor( 0, 1.0, 0, 1.0);
-    actStream->wind( 1-xLL, xsize-xLL, 1-yLL, ysize-yLL);
-
-    DByteGDL* p0B = e->GetParAs<DByteGDL>( 0);
-    SizeT rank = p0B->Rank();
-
-    int width, height;
-    DLong tru=0;
-    e->AssureLongScalarKWIfPresent( "TRUE", tru);
-    if (rank == 2) 
-      {
-	if (tru != 0)
-	  e->Throw( "Array must have 3 dimensions: "+
-		    e->GetParString(0));
-	width  = p0B->Dim(0);
-	height = p0B->Dim(1);
-      } 
-    else if( rank == 3) 
-      {
-	if (tru == 1) {
-	  width = p0B->Dim(1);
-	  height = p0B->Dim(2);
-	} else if (tru == 2) {
-	  width = p0B->Dim(0);
-	  height = p0B->Dim(2);
-	} else if (tru == 3) {
-	  width = p0B->Dim(0);
-	  height = p0B->Dim(1);
-	} else {
-	  e->Throw( "TRUE must be between 1 and 3");
-	}
-      } else {
-	e->Throw( "Image array must have rank 2 or 3");
-      }
-
-    if( width + xLL > xsize || height + yLL > ysize)
-      e->Throw( "Value of image coordinates is out of allowed range.");
-
-    DLong chan = 0;
-    plimage_gdl(&(*p0B)[0], width, height, xLL, yLL, tru, chan);
-  }
-
+  DLong GetPixelDepth() { return 24;}  
 };
 
 #endif

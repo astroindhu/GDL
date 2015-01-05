@@ -28,7 +28,9 @@
 
 #  ifdef USE_PSLIB
 #    include <stdio.h> // tmpnam
-#    include <sys/utsname.h> // uname
+#    if !defined(_WIN32) || defined(__CYGWIN__)
+#        include <sys/utsname.h> // uname
+#    endif
 #    include <libps/pslib.h>
 #  endif
 
@@ -39,11 +41,15 @@
 #  endif
 
 #ifdef _MSC_VER
-#define cm2in (.01 / GSL_CONST_MKSA_INCH) // This is not good, but works
-#define dpi 72.0 //in dpi;
+#define CM2IN (.01 / GSL_CONST_MKSA_INCH) // This is not good, but works
+#define in2cm ( GSL_CONST_MKSA_INCH * 100)
+#define DPI 72.0 //in dpi;
+#define RESOL 1000.0
 #else
-  static const float cm2in = .01 / GSL_CONST_MKSA_INCH;
-  static const PLFLT dpi = 72.0 ; //in dpi;
+  static const float CM2IN = .01 / GSL_CONST_MKSA_INCH;
+  static const float in2cm = GSL_CONST_MKSA_INCH*100;
+  static const PLFLT DPI = 72.0 ; //in dpi;
+  static const float RESOL = 1000.0;
 #endif
 
 class DevicePS: public GraphicsDevice
@@ -85,8 +91,8 @@ class DevicePS: public GraphicsDevice
     (*static_cast<DLongGDL*>( dStruct->GetTag(dStruct->Desc()->TagIndex("UNIT"))))[0]=lun;
 
     // zeroing offsets (xleng and yleng are the default ones but they need to be specified 
-    // for the offsets to be taken into account by spage(), works with plplot >= 5.9.9)
-    actStream->spage(dpi, dpi, 540, 720, 0, 0); //plplot default: portrait!
+    // for the offsets to be taken into account by spage(), works with plplot >= 5.9.9)    
+    actStream->spage(DPI, DPI, 540, 720, 0, 0); //plplot default: portrait!
 
     // as setting the offsets and sizes with plPlot is (extremely) tricky, and some of these setting
     // are hardcoded into plplot (like EPS header, and offsets in older versions of plplot)
@@ -108,12 +114,12 @@ class DevicePS: public GraphicsDevice
     // extended fonts
     actStream->fontld( 1);
     
-    // avoid to set color map 0 -- makes plplot very slow (?)
     PLINT r[ctSize], g[ctSize], b[ctSize];
     actCT.Get( r, g, b);
-//    actStream->scmap0( r, g, b, ctSize);
+    actStream->scmap0( r, g, b, ctSize);
     actStream->scmap1( r, g, b, ctSize);
     // default: black+white (IDL behaviour)
+
     if (color == 0)
     {
       actStream->SETOPT( "drvopt","text=0,color=0");
@@ -140,14 +146,24 @@ class DevicePS: public GraphicsDevice
         actStream->GetPlplotDefaultCharSize(); //initializes everything in fact..
 
     }
+    PLFLT xp, yp;
+    PLINT xleng, yleng, xoff, yoff;
+    actStream->gpage(xp, yp, xleng, yleng, xoff, yoff);
+    // to mimic IDL we must scale char so that the A4 charsize is constant whatever the size of the plot
+    PLFLT size = (XPageSize>YPageSize)?XPageSize:YPageSize;
+    PLFLT refsize= (xleng/xp>yleng/yp)?xleng/xp:yleng/yp;
+    PLFLT scale=(refsize*in2cm)/size;
+    PLFLT defhmm, scalhmm;
+    plgchr(&defhmm, &scalhmm); // height of a letter in millimetres
+    actStream->RenewPlplotDefaultCharsize(defhmm * scale);
   }
     
 private:
   void pslibHacks()
   {
 #  ifndef USE_PSLIB
-    Warning("Warning: pslib support is mandatory for the PostScript driver to handle the following");
-    Warning("         keywords:  [X,Y]OFFSET, SCALE_FACTOR, ENCAPSULATED");
+    Warning("Warning: pslib support is mandatory for the PostScript driver to handle correctly the following");
+    Warning("         keywords:  [X,Y]OFFSET, [X,Y]SIZE, SCALE_FACTOR");
 #  else
     PSDoc *ps = PS_new(); 
     GDLGuard<PSDoc> psGuard( ps, PS_delete);
@@ -177,15 +193,29 @@ private:
     PS_set_info(ps, "Title", "Graphics produced by GDL"); 
     PS_set_info(ps, "Orientation", orient_portrait ? "Portrait" : "Landscape"); 
     {
+      string tmp;
+#if !defined(_WIN32) || defined(__CYGWIN__)
       struct utsname uts;
       uname(&uts);
-      string tmp;
       tmp = "GDL Version " + string(VERSION) + ", " + string(uts.sysname) + " " + string(uts.machine);
       PS_set_info(ps, "Creator", tmp.c_str()); 
       char* login = getlogin();
       if (login == NULL) Warning("Warning: getlogin() failed!");
       tmp = (login == NULL ? "?" : login) + string("@") + uts.nodename;
       PS_set_info(ps, "Author", tmp.c_str());
+#else
+      tmp = "GDL Version " + string(VERSION) + ", Microsoft Windows x32";
+      PS_set_info(ps, "Creator", tmp.c_str());
+
+      TCHAR username[257];
+      char cusername[257];
+      DWORD username_len = 257;
+      GetUserName(username, &username_len);
+
+      WideCharToMultiByte(CP_ACP, 0, username, username_len, cusername, username_len, NULL, NULL);
+
+      PS_set_info(ps, "Author", cusername);
+#endif
     }
     //bug: PSLIB does not return the correct boundingbox, it forgets offx and offy. Try to get it
     //back (using pslib own code!)!
@@ -217,10 +247,10 @@ private:
       int bbXSize, bbYSize;
     {
 
-      int bbXoff = XOffset*cm2in*dpi;
-      int bbYoff = YOffset*cm2in*dpi;
-      bbXSize = orient_portrait ? bbXoff + XPageSize*cm2in*dpi*scale : bbXoff + YPageSize*cm2in*dpi*scale;
-      bbYSize = orient_portrait ? bbYoff + YPageSize*cm2in*dpi*scale : bbYoff + XPageSize*cm2in*dpi*scale;
+      int bbXoff = XOffset*CM2IN*DPI;
+      int bbYoff = YOffset*CM2IN*DPI;
+      bbXSize = orient_portrait ? bbXoff + XPageSize*CM2IN*DPI*scale : bbXoff + YPageSize*CM2IN*DPI*scale;
+      bbYSize = orient_portrait ? bbYoff + YPageSize*CM2IN*DPI*scale : bbYoff + XPageSize*CM2IN*DPI*scale;
       sprintf(bbstr,"%i %i %i %i",bbXoff,bbYoff,bbXSize,bbYSize);
       sprintf(offstr,"%i %i",bbXoff,bbYoff);
     
@@ -266,13 +296,16 @@ private:
       string pbstr=string("%%PageBoundingBox: ")+offstr;
       // edits will be in the first 12288 bytes; add the length of offstr-3
       const size_t buflen=12288 + pbstr.length()-22;
-      //const size_t buflen=4096;
+#ifdef _MSC_VER
+      char *buff = (char*)alloca(sizeof(char)*buflen);
+#else      
       char buff[buflen];
+#endif
 
       //do the first read:
-      size_t cnt = fread(&buff, 1, 12288, fp);
-      string sbuff;
-      sbuff = string(buff);
+      size_t cnt = fread(&buff, 1, buflen, fp);
+      std::string sbuff;
+      sbuff.assign(buff,cnt);
 
       // find the PageBoundingBox statement
       size_t pos = sbuff.find("%%PageBoundingBox: 0 0");
@@ -340,8 +373,8 @@ private:
     int offx, offy, width, height;
     bb += 15;
     sscanf(bb, "%i %i %i %i", &offx, &offy, &width, &height);
-    float hsize = XPageSize*cm2in*dpi*scale;
-	float vsize = YPageSize*cm2in*dpi*scale;
+    float hsize = XPageSize*CM2IN*DPI*scale;
+    float vsize = YPageSize*CM2IN*DPI*scale;
     float newwidth = (width - offx), newheight = (height - offy);
     float hscale = (orient_portrait ? hsize : vsize)/newwidth/5.0;
     float vscale = (orient_portrait ? vsize : hsize)/newheight/5.0;
@@ -362,6 +395,17 @@ private:
       extralen = replstr.str().length()-searchstr.str().length();
     }
 
+    //replace the values of linecap and linejoin to nice round butts (sic!) more pleasing to the eye.
+    searchstr.str("");
+    searchstr << "0 setlinecap" << endl << "    0 setlinejoin";
+    replstr.str("");
+    replstr << "1 setlinecap" << endl << "    1 setlinejoin";
+    pos = sbuff.find(searchstr.str());
+    if (pos != string::npos) {
+      sbuff.replace(pos,searchstr.str().length(),replstr.str()); 
+      extralen = extralen + replstr.str().length()-searchstr.str().length();
+    }
+    
     //replace values of hscale, vscale
     searchstr.str("");
     searchstr << "{hs 3600 div} def" << endl << "/YScale" << endl << "   {vs 2700 div} def";
@@ -405,10 +449,8 @@ private:
     }
 
     // write the first buflen to temp file
-    char buffer2[buflen + extralen];
-    strcpy(buffer2,sbuff.c_str());
-    fwrite(&buffer2, 1, buflen+extralen, fp); 
-
+    fwrite(sbuff.c_str(), 1, buflen+extralen, fp); 
+    
     // read the rest of feps and write to temp file
     while (true)
       {
@@ -455,20 +497,20 @@ public:
 
     dStruct = new DStructGDL( "!DEVICE");
     dStruct->InitTag("NAME",       DStringGDL( name)); 
-    dStruct->InitTag("X_SIZE",     DLongGDL( XPageSize*scale*1000)); //29700/1000=29.7 cm
-    dStruct->InitTag("Y_SIZE",     DLongGDL( YPageSize*scale*1000));
-    dStruct->InitTag("X_VSIZE",    DLongGDL( XPageSize*scale*1000));
-    dStruct->InitTag("Y_VSIZE",    DLongGDL( YPageSize*scale*1000));
+    dStruct->InitTag("X_SIZE",     DLongGDL( XPageSize*scale*RESOL)); 
+    dStruct->InitTag("Y_SIZE",     DLongGDL( YPageSize*scale*RESOL));
+    dStruct->InitTag("X_VSIZE",    DLongGDL( XPageSize*scale*RESOL));
+    dStruct->InitTag("Y_VSIZE",    DLongGDL( YPageSize*scale*RESOL));
     dStruct->InitTag("X_CH_SIZE",  DLongGDL( 360));
     dStruct->InitTag("Y_CH_SIZE",  DLongGDL( 360));
-    dStruct->InitTag("X_PX_CM",    DFloatGDL( 1000.0)); //1000 pix/cm
-    dStruct->InitTag("Y_PX_CM",    DFloatGDL( 1000.0)); 
+    dStruct->InitTag("X_PX_CM",    DFloatGDL( RESOL)); 
+    dStruct->InitTag("Y_PX_CM",    DFloatGDL( RESOL)); 
     dStruct->InitTag("N_COLORS",   DLongGDL( 256)); 
     dStruct->InitTag("TABLE_SIZE", DLongGDL( 256)); 
     dStruct->InitTag("FILL_DIST",  DLongGDL( 1));
     dStruct->InitTag("WINDOW",     DLongGDL( -1)); 
     dStruct->InitTag("UNIT",       DLongGDL( 0)); 
-    dStruct->InitTag("FLAGS",      DLongGDL( 266807)); 
+    dStruct->InitTag("FLAGS",      DLongGDL( 266791)); //266807 if color, 266791 if monochrome.
     dStruct->InitTag("ORIGIN",     origin); 
     dStruct->InitTag("ZOOM",       zoom);
 
@@ -572,31 +614,47 @@ public:
   bool SetColor(const long hascolor)
   {
     if (hascolor==1) color=1; else color=0;
+      if (hascolor==1) 
+      {
+        DLong FLAG=(*static_cast<DLongGDL*>( dStruct->GetTag(dStruct->Desc()->TagIndex("FLAGS"))))[0];
+        (*static_cast<DLongGDL*>( dStruct->GetTag(dStruct->Desc()->TagIndex("FLAGS"))))[0]=FLAG|16; //set colored device
+      } else {
+      DLong FLAG=(*static_cast<DLongGDL*>( dStruct->GetTag(dStruct->Desc()->TagIndex("FLAGS"))))[0];
+        (*static_cast<DLongGDL*>( dStruct->GetTag(dStruct->Desc()->TagIndex("FLAGS"))))[0]=FLAG&(~16); //set monochrome device
+      }
+      //trick, to be repeated in Decomposed()
+      DLong FLAG=(*static_cast<DLongGDL*>( dStruct->GetTag(dStruct->Desc()->TagIndex("FLAGS"))))[0];
+      if (decomposed==1 && color==1) (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("FLAGS"), 0)))[0]= FLAG&(~512); //remove flag 'printer' since logic does not work with ps drive
+      else (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("FLAGS"), 0)))[0]= FLAG|(512); //set Flag printer
     return true;
   }
 
   bool SetPortrait()
   {
+      // no need to update !D
     orient_portrait = true;
-//    XPageSize = 7 * 100. * GSL_CONST_MKSA_INCH;
-//    YPageSize = 5 * 100. * GSL_CONST_MKSA_INCH;
-//    XOffset = .75 * 100. * GSL_CONST_MKSA_INCH;
-//    YOffset = 3 * 100. * GSL_CONST_MKSA_INCH; // TODO: this is different from IDL docs
+//    nb: IDL defaults to:
+//    XPageSize = 7.25 * in2cm;
+//    YPageSize = 5 * in2cm;
+//    XOffset = .75 * in2cm;
+//    YOffset = 5 * in2cm; 
     return true;
   }
 
   bool SetLandscape()
   {
+      // no need to update !D
     orient_portrait = false;
-//    XPageSize = 10 * 100. * GSL_CONST_MKSA_INCH;
-//    YPageSize = 7 * 100. * GSL_CONST_MKSA_INCH;
-//    XOffset = .5 * 100. * GSL_CONST_MKSA_INCH;
-//    YOffset = .75 * 100. * GSL_CONST_MKSA_INCH;
+//    XPageSize = 9.5 * in2cm;
+//    YPageSize = 7.0 * in2cm;
+//    XOffset = .75 * in2cm;
+//    YOffset = 10.25 * in2cm;
     return true;
   }
 
   bool SetScale(float value)
   {
+      //no effect for postscript in IDL up to 8 (?)
     scale = value;
     return true;
   }
@@ -610,6 +668,12 @@ public:
   bool Decomposed( bool value)           
   {   
     decomposed = value;
+    if (decomposed==1) (*static_cast<DLongGDL*>( dStruct->GetTag(dStruct->Desc()->TagIndex("N_COLORS"))))[0]=256*256*256;
+    else (*static_cast<DLongGDL*>( dStruct->GetTag(dStruct->Desc()->TagIndex("N_COLORS"))))[0]=256;
+    DLong FLAG=(*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("FLAGS"), 0)))[0];
+    //trick, to be repeated in SetColor(). To compensate a problem in ps driver. Other possibilities: use only the psc driver and do the black & white directly ourselves. 
+    if (decomposed==1 && color==1) { (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("FLAGS"), 0)))[0]= FLAG&(~512); //remove flag 'printer' since logic does not work with ps drive
+    } else (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("FLAGS"), 0)))[0]= FLAG|(512); //set Flag printer
     return true;
   }
 
@@ -618,123 +682,14 @@ public:
     return decomposed;  
   }
 
-  // TODO: SA: this TV() should be merged with TV() in DeviceX and DeviceZ!
-  // TODO: SA: just a draft - a lot more needs to be done...
-  void TV( EnvT* e)
+  DIntGDL* GetPageSize()
   {
-    SizeT nParam=e->NParam( 1); 
-
-    GDLGStream* actStream = GetStream();
-
-    // TODO: use it is XSIZE and YSIZE is not specified!
-    //DLong xsize = (*static_cast<DLongGDL*>( dStruct->GetTag( xSTag, 0)))[0];
-    //DLong ysize = (*static_cast<DLongGDL*>( dStruct->GetTag( ySTag, 0)))[0];
-
-    DLong pos=0; // TODO: handle it!
-    DDouble xmin, ymin;
-    {
-      DDouble null;
-      lib::gdlGetCurrentAxisRange("X", xmin, null);
-      lib::gdlGetCurrentAxisRange("Y", ymin, null);
-    }
-    if (nParam == 2) {
-      e->AssureLongScalarPar( 1, pos);
-    } else if (nParam >= 3) {
-      if (e->KeywordSet("NORMAL")) 
-      {
-        e->Throw("NORMAL keyword not supported yet");
-	//e->AssureDoubleScalarPar( 1, xmin);
-	//e->AssureDoubleScalarPar( 2, ymin);
-	//xLL = (DLong) rint(xLLf * xsize);
-	//yLL = (DLong) rint(yLLf * ysize);
-      } 
-      else if (e->KeywordSet("DEVICE")) 
-      {
-        e->Throw("DEVICE keyword not supported yet");
-      }
-      else // aka DATA
-      {
-	e->AssureDoubleScalarPar( 1, xmin);
-	e->AssureDoubleScalarPar( 2, ymin);
-      }
-    }
-
-    DByteGDL* p0B = e->GetParAs<DByteGDL>( 0);
-    SizeT rank = p0B->Rank();
-
-    int width, height;
-    DLong tru=0;
-    e->AssureLongScalarKWIfPresent( "TRUE", tru);
-    if (rank == 2) 
-      {
-	if (tru != 0)
-	  e->Throw( "Array must have 3 dimensions: "+
-		    e->GetParString(0));
-	width  = p0B->Dim(0);
-	height = p0B->Dim(1);
-      } 
-    else if( rank == 3) 
-      {
-	if (tru == 1) {
-	  width = p0B->Dim(1);
-	  height = p0B->Dim(2);
-	} else if (tru == 2) {
-	  width = p0B->Dim(0);
-	  height = p0B->Dim(2);
-	} else if (tru == 3) {
-	  width = p0B->Dim(0);
-	  height = p0B->Dim(1);
-	} else {
-	  e->Throw( "TRUE must be between 1 and 3");
-	}
-      } else {
-	e->Throw( "Image array must have rank 2 or 3");
-      }
-    if (tru != 0) e->Throw("Decomposed images not supported yet with PostScript + TV() (FIXME)"); // TODO!
-
-    /* TODO...
-    if( width + xLL > xsize || height + yLL > ysize)
-      e->Throw( "Value of image coordinates is out of allowed range.");
-    */
-
-    class grid2d {
-      public: PLFLT** data;
-      private: GDLGStream *pls;
-      private: int w, h;
-      public: grid2d(GDLGStream *actStream, int w, int h) 
-        : pls(actStream), w(w), h(h) { pls->Alloc2dGrid(&data, w, h); }
-      public: ~grid2d() { pls->Free2dGrid(data, w, h); }
-    } idata(actStream, width, height);
-    for (int x=0; x < width; ++x)
-      for (int y=0; y < height; ++y)
-        idata.data[x][y] = (*p0B)[x + y * width]; 
-
-    PLFLT xmax, ymax;
-    if (e->KeywordSet("XSIZE")) 
-    {
-      DDouble tmp;
-      e->AssureDoubleScalarKW("XSIZE", tmp);
-      xmax = xmin + tmp;
-    }
-    else e->Throw("Specification of XSIZE is mandatory for PostScript/TV() (FIXME!)"); // TODO!
-    if (e->KeywordSet("YSIZE")) 
-    {
-      DDouble tmp;
-      e->AssureDoubleScalarKW("YSIZE", tmp);
-      ymax = ymin + tmp;
-    }
-    else e->Throw("Specification of YSIZE is mandatory for PostScript/TV() (FIXME!)"); // TODO!
-
-    // TODO: map projection (via the last two arguments - same as was done in CONTOUR e.g.)
-    bool mapSet = false;
-#ifdef USE_LIBPROJ4
-    //get_mapset(mapSet);
-#endif
-    if (mapSet) e->Throw("PostScript + TV() + mapping cobination not available yet (FIXME!)");
-
-    actStream->imagefr(idata.data, width, height, xmin, xmax, ymin, ymax, 0., 255., 0., 255., NULL, NULL); 
+    DIntGDL* res;
+    res = new DIntGDL(2, BaseGDL::NOZERO);
+    (*res)[0]= XPageSize;
+    (*res)[1]= YPageSize;
+    return res;
   }
-
 };
 
 #endif

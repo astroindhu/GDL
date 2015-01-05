@@ -4,7 +4,7 @@
     begin                : 2004
     copyright            : (C) 2004 by Joel Gales
     email                : jomoga@users.sourceforge.net
- ***************************************************************************/
+***************************************************************************/
 
 /***************************************************************************
  *                                                                         *
@@ -29,6 +29,7 @@
 #include "dinterpreter.hpp"
 #include "objects.hpp"
 #include "basic_fun_jmg.hpp"
+#include "nullgdl.hpp"
 
 
 //#define GDL_DEBUG
@@ -39,15 +40,350 @@ namespace lib {
   using namespace std;
   using namespace antlr;
  
-  
-  BaseGDL* size( EnvT* e) 
+  BaseGDL* isa_fun( EnvT* e) 
+  {
+    if (e->NParam() == 0) e->Throw("Requires at least one argument !");
+
+    DString type;
+    BaseGDL *p0;
+    BaseGDL *p1;
+    DStringGDL *p1Str;
+    DString p1S = "";
+    int nb_kw=0;
+
+    bool secPar = false;
+    SizeT n_elem;
+    SizeT rank;
+    int debug=0;
+
+    string structName;
+    string objectName;
+
+    bool ARRAY_KW_B = false;
+    bool NULL_KW_B = false;
+    bool NUMBER_KW_B = false;
+    bool SCALAR_KW_B = false;
+
+    bool isARRAY = false;
+    bool isFILE = false;
+    bool isNULL = false;
+    bool isSCALAR = false;
+
+    static int array_kw = e->KeywordIx("ARRAY");
+    static int null_kw = e->KeywordIx("NULL");
+    static int number_kw = e->KeywordIx("NUMBER");
+    static int scalar_kw = e->KeywordIx("SCALAR");
+
+    if (e->KeywordSet(array_kw))  { ARRAY_KW_B = true;}
+    if (e->KeywordSet(null_kw))   { NULL_KW_B = true;}
+    if (e->KeywordSet(number_kw)) { NUMBER_KW_B = true;}
+    if (e->KeywordSet(scalar_kw)) { SCALAR_KW_B = true; }
+   
+    // new since 8.4
+
+    bool isBOOLEAN = false;
+    bool isINTEGER = false;
+    bool isFLOAT = false;
+    bool isCOMPLEX = false;
+    bool isSTRING = false;
+
+    bool BOOLEAN_KW_B = false;
+    bool INTEGER_KW_B = false;
+    bool FLOAT_KW_B = false;
+    bool COMPLEX_KW_B = false;
+    bool STRING_KW_B = false;
+
+    static int boolean_kw = e->KeywordIx("BOOLEAN");
+    static int integer_kw = e->KeywordIx("INTEGER");
+    static int float_kw = e->KeywordIx("FLOAT");
+    static int complex_kw = e->KeywordIx("COMPLEX");
+    static int string_kw = e->KeywordIx("STRING"); 
+
+    if (e->KeywordSet(boolean_kw)) { BOOLEAN_KW_B = true;}
+    if (e->KeywordSet(integer_kw)) { INTEGER_KW_B = true;}
+    if (e->KeywordSet(float_kw))   { FLOAT_KW_B = true;}
+    if (e->KeywordSet(complex_kw)) { COMPLEX_KW_B = true; }
+    if (e->KeywordSet(string_kw))  { STRING_KW_B = true; }
+
+    // /FILE keyword not ready
+    bool FILE_KW_B = false;
+    static int file_kw = e->KeywordIx("FILE");
+    if (e->KeywordSet(file_kw)) { FILE_KW_B = true;}
+    if (FILE_KW_B) {
+      string txt="(file keyword - ISA() not ready ! Please contribute !!";
+      e->Throw(txt);
+    }
+	
+    if (SCALAR_KW_B && ARRAY_KW_B) {
+      e->Throw("Keywords ARRAY and SCALAR are mutually exclusive.");
+    }
+
+    if (NULL_KW_B) {
+      string txt="Keywords NULL and ";
+      if (ARRAY_KW_B) e->Throw(txt+"ARRAY are mutually exclusive.");
+      if (FILE_KW_B) e->Throw(txt+"FILE are mutually exclusive.");
+      if (SCALAR_KW_B) e->Throw(txt+"SCALAR are mutually exclusive.");
+      if (NUMBER_KW_B) e->Throw(txt+"NUMBER are mutually exclusive.");
+
+      if (BOOLEAN_KW_B) e->Throw(txt+"BOOLEAN are mutually exclusive.");
+      if (INTEGER_KW_B) e->Throw(txt+"INTEGER are mutually exclusive.");
+      if (FLOAT_KW_B) e->Throw(txt+"FLOAT are mutually exclusive.");
+      if (COMPLEX_KW_B) e->Throw(txt+"COMPLEX are mutually exclusive.");
+      if (STRING_KW_B) e->Throw(txt+"STRING are mutually exclusive.");
+    }
+
+    if (BOOLEAN_KW_B) {
+      string txt="Keywords BOOLEAN and ";
+      if (INTEGER_KW_B) e->Throw(txt+"INTEGER are mutually exclusive.");
+      if (FLOAT_KW_B) e->Throw(txt+"FLOAT are mutually exclusive.");
+      if (COMPLEX_KW_B) e->Throw(txt+"COMPLEX are mutually exclusive.");
+      if (STRING_KW_B) e->Throw(txt+"STRING are mutually exclusive.");
+    }
+    if (INTEGER_KW_B) {
+      string txt="Keywords INTEGER and ";
+      if (FLOAT_KW_B) e->Throw(txt+"FLOAT are mutually exclusive.");
+      if (COMPLEX_KW_B) e->Throw(txt+"COMPLEX are mutually exclusive.");
+      if (STRING_KW_B) e->Throw(txt+"STRING are mutually exclusive.");
+    }
+    if (FLOAT_KW_B) {
+      string txt="Keywords FLOAT and ";
+      if (COMPLEX_KW_B) e->Throw(txt+"COMPLEX are mutually exclusive.");
+      if (STRING_KW_B) e->Throw(txt+"STRING are mutually exclusive.");
+    }
+    if (COMPLEX_KW_B) {
+      string txt="Keywords COMPLEX and ";
+      if (STRING_KW_B) e->Throw(txt+"STRING are mutually exclusive.");
+    }
+
+    //first par.
+    p0 = e->GetPar(0);
+
+    bool isNUMBER = true;
+    bool res = true;
+    // (1: boolean, 2: all integer like, 3 : float, 4 : complex, 5: string)
+    int sub_type=0;
+
+    if (p0 == NULL) {
+      type="UNDEFINED";
+      res = false;
+      isNUMBER=false;
+    } else {
+      n_elem = p0->N_Elements();
+      rank = p0->Rank();
+      if (debug) cout << "type : "<< p0->Type() << ", Rank : "<< rank << endl;
+      
+      switch (p0->Type())
+	{
+	case GDL_UNDEF: type="UNDEFINED"; isNUMBER=false; res=false; break; 
+	case GDL_BYTE: type="BYTE"; sub_type=1; break;
+	case GDL_INT: type="INT"; sub_type=2; break;
+	case GDL_LONG: type="LONG"; sub_type=2; break;
+	case GDL_FLOAT: type="FLOAT"; sub_type=3; break;
+	case GDL_DOUBLE: type="DOUBLE"; sub_type=3; break;
+	case GDL_COMPLEX: type="COMPLEX"; sub_type=4; break;
+	case GDL_STRING: type="STRING"; sub_type=5; isNUMBER=false; break;
+	case GDL_STRUCT: type="STRUCT"; isNUMBER=false; break;
+	case GDL_COMPLEXDBL: type="DCOMPLEX"; sub_type=4; break;
+	case GDL_PTR: type="POINTER"; isNUMBER=false; break;
+	case GDL_OBJ: type="OBJREF"; isNUMBER=false; break;
+	case GDL_UINT: type="UINT"; sub_type=2; break;
+	case GDL_ULONG: type="ULONG"; sub_type=2; break;
+	case GDL_LONG64: type="LONG64"; sub_type=2; break;
+	case GDL_ULONG64: type="ULONG64"; sub_type=2; break;
+
+	default: e->Throw("This should never happen, please report");
+	}
+    }
+
+    if(type == "POINTER"){
+      DPtrGDL* ptr = static_cast<DPtrGDL*>(p0);
+      DPtr ptrID = (*ptr)[0];
+      if(ptrID == 0) res=false; else res=true;
+    }
+
+    if(type == "STRUCT"){
+      //cout << "struct" << endl;
+      rank=1; // alway array following ISA() doc.
+      DStructGDL* str = static_cast<DStructGDL*>(p0);	   
+      if(str->Desc()->IsUnnamed()) structName="ANONYMOUS"; else structName = str->Desc()->Name();
+    }
+
+    if(type == "OBJREF"){
+      rank=1; // alway array following ISA() doc.
+      //cout << "OBJREF" << endl;
+      DObjGDL* obj = static_cast<DObjGDL*>(p0);
+      DObj objID = (*obj)[0];
+      if(objID == 0) res = false; else res = true;
+
+      DStructGDL* oStructGDL= GDLInterpreter::GetObjHeapNoThrow(objID);
+      if( oStructGDL != NULL) {
+	BaseGDL* objRef = DInterpreter::GetObjHeap(objID);
+	DStructGDL* str = static_cast<DStructGDL*>(objRef);
+	if(str->Desc()->IsUnnamed())
+	  {
+	    objectName="Anonymous"; 
+	  }
+	else {
+	  objectName = str->Desc()->Name();
+	}
+	// cout << objectName << endl;
+      }
+    }
+
+    //second par.
+    p1 = e->GetPar(1);
+    if (p1 != NULL){
+
+      if (p1->Type() != GDL_STRING)
+	e->Throw("String expression required in this context:"+e->GetParString(1));
+
+      if (p1->N_Elements() > 1)
+	e->Throw("Expression must be a scalar or 1 element array in this context"+e->GetParString(1));
+
+      p1Str = static_cast<DStringGDL*>(p1->Convert2(GDL_STRING,BaseGDL::COPY));
+      transform((*p1Str)[0].begin(), (*p1Str)[0].end(),(*p1Str)[0].begin(), ::toupper);
+      
+      if (type == (*p1Str)[0]) res = true; else res = false;
+
+      debug=0;
+      if (debug) cout << type << " " << (*p1Str)[0] << " " << res << endl;
+	
+      if(type == "STRUCT"){ if(structName == (*p1Str)[0]) res = true;}
+      if(type == "OBJREF"){ if(objectName == (*p1Str)[0]) res = true;}
+    }
+	
+    if(type != "UNDEFINED"){
+
+      if (sub_type == 1) isBOOLEAN = true;
+      if (sub_type == 2) isINTEGER = true;
+      if (sub_type == 3) isFLOAT   = true;
+      if (sub_type == 4) isCOMPLEX = true;
+      if (sub_type == 5) isSTRING  = true;
+
+      if(BOOLEAN_KW_B && res) { res = res && isBOOLEAN ;}
+      if(INTEGER_KW_B && res) { res = res && isINTEGER ;}
+      if(FLOAT_KW_B && res) { res = res && isFLOAT ;}
+      if(COMPLEX_KW_B && res) { res = res && isCOMPLEX ;}
+      if(STRING_KW_B && res) { res = res && isSTRING  ;}
+
+      if(NULL_KW_B && res){
+	res = false;
+      }
+
+      if(SCALAR_KW_B && res){
+	if (rank == 0) isSCALAR=true; else isSCALAR=false;
+	res = res && isSCALAR; 
+      }
+
+      if(NUMBER_KW_B && res){
+	//cout<<"Number"<<endl;
+	res = res && isNUMBER;
+      }
+
+      if(ARRAY_KW_B && res){
+	//cout<<"Array"<<endl;
+	if (rank > 0) isARRAY = true; else isARRAY = false;
+	res = res && isARRAY;
+      }
+
+      if(NULL_KW_B && res){
+	res = false;
+      }
+    } else {
+      // we have two cases : undefined variable OR variable set to !null
+      if (NULL_KW_B){
+	if (p0 == NULL) res = false; 
+	else {
+	  res = true;
+	  res = res && (!ARRAY_KW_B) && (!SCALAR_KW_B) && (!NUMBER_KW_B); 
+	}
+      } else {
+	res = res && (!ARRAY_KW_B) && (!SCALAR_KW_B) && (!NUMBER_KW_B); 
+      }
+    }
+    
+    if (res) return new DByteGDL(1);
+    return new DByteGDL(0);
+  }
+
+  BaseGDL* typename_fun( EnvT* e) 
+  {
+    DString type="";
+    BaseGDL* p0 = e->GetPar(0);
+
+    // we manage Undefined here, !null is managed below
+    if (p0 == NULL) return new DStringGDL("UNDEFINED");
+    
+    int redo=0;
+
+    switch (p0->Type())
+      {
+	// this is different that (p0 == NULL), here input is set to !null
+      case GDL_UNDEF: type="UNDEFINED"; break;
+      case GDL_BYTE: type="BYTE"; break;
+      case GDL_INT: type="INT"; break;
+      case GDL_LONG: type="LONG"; break;
+      case GDL_FLOAT: type="FLOAT"; break;
+      case GDL_DOUBLE: type="DOUBLE"; break;
+      case GDL_COMPLEX: type="COMPLEX"; break;
+      case GDL_STRING: type="STRING"; break;
+      case GDL_STRUCT: redo=1; break;
+      case GDL_COMPLEXDBL: type="DCOMPLEX"; break;
+      case GDL_PTR: type="POINTER"; break;
+      case GDL_OBJ:redo=1; break;
+      case GDL_UINT: type="UINT"; break;
+      case GDL_ULONG: type="ULONG"; break;
+      case GDL_LONG64: type="LONG64"; break;
+      case GDL_ULONG64: type="ULONG64"; break;
+
+      default: e->Throw("This should never happen, please report");
+      }
+ 
+    if (redo) {
+      //      cout << "here we are " <<p0->Type() << endl;
+      if (p0->Type() == GDL_STRUCT) {
+	DStructGDL* s = static_cast<DStructGDL*>(p0);
+	if (s->Desc()->IsUnnamed()) {
+	  type="ANONYMOUS";
+	} else {
+	  type=s->Desc()->Name();
+	}
+      }
+      // here we manage : {Objects, LIST, HASH}
+      if (p0->Type() == GDL_OBJ) {
+	
+	// see case in "basic_pro.cpp", in help_item()
+	if (!p0->StrictScalar())
+	  e->Throw("We don't know how to do here, please provide exemple !");
+
+	DObj s = (*static_cast<DObjGDL*>(p0))[0]; // is StrictScalar()
+	if( s != 0)  // no overloads for null object
+	  {
+	    DStructGDL* oStructGDL= GDLInterpreter::GetObjHeapNoThrow( s);
+	    if (oStructGDL->Desc()->IsUnnamed()) 
+	      e->Throw("We don't know how to be here (unnamed Obj/List/Hash), please provide exemple !");
+	    
+	    type= oStructGDL->Desc()->Name();
+	  }else {
+	  type = "UNDEFINED";
+	}
+	 
+      }
+    }
+    return new DStringGDL(type);
+    
+  }
+
+  BaseGDL* size_fun( EnvT* e) 
   {
     static int L64Ix = e->KeywordIx( "L64");
     static int dimIx = e->KeywordIx( "DIMENSIONS");
     static int FILE_LUNIx = e->KeywordIx( "FILE_LUN");
+    static int FILE_OFFSETIx = e->KeywordIx( "FILE_OFFSET");
     static int N_DIMENSIONSIx = e->KeywordIx( "N_DIMENSIONS");
     static int N_ELEMENTSIx = e->KeywordIx( "N_ELEMENTS");
     static int STRUCTUREIx = e->KeywordIx( "STRUCTURE");
+    static int SNAMEIx = e->KeywordIx( "SNAME");
     static int TNAMEIx = e->KeywordIx( "TNAME");
     static int TYPEIx = e->KeywordIx( "TYPE");
 
@@ -55,59 +391,113 @@ namespace lib {
 
     // BaseGDL* p0 = e->GetParDefined( 0); //, "SIZE");
     BaseGDL* p0 = e->GetPar( 0); //, "SIZE");
+    
+    // managing exclusive keywords (all but L64)
+    int nb_keywords_set=0;
+    if (e->KeywordSet(dimIx)) nb_keywords_set++;
+    if (e->KeywordSet(FILE_LUNIx)) nb_keywords_set++;
+    if (e->KeywordSet(FILE_OFFSETIx)) nb_keywords_set++;
+    if (e->KeywordSet(N_DIMENSIONSIx)) nb_keywords_set++;
+    if (e->KeywordSet(N_ELEMENTSIx)) nb_keywords_set++;
+    if (e->KeywordSet(STRUCTUREIx)) nb_keywords_set++;
+    if (e->KeywordSet(SNAMEIx)) nb_keywords_set++;
+    if (e->KeywordSet(TNAMEIx)) nb_keywords_set++;
+    if (e->KeywordSet(TYPEIx)) nb_keywords_set++;
+
+    if (nb_keywords_set > 1) e->Throw("Conflicting keywords.");
 
     SizeT nEl = 0;
     SizeT Rank = 0;
+    SizeT LogicalRank = 0;
     SizeT vType = GDL_UNDEF;
 
     if (p0 != NULL) {
       nEl = p0->N_Elements();
       Rank = p0->Rank();
+      LogicalRank = p0->Rank();
       vType = p0->Type();
     }
 
+    bool isObjectContainer = false;
+    if( vType == GDL_OBJ)
+      {
+	DObjGDL* p0Obj = static_cast<DObjGDL*>(p0);
+	if( p0Obj->StrictScalar())
+	  {
+	    DStructGDL* oStructGDL= GDLInterpreter::GetObjHeapNoThrow( (*p0Obj)[0]);
+	    if( oStructGDL != NULL) // if object not valid -> default behaviour
+	      {  
+		DStructDesc* desc = oStructGDL->Desc();
+
+		if( desc->IsParent("LIST"))
+		  {
+		    isObjectContainer = true;
+		  }
+		if( desc->IsParent("HASH"))
+		  {
+		    isObjectContainer = true;
+		  }
+	      }
+	  }
+      }
+
+    if( isObjectContainer)
+      {
+	LogicalRank = 1;
+      }
+    
     // DIMENSIONS
     if( e->KeywordSet( dimIx)) { 
-      if( Rank == 0) {
+      if( LogicalRank == 0) {
 	if( e->KeywordSet(L64Ix))
 	  return new DLong64GDL( 0);
 	else
 	  return new DLongGDL( 0);
       }
-      dimension dim( Rank);
+      dimension dim( LogicalRank);
 
       if( e->KeywordSet(L64Ix)) { // L64
 	DLong64GDL* res = new DLong64GDL( dim, BaseGDL::NOZERO);
 	(*res)[0] = 0;
 	for( SizeT i=0; i<Rank; ++i) (*res)[ i] = p0->Dim(i);
+	if( isObjectContainer)
+	  (*res)[ 0] = nEl;
 	return res;
       } else {
 	DLongGDL* res = new DLongGDL( dim, BaseGDL::NOZERO);
 	(*res)[0] = 0;
 	for( SizeT i=0; i<Rank; ++i) (*res)[ i] = p0->Dim(i);
+	if( isObjectContainer)
+	  (*res)[ 0] = nEl;
 	return res;
       }
+    }
 
     // FILE_LUN
-    } else if( e->KeywordSet(FILE_LUNIx)) { 
-
-      e->Throw( "FILE_LUN not supported yet.");
+    string txt="Sorry, keyword ";
+    if( e->KeywordSet(FILE_LUNIx)) {    
+      e->Throw(txt+"/FILE_LUN not supported yet, please contribute.");
+    }
+    if( e->KeywordSet(FILE_OFFSETIx))  {
+      e->Throw(txt+"/FILE_OFFSET not supported yet, please contribute.");
+    }
 
     // N_DIMENSIONS
-    } else if( e->KeywordSet(N_DIMENSIONSIx)) { 
-
-      return new DLongGDL( Rank);
+    if( e->KeywordSet(N_DIMENSIONSIx)) {
+      return new DLongGDL( LogicalRank);
+    }
 
     //N_ELEMENTS
-    } else if( e->KeywordSet(N_ELEMENTSIx)) { 
-
+    if( e->KeywordSet(N_ELEMENTSIx)) { 
+      
       if( e->KeywordSet(0))
 	return new DULongGDL( nEl);
       else
 	return new DLongGDL( nEl);
+    }
 
     // STRUCTURE
-    } else if( e->KeywordSet(STRUCTUREIx)) { 
+    if( e->KeywordSet(STRUCTUREIx)) { 
 
       DStructGDL* res;
 
@@ -161,46 +551,60 @@ namespace lib {
 
       return res;
       //e->Throw( "STRUCTURE not supported yet.");
+    }
+    
+    // SNAME
+    if( e->KeywordSet(SNAMEIx)) {
+      DString sname="";
+      if (vType == GDL_STRUCT) {
+	DStructGDL* s = static_cast<DStructGDL*>( p0);
+	if (!s->Desc()->IsUnnamed()) sname = s->Desc()->Name();
+      }
+      return new DStringGDL(sname);
+    }
 
     // TNAME
-    } else if( e->KeywordSet(TNAMEIx)) { 
-
+    if( e->KeywordSet(TNAMEIx)) {
       if( p0 == NULL)
 	return new DStringGDL( "UNDEFINED");
-
       return new DStringGDL( p0->TypeStr());
-
-    // TYPE
-    } else if( e->KeywordSet(TYPEIx)) { 
-
-      return new DLongGDL( vType );
-
-    } else {
-
-      dimension dim( 3 + Rank);
-
-      if( e->KeywordSet(L64Ix)) {
-	DLong64GDL* res = new DLong64GDL( dim, BaseGDL::NOZERO);
-	(*res)[ 0] = Rank;
-	for( SizeT i=0; i<Rank; ++i) (*res)[ i+1] = p0->Dim(i);
-	(*res) [ Rank+1] = vType;
-	(*res) [ Rank+2] = nEl;
-
-	return res;
-      } else {
-	DLongGDL* res = new DLongGDL( dim, BaseGDL::NOZERO);
-	(*res)[ 0] = Rank;
-	for( SizeT i=0; i<Rank; ++i) (*res)[ i+1] = p0->Dim(i);
-	(*res) [ Rank+1] = vType;
-	(*res) [ Rank+2] = nEl;
-
-	return res;
-      }
     }
+    
+    // TYPE
+    if( e->KeywordSet(TYPEIx)) { 
+      return new DLongGDL( vType );
+    }
+
+    // the general case without keyword ...
+
+    dimension dim( 3 + LogicalRank);
+    
+    if( e->KeywordSet(L64Ix)) {
+      DLong64GDL* res = new DLong64GDL( dim, BaseGDL::NOZERO);
+      (*res)[ 0] = LogicalRank;
+      for( SizeT i=0; i<Rank; ++i) (*res)[ i+1] = p0->Dim(i);
+      if( isObjectContainer)
+	(*res)[ 0+1] = nEl;
+      (*res) [ LogicalRank+1] = vType;
+      (*res) [ LogicalRank+2] = nEl;
+      
+      return res;
+    } else {
+      DLongGDL* res = new DLongGDL( dim, BaseGDL::NOZERO);
+      (*res)[ 0] = LogicalRank;
+      for( SizeT i=0; i<Rank; ++i) (*res)[ i+1] = p0->Dim(i);
+      if( isObjectContainer)
+	(*res)[ 0+1] = nEl;
+      (*res) [ LogicalRank+1] = vType;
+      (*res) [ LogicalRank+2] = nEl;
+      
+      return res;
+    }
+    
     return new DIntGDL( 0); // default for not supported
   }
 
-  BaseGDL* fstat( EnvT* e) 
+  BaseGDL* fstat_fun( EnvT* e) 
   { 
     e->NParam( 1);//, "FSTAT");
 
@@ -215,12 +619,12 @@ namespace lib {
     bool big = false;
 
     if (lun > 0)
-    {
-      if(fileUnits[ lun-1].IsOpen())  {
-	size = fileUnits[ lun-1].Size();
-	big = (DLong(size) != size);
+      {
+	if(fileUnits[ lun-1].IsOpen())  {
+	  size = fileUnits[ lun-1].Size();
+	  big = (DLong(size) != size);
+	}
       }
-    }
 
     DStructGDL* fstat;
     if (big) fstat = new DStructGDL( "FSTAT64");
@@ -279,7 +683,7 @@ namespace lib {
 
 	fstat->InitTag("NAME", DStringGDL( actUnit.Name()));
 	if (big) fstat->InitTag("SIZE", DLong64GDL( buffer.st_size));//size)); 
-        else fstat->InitTag("SIZE", DLongGDL( buffer.st_size));//size));
+	else fstat->InitTag("SIZE", DLongGDL( buffer.st_size));//size));
 	fstat->InitTag("OPEN", DByteGDL( 1)); 
 	// fstat->InitTag("ISATTY", DByteGDL( 0)); 
 	// fstat->InitTag("ISAGUI", DByteGDL( 0)); 
@@ -293,8 +697,8 @@ namespace lib {
 	fstat->InitTag("ATIME", DLong64GDL( buffer.st_atime)); 
 	fstat->InitTag("CTIME", DLong64GDL( buffer.st_ctime)); 
 	fstat->InitTag("MTIME", DLong64GDL( buffer.st_mtime)); 
-        if (big) fstat->InitTag("CUR_PTR", DLong64GDL( actUnit.Tell()));
-        else fstat->InitTag("CUR_PTR", DLongGDL( actUnit.Tell()));
+	if (big) fstat->InitTag("CUR_PTR", DLong64GDL( actUnit.Tell()));
+	else fstat->InitTag("CUR_PTR", DLongGDL( actUnit.Tell()));
       }
 
     return fstat;
@@ -310,10 +714,10 @@ namespace lib {
 	if( value != NULL)
 	  {
 	    T* v = static_cast<T*>( value);
-// 	    T* res = new T(dim, BaseGDL::NOZERO);
-// 	    SizeT nEl = dim.N_Elements();
-// 	    for( SizeT i=0; i<nEl; ++i)
-// 	      (*res)[i] = (*v)[0];
+	    // 	    T* res = new T(dim, BaseGDL::NOZERO);
+	    // 	    SizeT nEl = dim.N_Elements();
+	    // 	    for( SizeT i=0; i<nEl; ++i)
+	    // 	      (*res)[i] = (*v)[0];
 	    T* res = v->New( dim, BaseGDL::INIT);
 	    return res;
 	  }
@@ -326,10 +730,10 @@ namespace lib {
 	if( value != NULL)
 	  {
 	    T* v = static_cast<T*>( value);
-// 	    T* res = new T(dim, BaseGDL::NOZERO);
-// 	    SizeT nEl = dim.N_Elements();
-// 	    for( SizeT i=0; i<nEl; ++i)
-// 	      (*res)[i] = (*v)[0];
+	    // 	    T* res = new T(dim, BaseGDL::NOZERO);
+	    // 	    SizeT nEl = dim.N_Elements();
+	    // 	    for( SizeT i=0; i<nEl; ++i)
+	    // 	      (*res)[i] = (*v)[0];
 	    T* res = v->New( dim, BaseGDL::INIT);
 	    return res;
 	  }
@@ -398,16 +802,16 @@ namespace lib {
 	e->Throw("Invalid type specified for result.");
       }
  
-// TODO: sanity check on dimKey & arguments - if all are > 0, otherwise:
-//       e->Throw("Array dimensions must be greater than 0.");
+    // TODO: sanity check on dimKey & arguments - if all are > 0, otherwise:
+    //       e->Throw("Array dimensions must be greater than 0.");
 
     if (e->KeywordSet(indexix))
-    {
-      if (type == GDL_PTR || e->KeywordSet(18)) 
-        e->Throw("Index initialization of pointer array is invalid.");
-      if (type == GDL_OBJ || e->KeywordSet(19)) 
-        e->Throw("Index initialization of object reference array is invalid..");
-    }
+      {
+	if (type == GDL_PTR || e->KeywordSet(18)) 
+	  e->Throw("Index initialization of pointer array is invalid.");
+	if (type == GDL_OBJ || e->KeywordSet(19)) 
+	  e->Throw("Index initialization of object reference array is invalid..");
+      }
 
     static int valueix = e->KeywordIx( "VALUE"); 
     BaseGDL* value = e->GetKW( valueix);
@@ -480,24 +884,24 @@ namespace lib {
     } else if (e->KeywordSet(17) || type == GDL_STRING) {
 
       if (!e->KeywordSet(indexix))
-		return make_array_template< DStringGDL>( e, dimKey, value);
+	return make_array_template< DStringGDL>( e, dimKey, value);
       
       // 'true' for ignoring /INDEX keyword 
-	 // BaseGDL* ret = make_array_template< DStringGDL>( e, dimKey, value, true);
-//       if (e->KeywordSet(indexix))
-//       {
+      // BaseGDL* ret = make_array_template< DStringGDL>( e, dimKey, value, true);
+      //       if (e->KeywordSet(indexix))
+      //       {
 
-	  BaseGDL* ret = make_array_template< DULongGDL>( e, dimKey, value); //, true);
+      BaseGDL* ret = make_array_template< DULongGDL>( e, dimKey, value); //, true);
       return ret->Convert2( GDL_STRING);
 
-//         for (DLong i = 0; i < ret->N_Elements(); ++i)
-//         {
-//           char tmp[13];
-//           assert(sprintf(tmp, "%12d", i) == 12);
-//           (*static_cast<DStringGDL*>(ret))[i] = tmp;
-//         }
-//       }
-//       return ret;
+      //         for (DLong i = 0; i < ret->N_Elements(); ++i)
+      //         {
+      //           char tmp[13];
+      //           assert(sprintf(tmp, "%12d", i) == 12);
+      //           (*static_cast<DStringGDL*>(ret))[i] = tmp;
+      //         }
+      //       }
+      //       return ret;
 
       // GDL_PTR (added by SA 15.08.2009)
     } else if (e->KeywordSet(18) || type == GDL_PTR) {
@@ -540,12 +944,12 @@ namespace lib {
     BaseGDL* p0 = *p0P;
 
     SizeT nEl = p0->N_Elements();
-//     SizeT Rank = p0->Rank();
-//     if( Rank == 0)
-//       e->Throw( "Parameter must be an array in this context: " 
-// 		+ e->GetParString( 0));
+    //     SizeT Rank = p0->Rank();
+    //     if( Rank == 0)
+    //       e->Throw( "Parameter must be an array in this context: " 
+    // 		+ e->GetParString( 0));
 
-//     SizeT Type = p0->Type();
+    //     SizeT Type = p0->Type();
 
     dimension dim;
 
@@ -556,10 +960,10 @@ namespace lib {
 	if (p0->Dim(i) > 1)
 	  {
 	    dim << p0->Dim( i);  
-	  //	  j *= p0->Dim(i);
-	  //	  cout << j << p0->Dim(i) << endl;
-	  //	  dim.Set(j,p0->Dim(i));
-	  //j++;
+	    //	  j *= p0->Dim(i);
+	    //	  cout << j << p0->Dim(i) << endl;
+	    //	  dim.Set(j,p0->Dim(i));
+	    //j++;
 	  }
       }
       if( dim.Rank() == 0)
@@ -588,11 +992,11 @@ namespace lib {
 
     static int overwriteIx = e->KeywordIx("OVERWRITE");
     if (e->KeywordSet( overwriteIx)) 
-    {
-      p0->SetDim(dim);
-      e->SetPtrToReturnValue( p0P);
-      return p0;
-    }
+      {
+	p0->SetDim(dim);
+	e->SetPtrToReturnValue( p0P);
+	return p0;
+      }
 
     // global paramter - make a copy
     BaseGDL* res = p0->Dup();
@@ -609,9 +1013,9 @@ namespace lib {
     SizeT nParam=e->NParam();
 
     EnvStackT& callStack = e->Interpreter()->CallStack();
-//     DLong curlevnum = callStack.size()-1;
-	// 'e' is not on the stack
-	DLong curlevnum = callStack.size();
+    //     DLong curlevnum = callStack.size()-1;
+    // 'e' is not on the stack
+    DLong curlevnum = callStack.size();
 
     if (e->KeywordSet( "S_FUNCTIONS")) {
       vector<DString> subList;
@@ -666,9 +1070,12 @@ namespace lib {
 
     DLongGDL* level;
     level = e->IfDefGetKWAs<DLongGDL>( variablesIx);
-    if (level != NULL) {
+    if (level != NULL) 
+    {
       var = true;
-    } else {
+    } 
+    else 
+    {
       level = e->IfDefGetKWAs<DLongGDL>( fetchIx);
       if (level != NULL) {
 	fetch = true;
@@ -687,11 +1094,15 @@ namespace lib {
 
     DString varName;
 
-    if (level != NULL) {
+    if (level != NULL) 
+    {
       DLong desiredlevnum = (*level)[0];
-      if (desiredlevnum <= 0) desiredlevnum += curlevnum;
-      if (desiredlevnum < 1) return new DStringGDL("");
-      if (desiredlevnum > curlevnum) desiredlevnum = curlevnum;
+      if (desiredlevnum <= 0) 
+	desiredlevnum += curlevnum;
+      if (desiredlevnum < 1) 
+	return new DStringGDL("");
+      if (desiredlevnum > curlevnum) 
+	desiredlevnum = curlevnum;
 
       DSubUD* pro = static_cast<DSubUD*>(callStack[desiredlevnum-1]->GetPro());
 
@@ -701,7 +1112,8 @@ namespace lib {
       //cout << "nVar:" << nVar << endl;
       //cout << pro->Name() << endl;
 
-      if (var) {
+      if (var) 
+      {
 	if( nVar == 0) return new DStringGDL("");
 
 	DStringGDL* res = new DStringGDL( dimension( nVar), BaseGDL::NOZERO);
@@ -710,19 +1122,24 @@ namespace lib {
 	  (*res)[i] = vname;
 	}
 	return res;
-      } else if (fetch) { // FETCH
+      } 
+      else if (fetch) 
+      { // FETCH
 
 	e->AssureScalarPar<DStringGDL>( 0, varName);
 	varName = StrUpCase( varName);
 	int xI = pro->FindVar( varName);
-	//	cout << xI << endl;
+	//cout << xI << " " << varName << " " << pro->Size() << endl;
 	if (xI != -1) {
-// 	  BaseGDL* par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( xI);
-	  BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( xI);
+	  // 	  BaseGDL* par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( xI-nKey);
+
+	  // Keywords are already counted (in FindVar)
+	  // 	  BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( xI-nKey);
+	  BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetKW( xI);
 
 	  if( par == NULL)
- 		e->Throw( "Variable is undefined: " + varName);
-// 		return NULL;
+	    e->Throw( "Variable is undefined: " + varName);
+	  // 		return NULL;
 	  //	  char* addr = static_cast<char*>(par->DataAddr());
 
 	  // no retnew function BUT: ret value is not from current environment
@@ -733,9 +1150,13 @@ namespace lib {
 	  // return par->Dup(); // <-  HERE IS THE DIFFERENCE // no retnew function BUT: ret value is not from current environment
 	}
 	
- 	e->Throw( "Variable not found: " + varName);
- 	return NULL;
-      } else if (arg) { // ARG_NAME
+	if( e->Interpreter()->InterruptEnable())
+	  Message( "Variable not found: " + varName);
+
+	return NULL;
+
+      }
+      else if (arg) { // ARG_NAME
 
 	if( nParam == 0) return new DStringGDL("");
 
@@ -744,32 +1165,34 @@ namespace lib {
 	//	cout << "nVar:" << nVar << endl;
 	EnvBaseT* desiredCallStack;
 	if( desiredlevnum >= callStack.size())
-		desiredCallStack = e;
+	  desiredCallStack = e;
 	else
-		desiredCallStack = callStack[ desiredlevnum];
+	  desiredCallStack = callStack[ desiredlevnum];
 	
-// 	SizeT nCall = callStack[desiredlevnum]->NParam();
 	SizeT nCall = desiredCallStack->NParam();
 	
 	//	cout << "nCall:" << nCall << "curlevnum:" << curlevnum << endl;
+	// search for all given parameters of this call
 	for( SizeT i = 0; i<nParam; ++i) {
+
+	  // search all parameters of target environment
 	  for( SizeT j = 0; j<nCall; ++j) {
 
-	    if (e->GetParString(i) == 
-		desiredCallStack->GetParString(j)) {
+	    if (e->GetParString(i) == desiredCallStack->GetParString(j)) 
+	    {
 	      //	      cout << "Calling param: " << j+1 << endl;
 	      BaseGDL*& p = e->GetPar( i);
 	      if (p == NULL) {
 		(*res)[i]="UNDEFINED";
-// 		break;
+		// 		break;
 	      }
 	      //	      cout << "p:" << p << endl;
 
-	      for( SizeT xI=0; xI<nVar; ++xI) {
+	      SizeT xI=0;
+	      for( ; xI<nVar; ++xI) 
+	      {
 		string vname = pro->GetVarName( xI);
-		BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->
-		  GetPar( xI-nKey);
-
+		BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( xI-nKey);
 		//    cout << "xI:" << xI << " " << vname.c_str() << endl;
 		//    cout << "par:" << par << endl;
 		if (&par == &p) {
@@ -777,6 +1200,13 @@ namespace lib {
 		  break;
 		}
 	      } // xI loop
+	      if( xI == nVar) // not found -> search common
+	      {
+		string vname;
+		bool success = pro->GetCommonVarName( p, vname);
+		if( success)
+		  (*res)[i] = vname;
+	      }
 	      break;
 	    }
 	  } // j loop
@@ -799,7 +1229,7 @@ namespace lib {
 	if (xI == -1) {
 
 	  SizeT u = pro->AddVar(StrUpCase(varName));
- 	  s = callStack[desiredlevnum-1]->AddEnv();
+	  s = callStack[desiredlevnum-1]->AddEnv();
 	  //cout << "AddVar u: " << u << endl;
 	  //cout << "AddEnv s: " << s << endl;
 
@@ -808,12 +1238,13 @@ namespace lib {
 	  //cout << "FindVar s: " << s << endl;
 	}
 
-// 	BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( s-nKey);
+	// 	BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( s-nKey);
 
- 	((EnvT*)(callStack[desiredlevnum-1]))->GetPar( s-nKey) = res->Dup();
+	// 	((EnvT*)(callStack[desiredlevnum-1]))->GetPar( s-nKey) = res->Dup();
+	((EnvT*)(callStack[desiredlevnum-1]))->GetKW( s) = res->Dup();
 
 	//	cout << "par: " << &par << endl << endl;
-// 	memcpy(&par, &res, sizeof(par)); 
+	// 	memcpy(&par, &res, sizeof(par)); 
 
 	return new DIntGDL( 1);
       }
@@ -854,9 +1285,9 @@ namespace lib {
     SizeT nParam=e->NParam();
 
     EnvStackT& callStack = e->Interpreter()->CallStack();
-//     DLong curlevnum = callStack.size()-1;
-	// 'e' is not on the stack
-	DLong curlevnum = callStack.size();
+    //     DLong curlevnum = callStack.size()-1;
+    // 'e' is not on the stack
+    DLong curlevnum = callStack.size();
 
     if (e->KeywordSet( "S_FUNCTIONS")) {
       return NULL;
@@ -920,7 +1351,8 @@ namespace lib {
 	int xI = pro->FindVar( varName);
 	//	cout << xI << endl;
 	if (xI != -1) {
-	  BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( xI);
+	  // 	  BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetPar( xI-nKey);
+	  BaseGDL*& par = ((EnvT*)(callStack[desiredlevnum-1]))->GetKW( xI);
 	  return &par; // <-  HERE IS THE DIFFERENCE
 	}
 	
@@ -942,10 +1374,10 @@ namespace lib {
       }
     } 
     else 
-    {
+      {
 	// Get Compiled Procedures & Functions 
 	return NULL;
-    }
+      }
   }
 
   

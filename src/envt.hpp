@@ -106,6 +106,13 @@ public:
     return ptrToReturnValue;
     
   }
+  bool InLoc( BaseGDL** pp)
+  {
+    return env.InLoc(pp);
+  }
+  
+  
+  void SetKW( SizeT ix, BaseGDL* newVal);
 
   // used by the interperter returns the keyword index, used for UD functions
   // and used by WRAPPED subroutines
@@ -319,6 +326,8 @@ public:
 //   const std::string GetString( BaseGDL* p);
 
   virtual const std::string GetFilename() const=0;
+
+  void AssureGlobalKW( SizeT ix);
 
   // converts parameter 'ix' if necessary and sets 'scalar' 
   void AssureLongScalarPar( SizeT ix, DLong& scalar);
@@ -606,8 +615,10 @@ public:
     if( NumericType( p0->Type()))
 	return p0;
 
-    if( p0->Type() == GDL_STRING)
-      Throw( "String expression not allowed in this context: "+GetParString(ix));
+    // AC 2014-08-14 : in fact, in most case, a tentative of String to Numeric
+    // convertion is done. E.g. invert(['1']) is OK !
+    //    if( p0->Type() == GDL_STRING)
+    //  Throw( "String expression not allowed in this context: "+GetParString(ix));
     if( p0->Type() == GDL_STRUCT)
       Throw( "Struct expression not allowed in this context: "+GetParString(ix));
     if( p0->Type() == GDL_PTR)
@@ -770,7 +781,7 @@ public:
   // create the data (newVal) only if its necessary
   // if the functions throw, they delete newVal before -> no
   // guarding of newVal is needed
-  void SetKW( SizeT ix, BaseGDL* newVal);
+//   void SetKW( SizeT ix, BaseGDL* newVal);
   void SetPar( SizeT ix, BaseGDL* newVal);
 
   // Assure functions:
@@ -811,15 +822,17 @@ public:
   }
 
   void AssureGlobalPar( SizeT pIx);
-  void AssureGlobalKW( SizeT ix);
+//   void AssureGlobalKW( SizeT ix);
 
   // if keyword 'kw' is not set, 'scalar' is left unchanged
   void AssureLongScalarKWIfPresent( const std::string& kw, DLong& scalar);
   void AssureLongScalarKWIfPresent( SizeT ix, DLong& scalar);
   // converts keyword 'kw' if necessary and sets 'scalar' 
   void AssureLongScalarKW( const std::string& kw, DLong& scalar);
+  void AssureLongScalarKW( const std::string& kw, DLong64& scalar);
   // converts ix'th keyword if necessary and sets 'scalar' 
   void AssureLongScalarKW( SizeT ix, DLong& scalar);
+  void AssureLongScalarKW( SizeT ix, DLong64& scalar);
   // converts parameter 'ix' if necessary and sets 'scalar' 
   void AssureLongScalarPar( SizeT ix, DLong& scalar);
   void AssureLongScalarPar( SizeT ix, DLong64& scalar);

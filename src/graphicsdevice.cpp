@@ -22,14 +22,14 @@ renamed from: graphics.cpp
 
 #include "objects.hpp"
 #include "graphicsdevice.hpp"
-#ifdef _MSC_VER
-#  include "devicewin.hpp"
-#else
-#  include "devicex.hpp"
-#endif
+
+#include "devicewin.hpp"
+#include "devicewx.hpp"
+#include "devicex.hpp"
 #include "deviceps.hpp"
 #include "devicesvg.hpp"
 #include "devicez.hpp"
+#include "devicenull.hpp"
 #include "initsysvar.hpp"
 #include "color.hpp"
 
@@ -118,8 +118,31 @@ GraphicsDevice::~GraphicsDevice()
   if( actDevice != this) delete dStruct;
 } // v-table instatiation
 
-GraphicsDevice::GraphicsDevice(): dStruct( NULL)
+GraphicsDevice::GraphicsDevice(): dStruct( NULL), CopyBufferSize(0)
 {
+}
+
+void GraphicsDevice::ListDevice()
+{
+  int size = deviceList.size();
+  cout << "Available Graphics Devices: ";
+  for( int i=0; i<size; i++) cout << deviceList[ i]->Name() << " ";
+  cout << endl;
+}
+
+bool GraphicsDevice::ExistDevice( const string& device, int &index)
+{
+  index=-1;
+  int size = deviceList.size();
+  for( int i=0; i<size; i++)
+    {
+      if( deviceList[ i]->Name() == device)
+	{
+	  index=i;
+	  return true;
+	}
+    }
+  return false;
 }
 
 bool GraphicsDevice::SetDevice( const string& device)
@@ -146,36 +169,60 @@ void GraphicsDevice::Init()
 
   DefineDStructDesc();
 
-#ifdef _MSC_VER
-  deviceList.push_back( new DeviceWIN());
-#else
-#  ifdef HAVE_X
-  deviceList.push_back( new DeviceX());
-#  endif
-#endif
+  // 4 devices types without surprise !
+  deviceList.push_back( new DeviceNULL());
   deviceList.push_back( new DevicePS());
   deviceList.push_back( new DeviceSVG());
   deviceList.push_back( new DeviceZ());
-
-#ifdef _MSC_VER
-  if( !SetDevice( "WIN")) 
-#else
-#  ifndef HAVE_X
-#  else
-  if( !SetDevice( "X")) 
-#  endif
+#ifdef HAVE_LIBWXWIDGETS
+  deviceList.push_back( new DeviceWX());
 #endif
-#  ifndef HAVE_X
-    {}
+#ifdef HAVE_X
+  deviceList.push_back( new DeviceX());
+#endif
+#ifdef _WIN32
+  deviceList.push_back( new DeviceWIN());
+#endif
+
+  // we try to set X, WIN or WX as default 
+  // (and NULL if X11 system (Linux, OSX, Sun) but without X11 at compilation)
+#if defined(HAVE_X) // Check X11 first
+  if( !SetDevice( "X")) 
+#elif defined(_WIN32) // If Windows enable WinGCC driver 
+  if( !SetDevice( "WIN")) 
+#elif defined (HAVE_LIBWXWIDGETS) // Finally check WX
+  if (!SetDevice("MAC"))
+#else
+  if( !SetDevice( "NULL")) 
+#  endif
+#  if !defined (HAVE_X) && !defined (HAVE_LIBWXWIDGETS) && !defined (_WIN32)
+  {
+  }
 #  else
-    {
+  {
     cerr << "Error initializing graphics." << endl;
     exit( EXIT_FAILURE);
-    }
-#  endif 
+  }
+#  endif
 
-  actGUIDevice = deviceList[0];
-}
+#ifdef HAVE_LIBWXWIDGETS
+  // some X error message suggested this call
+#ifdef HAVE_X
+  XInitThreads();
+#endif
+#endif
+  int index=0;
+  // setting the GUI dev. (before, X/win was the first but X might be not defined now
+    if (ExistDevice( "X", index)) {
+      actGUIDevice = deviceList[index];
+  } else if (ExistDevice("WIN", index)) {
+    actGUIDevice = deviceList[index];
+  } else if (ExistDevice( "MAC", index)) {
+    actGUIDevice = deviceList[index];
+    } else {
+      actGUIDevice = deviceList[0];
+    }
+  }
 
 void GraphicsDevice::DestroyDevices()
 {

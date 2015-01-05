@@ -117,6 +117,7 @@ namespace lib {
   void xyouts( EnvT* e);
   void axis( EnvT* e);
   void polyfill( EnvT* e);
+  void tv_image( EnvT* e);
   void usersym( EnvT* e);
   void set_shading( EnvT* e);
 
@@ -135,10 +136,88 @@ namespace lib {
   void empty(EnvT* e);
 
   // Map stuff
+  void get_mapset(bool &mapset);
+  void set_mapset(bool mapset);
   BaseGDL* map_proj_forward_fun( EnvT* e);
   BaseGDL* map_proj_inverse_fun( EnvT* e);
-
   BaseGDL* convert_coord( EnvT* e);
+  BaseGDL* trigrid_fun( EnvT* e);
+
+#if defined(USE_LIBPROJ4) || defined(USE_LIBPROJ4_NEW) 
+#define GDL_COMPLEX COMPLEX2
+
+#ifdef USE_LIBPROJ4_NEW
+extern "C" {
+//#include "projects.h"
+#include "proj_api.h"
+}
+#define LPTYPE projLP
+#define XYTYPE projXY
+
+#define PROJTYPE projPJ
+#define PROJDATA projUV
+#define PJ_INIT pj_init
+
+PROJDATA protect_proj_fwd (PROJDATA idata, PROJTYPE proj);
+PROJDATA protect_proj_inv (PROJDATA idata, PROJTYPE proj);
+
+#define PJ_FWD protect_proj_fwd
+#define LIB_PJ_FWD pj_fwd
+#define PJ_INV protect_proj_inv 
+#define LIB_PJ_INV pj_inv
+PROJTYPE map_init(DStructGDL *map=SysVar::Map());
+static volatile PROJTYPE ref;
+static volatile PROJTYPE prev_ref;
+static PROJDATA badProj={sqrt(-1),sqrt(-1)};
+#else
+extern "C" {
+//adding this removes the problem with lam,phi vs. x,y and make no diffs between old an new lib proj.4    
+#define PROJ_UV_TYPE 1
+#include "lib_proj.h"
+}
+#define LPTYPE PROJ_LP
+#define XYTYPE PROJ_XY
+
+#define PROJTYPE PROJ*
+#define PROJDATA PROJ_UV
+#define PJ_INIT proj_init
+
+PROJDATA protect_proj_fwd (PROJDATA idata, PROJTYPE proj);
+PROJDATA protect_proj_inv (PROJDATA idata, PROJTYPE proj);
+
+#define PJ_FWD protect_proj_fwd
+#define LIB_PJ_FWD proj_fwd
+#define PJ_INV protect_proj_inv
+#define LIB_PJ_INV proj_inv
+PROJTYPE map_init(DStructGDL *map=SysVar::Map());
+static PROJTYPE ref;
+static PROJTYPE prev_ref;
+static PROJDATA badProj={sqrt(-1),sqrt(-1)};
+//general reprojecting function
+#endif
+
+//general reprojecting function
+DDoubleGDL* gdlProjForward(PROJTYPE ref, DStructGDL* map, DDoubleGDL* lon, DDoubleGDL *lat, DLongGDL* connectivity,
+bool doConn,DLongGDL* &gons, bool doGons,DLongGDL* &lines, bool doLines, bool doFill);
+
+void GDLgrProjectedPolygonPlot(EnvT* e, GDLGStream * a, PROJTYPE ref, DStructGDL* map, 
+DDoubleGDL *lons, DDoubleGDL *lats, bool isRadians, bool const doFill, DLongGDL *conn=NULL);
+  DStructGDL *GetMapAsMapStructureKeyword(EnvT *e, bool &externalMap);
+//dummy functions for compatibility support of GCTP projections 
+  void map_proj_gctp_forinit (EnvT* e);
+  void map_proj_gctp_revinit (EnvT* e);
+
+
+#define COMPLEX2 GDL_COMPLEX
+#else //NOT USE_LIBPROJ4 : define some more or less dummy values:
+#define PROJTYPE void*
+#define DEG_TO_RAD 0.017453292
+#endif //USE_LIBPROJ4
+
+
+
+
+
 
   //3D conversions
   void SelfTranspose3d(DDoubleGDL* me);
@@ -193,6 +272,10 @@ namespace lib {
     // all steps combined (virtual methods cannot be called from ctor)
     public: void call(EnvT* e, SizeT n_params_required) // {{{
     {
+      // when !d.name == Null  we do nothing !
+      DString name = (*static_cast<DStringGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("NAME"), 0)))[0];
+      if (name == "NULL") return;
+
       _nParam = e->NParam(n_params_required);
 
       overplot = handle_args(e);
@@ -202,7 +285,7 @@ namespace lib {
       //double buffering kills the logic and operation of XOR modes. Use HasSafeDoubleBuffering() that tests this feature.)
       isDB = actStream->HasSafeDoubleBuffering();
       if (isDB) actStream->SetDoubleBuffering();
-      DString name = (*static_cast<DStringGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("NAME"), 0)))[0];
+
       if (name == "X") 
       {       
           actStream->updatePageInfo(); //since window size can change
@@ -252,6 +335,8 @@ namespace lib {
   void gdlSetPlotCharthick(EnvT *e, GDLGStream *a);
   //set the line thickness
   void gdlSetPenThickness(EnvT * e, GDLGStream * a);
+  //get the line thickness
+  DFloat gdlGetPenThickness(EnvT * e, GDLGStream * a);
   //set the linestyle
   void gdlLineStyle(GDLGStream *a, DLong style);
   void gdlSetLineStyle(EnvT * e, GDLGStream * a);
@@ -263,10 +348,6 @@ namespace lib {
   void gdlStoreAxisCRANGE(string axis, DDouble Start, DDouble End, bool log);
   //set the !axis.s vector
   void gdlStoreAxisSandWINDOW(GDLGStream* actStream, string axis, DDouble Start, DDouble End, bool log=false);
-
-  // mapset
-  void get_mapset(bool &mapset);
-  void set_mapset(bool mapset);
 
   //axis_type
   void gdlGetAxisType(string axis, bool &log);
@@ -302,18 +383,8 @@ namespace lib {
   bool gdlSetViewPortAndWorldCoordinates( EnvT* e, GDLGStream* actStream, DFloatGDL* boxPosition, bool xLog, bool yLog,
                  DFloat xMarginL, DFloat xMarginR, DFloat yMarginB, DFloat yMarginT,
                  DDouble xStart, DDouble xEnd, DDouble minVal, DDouble maxVal, DLong iso);
-;
   void GetMinMaxVal( DDoubleGDL* val, double* minVal, double* maxVal);
-  void GetAxisData( DStructGDL* xStruct,
-                    DLong& style, DString& title, DFloat& charSize,
-                    DFloat& margin0, DFloat& margin1, DFloat& ticklen);
-  void GetMinMaxVal( DDoubleGDL* val, double* minVal, double* maxVal);
-  void GetPData( DLong& p_background,
-                 DLong& p_noErase, DLong& p_color, DLong& p_psym,
-                 DLong& p_linestyle,
-                 DFloat& p_symsize, DFloat& p_charsize, DFloat& p_thick,
-                 DString& p_title, DString& p_subTitle, DFloat& p_ticklen);
-  void GetPData2 (pstruct& p);
+
     void CheckMargin( EnvT* e, GDLGStream* actStream,
                     DFloat xMarginL, DFloat xMarginR, DFloat yMarginB, DFloat yMarginT,
                     PLFLT& xMR, PLFLT& xML, PLFLT& yMB, PLFLT& yMT);
@@ -321,7 +392,6 @@ namespace lib {
     void UpdateSWPlotStructs(GDLGStream* actStream, DDouble xStart, DDouble xEnd, DDouble yStart, DDouble yEnd, bool xLog, bool yLog);
     bool gdlAxis(EnvT *e, GDLGStream *a, string axis, DDouble Start, DDouble End, bool Log, DLong modifierCode=0, DDouble length=0);
     bool gdlBox(EnvT *e, GDLGStream *a, DDouble xStart, DDouble xEnd, DDouble yStart, DDouble yEnd, bool xLog, bool yLog);
-
 } // namespace
 
 #endif

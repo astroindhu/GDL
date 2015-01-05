@@ -39,9 +39,13 @@ namespace SysVar
 
   // returns !DIR
   const DString& Dir();
+  const DString& GshhsDir();
 
   // updates !STIME
   void UpdateSTime();
+
+  // updates !D
+  void UpdateD();//long &xSize, long &ySize);
 
   DStructGDL* Version();
 
@@ -72,12 +76,16 @@ namespace SysVar
   // returns !D
   DStructGDL* D();
 
+  // returns !STIME
+  DStringGDL* STime();
+
   // returns !WARN
   DStructGDL* Warn();
 
   const std::string& Prompt();
   int   Edit_Input();
   DLong Quiet();
+  DLong GDL_Warning();
 
   // get and set !JOURNAL (journal file LUN)
   DLong JournalLUN();

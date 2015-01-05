@@ -78,9 +78,9 @@ namespace structDesc {
 
 // for OpenMP
 DLong CpuTPOOL_NTHREADS;
-DLong CpuTPOOL_MIN_ELTS;
-DLong CpuTPOOL_MAX_ELTS;
-const DLong CpuTPOOL_MAX_ELTS_max = numeric_limits<DLong>::max();
+DLong64 CpuTPOOL_MIN_ELTS;
+DLong64 CpuTPOOL_MAX_ELTS;
+const DLong64 CpuTPOOL_MAX_ELTS_max = numeric_limits<DLong64>::max();
 
 // instantiate own AST factory
 //_DNodeFactory DNodeFactory;
@@ -314,15 +314,15 @@ void InitStructs()
   structList.push_back( dmachar);
 
   // for internal usage
-  // attention: $WIDGET_MESSAGE would identify this as an unnamed struct
+  // attention: $WIDGET_DESTROY would identify this as an unnamed struct
   // see DStructDesc constructor
-  DStructDesc* widgmsg = new DStructDesc( "*WIDGET_MESSAGE*");
-  widgmsg->AddTag("ID", &aLong);
-  widgmsg->AddTag("TOP", &aLong);
-  widgmsg->AddTag("HANDLER", &aLong);
-  widgmsg->AddTag("MESSAGE", &aLong);
+  DStructDesc* widgdestroy = new DStructDesc( "*WIDGET_DESTROY*");
+  widgdestroy->AddTag("ID", &aLong);
+  widgdestroy->AddTag("TOP", &aLong);
+  widgdestroy->AddTag("HANDLER", &aLong);
+  widgdestroy->AddTag("MESSAGE", &aLong);
   // insert into structList
-  structList.push_back( widgmsg);
+  structList.push_back( widgdestroy);
 
   DStructDesc* widgbut = new DStructDesc( "WIDGET_BUTTON");
   widgbut->AddTag("ID", &aLong);
@@ -423,14 +423,71 @@ void InitStructs()
   widgtxtd->AddTag("LENGTH", &aLong);
   // insert into structList
   structList.push_back( widgtxtd);
-
+  
+  DStructDesc* widgnoevent = new DStructDesc( "WIDGET_NOEVENT");
+  widgnoevent->AddTag("ID", &aLong);
+  widgnoevent->AddTag("TOP", &aLong);
+  widgnoevent->AddTag("HANDLER", &aLong);  
+  // insert into structList
+  structList.push_back( widgnoevent);
+  
   DStructDesc* widgver = new DStructDesc( "WIDGET_VERSION");
   widgver->AddTag("STYLE", &aString);
   widgver->AddTag("TOOLKIT", &aString);
   widgver->AddTag("RELEASE", &aString);
   // insert into structList
   structList.push_back( widgver);
-}
+  
+  DStructDesc* widggeom = new DStructDesc( "WIDGET_GEOMETRY");
+  widggeom->AddTag("XOFFSET",&aFloat);
+  widggeom->AddTag("YOFFSET",&aFloat);
+  widggeom->AddTag("XSIZE",&aFloat);
+  widggeom->AddTag("YSIZE",&aFloat);
+  widggeom->AddTag("SCR_XSIZE",&aFloat);
+  widggeom->AddTag("SCR_YSIZE",&aFloat);
+  widggeom->AddTag("DRAW_XSIZE",&aFloat);
+  widggeom->AddTag("DRAW_YSIZE",&aFloat);
+  widggeom->AddTag("MARGIN",&aFloat);
+  widggeom->AddTag("XPAD",&aFloat);
+  widggeom->AddTag("YPAD",&aFloat);
+  widggeom->AddTag("SPACE",&aFloat);
+  // insert into structList
+  structList.push_back( widggeom);
+  
+  DStructDesc* widgdraw = new DStructDesc( "WIDGET_DRAW");
+  widgdraw->AddTag("ID", &aLong);
+  widgdraw->AddTag("TOP", &aLong);
+  widgdraw->AddTag("HANDLER", &aLong);
+  widgdraw->AddTag("TYPE", &aInt);
+  widgdraw->AddTag("X", &aLong);
+  widgdraw->AddTag("Y", &aLong);
+  widgdraw->AddTag("PRESS", &aByte);
+  widgdraw->AddTag("RELEASE", &aByte);
+  widgdraw->AddTag("CLICKS", &aLong);
+  widgdraw->AddTag("MODIFIERS", &aLong);
+  widgdraw->AddTag("CH", &aByte);
+  widgdraw->AddTag("KEY", &aLong);
+  // insert into structList
+  structList.push_back( widgdraw);
+  
+  DStructDesc* widgkbrdfocus = new DStructDesc( "WIDGET_KBRD_FOCUS");  
+  widgkbrdfocus->AddTag("ID", &aLong);
+  widgkbrdfocus->AddTag("TOP", &aLong);
+  widgkbrdfocus->AddTag("HANDLER", &aLong);
+  widgkbrdfocus->AddTag("ENTER", &aInt);
+  structList.push_back( widgkbrdfocus);
+
+  DStructDesc* widgcontext = new DStructDesc( "WIDGET_DRAW");
+  widgcontext->AddTag("ID", &aLong);
+  widgcontext->AddTag("TOP", &aLong);
+  widgcontext->AddTag("HANDLER", &aLong);
+  widgcontext->AddTag("X", &aLong);
+  widgcontext->AddTag("Y", &aLong);
+  widgcontext->AddTag("ROW", &aLong);
+  widgcontext->AddTag("COL", &aLong);
+  // insert into structList
+  structList.push_back( widgcontext);
+ }
 
 void InitObjects()
 {
@@ -456,9 +513,6 @@ void InitObjects()
   //  Preferences::Init();
 
 #ifdef HAVE_LIBWXWIDGETS
-
-  // some X error message suggested this call
-  XInitThreads();
 
   // initialize widget system
   GDLWidget::Init();
@@ -610,9 +664,9 @@ int get_suggested_omp_num_threads() {
       return default_num_threads;
     }
 
-//#elif defined(_WIN32) || defined(__WIN32__) || defined(__WINDOWS__)
-#elif defined(_MSC_VER)
-  cout<<"get_suggested_omp_num_threads(): is windows"<<endl;
+
+#elif defined(_WIN32)
+  //cout<<"get_suggested_omp_num_threads(): is windows"<<endl;
   iff= _popen("wmic cpu get loadpercentage|more +1", "r");
   if (!iff)
     {
@@ -646,7 +700,7 @@ int get_suggested_omp_num_threads() {
 
   // if the following is commented out, there is no return statement
   // this lead to FILE_INFO in TEST_FILE_COPY fail
-#ifndef _MSC_VER
+#if !defined(_WIN32)
   
   char buffer[4];
   char* c;

@@ -1,4 +1,4 @@
-/* $ANTLR 2.7.7 (20120518): "gdlc.tree.g" -> "GDLTreeParser.cpp"$ */
+/* $ANTLR 2.7.7 (20130428): "gdlc.tree.g" -> "GDLTreeParser.cpp"$ */
 
 #include "includefirst.hpp"
 
@@ -5553,7 +5553,9 @@ void GDLTreeParser::arrayexpr_fn(RefDNode _t) {
 	// isVar == true -> VAR for sure 
 	// (== false: maybe VAR nevertheless)
 	
-	int libIx = LibFunIx(id_text);
+	int libIx = -1;    
+	//                if( id_text != "LIST" && id_text != "HASH")    
+	libIx = LibFunIx(id_text);
 	
 	
 	{

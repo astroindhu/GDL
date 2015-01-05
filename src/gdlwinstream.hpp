@@ -14,31 +14,119 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
+/** 
+  \file gdlwinstream.hpp
+  \brief graphic stream M$ windows
+  \struc wingcc_Dev
+  \class GDLWINStream
+*/
 
 #ifndef GDLWINSTREAM_HPP_
 #define GDLWINSTREAM_HPP_
 
 #include "gdlgstream.hpp"
+#include <Windows.h>
 
-class GDLWINStream: public GDLGStream
+// Copied from wingcc.c
+// Struct to hold device-specific info.
+
+struct wingcc_Dev
 {
-  //Atom wm_protocols;
-  //Atom wm_delete_window;
+	PLFLT scale;                     // scaling factor to "blow up" to the "virtual" page in removing hidden lines
+	PLINT width;                     // Window width (which can change)
+	PLINT height;                    // Window Height
 
-  PLStream* pls;
+	PLFLT PRNT_scale;
+	PLINT PRNT_width;
+	PLINT PRNT_height;
+
+	char  FT_smooth_text;
+	//
+	// WIN32 API variables
+	//
+
+	COLORREF          colour;                       // Current Colour
+	COLORREF          oldcolour;                    // Used for high-speed background erasing
+	MSG               msg;                          // A Win32 message structure.
+	WNDCLASSEX        wndclass;                     // An extended window class structure.
+	HWND              hwnd;                         // Handle for the main window.
+	HPEN              pen;                          // Windows pen used for drawing
+	HDC               hdc;                          // Driver Context
+	HDC               hdc2;                         // Driver Context II - used for Blitting
+	HDC               SCRN_hdc;                     // The screen's context
+	HDC               PRNT_hdc;                     // used for printing
+	PAINTSTRUCT       ps;                           // used to paint the client area of a window owned by that application
+	RECT              rect;                         // defines the coordinates of the upper-left and lower-right corners of a rectangle
+	RECT              oldrect;                      // used for re-sizing comparisons
+	RECT              paintrect;                    // used for painting etc...
+	HBRUSH            fillbrush;                    // brush used for fills
+	HCURSOR           cursor;                       // Current windows cursor for this window
+	HBITMAP           bitmap;                       // Bitmap of current display; used for fast redraws via blitting
+	HGDIOBJ           oldobject;                    // Used for tracking objects probably not really needed but
+	HMENU             PopupMenu;
+
+	PLINT             draw_mode;
+	char              truecolour;      // Flag to indicate 24 bit mode
+	char              waiting;         // Flag to indicate drawing is done, and it is waiting;
+	// we only do a windows redraw if plplot is plotting
+	char              enterresize;     // Used to keep track of reszing messages from windows
+	char              already_erased;  // Used to track first and only first backgroudn erases
+        struct wingcc_Dev  *push;
+};
+static tagWINDOWINFO Winfo;
+class GDLWINStream : public GDLGStream
+{
+	//Atom wm_protocols;
+	//Atom wm_delete_window;
+        HWND refocus;
+        
+	PLStream* pls;
+	plstream *plst;
 
 public:
-  GDLWINStream( int nx, int ny):
-    GDLGStream( nx, ny, "wingcc")
-  {
-  }
+	GDLWINStream(int nx, int ny) :
+		GDLGStream(nx, ny, "wingcc")
+	{	
+  // get the command interpreter window's handle
+		Winfo.cbSize = sizeof(Winfo);
+		refocus = GetForegroundWindow();
+	}
 
-  ~GDLWINStream()
-  {
-  }
+	~GDLWINStream()
+	{
+
+	}
+
+
+	void Init();
+	void EventHandler();
+	
+//	  static int   GetImageErrorHandler(Display *display, XErrorEvent *error);
+
+  void GetGeometry( long& xSize, long& ySize, long& xoff, long& yoff);
+  bool GetGin(PLGraphicsIn *gin, int mode);
   
-  void Init();
-  void EventHandler();
+  unsigned long GetWindowDepth();
+  DLong GetVisualDepth();
+//  DString GetVisualName();
+  
+  bool UnsetFocus();
+//  bool SetBackingStore(int value);
+//  bool SetGraphicsFunction(long value );
+  bool GetWindowPosition(long& xpos, long& ypos );
+  void Clear();
+  void Raise();
+  void Lower();
+  void Iconic();
+  void DeIconic();
+  void Flush();
+  void CheckValid();
+  bool PaintImage(unsigned char *idata, PLINT nx, PLINT ny,  DLong *pos, DLong tru, DLong chan);
+
+  //  bool SetGraphicsFunction(long value );
+  virtual bool HasCrossHair() { return true;}
+
+
 };
 
 #endif

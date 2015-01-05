@@ -21,28 +21,170 @@
 
 #include "graphicsdevice.hpp"
 #include "image.hpp"
-
-// #define ToXColor(a) (((0xFF & (a)) << 8) | (a))
-
-// #define free_mem(a) \
-//     if (a != NULL) { free((void *) a); a = NULL; }
+#ifdef HAVE_LIBWXWIDGETS
+#include "gdlwxstream.hpp"
+#endif
 
 using namespace std;
 
 namespace lib {
 
 
-  void tv( EnvT* e)
-  {
-    GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
-    actDevice->TV( e);
-  }
+//  BaseGDL* tvrd( EnvT* e)
+//  {
+//      // when !d.name == Null  we do nothing !
+//      GDLGStream* actStream = GraphicsDevice::GetDevice()->GetStream();
+//      if (actStream == NULL) e->Throw("Unable to create window.");
+//
+//#ifdef HAVE_LIBWXWIDGETS
+//      if (actStream->HasImage()) 
+//        return GetImage(e);
+//      else
+//#endif
+//        return GraphicsDevice::GetDevice()->TVRD( e);
+//  }
 
-  BaseGDL* tvrd( EnvT* e)
-  {
-    GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
-    return actDevice->TVRD( e);
+BaseGDL* tvrd( EnvT* e){
+    GDLGStream* actStream = GraphicsDevice::GetDevice()->GetStream();
+    if (actStream == NULL) e->Throw("Unable to create window.");
+ 
+    if (e->KeywordSet("WORDS")) e->Throw( "WORDS keyword not yet supported.");
+    DLong orderVal=SysVar::TV_ORDER();
+    e->AssureLongScalarKWIfPresent( "ORDER", orderVal);
+
+    DLong tru=0;
+    e->AssureLongScalarKWIfPresent( "TRUE", tru);
+    if (tru > 3 || tru < 0) e->Throw("Value of TRUE keyword is out of allowed range.");
+    //GetBitMapData is device-dependent and insures that image is by default ORDER=0 now.
+    DByteGDL *bitmap = static_cast<DByteGDL*>(actStream->GetBitmapData());
+    if (bitmap==NULL)  e->Throw("Unable to read from current device: "+GraphicsDevice::GetDevice()->Name()+"."); //need to GDLDelete bitmap on exit after this line.
+
+    long nx=bitmap->Dim(0);
+    long ny=bitmap->Dim(1);
+    long x_gdl=0;
+    long y_gdl=0;
+    long nx_gdl=nx;
+    long ny_gdl=ny;
+
+    bool error=false;
+    bool hasXsize=false;
+    bool hasYsize=false;
+    int nParam = e->NParam();
+    if (nParam >= 4) {
+      DLongGDL* Ny = e->GetParAs<DLongGDL>(3);
+      ny_gdl=(*Ny)[0];
+      hasYsize=true;
+    }
+    if (nParam >= 3) {
+      DLongGDL* Nx = e->GetParAs<DLongGDL>(2);
+      nx_gdl=(*Nx)[0];
+      hasXsize=true;
+    }
+    if (nParam >= 2) {
+      DLongGDL* y0 = e->GetParAs<DLongGDL>(1);
+      y_gdl=(*y0)[0];
+    }
+    if (nParam >= 1) {
+      DLongGDL* x0 = e->GetParAs<DLongGDL>(0);
+      x_gdl=(*x0)[0];
+    }
+    DLong channel=-1;
+    if (nParam == 5) {
+      DLongGDL* ChannelGdl = e->GetParAs<DLongGDL>(4);
+      channel=(*ChannelGdl)[0]; 
+    }
+    e->AssureLongScalarKWIfPresent( "CHANNEL", channel);
+    if (channel > 3) {GDLDelete(bitmap); e->Throw("Value of Channel is out of allowed range.");}
+
+    if (!(hasXsize))nx_gdl-=x_gdl; 
+    if (!(hasYsize))ny_gdl-=y_gdl;
+    
+    DLong xref,xval,xinc,yref,yval,yinc,xmax11,ymin11;
+    int x_11=0;
+    int y_11=0;
+    xref=0;xval=0;xinc=1;
+    yref=0;yval=0;yinc=1;
+    
+    x_11=xval+(x_gdl-xref)*xinc;
+    y_11=yval+(y_gdl-yref)*yinc;
+    xmax11=xval+(x_gdl+nx_gdl-1-xref)*xinc;    
+    ymin11=yval+(y_gdl+ny_gdl-1-yref)*yinc;
+    if (y_11 < 0 || y_11 > ny-1) error=true;
+    if (x_11 < 0 || x_11 > nx-1) error=true;
+    if (xmax11 < 0 || xmax11 > nx-1) error=true;
+    if (ymin11 < 0 || ymin11 > ny-1) error=true;
+    if (error)  {GDLDelete(bitmap); e->Throw("Value of Area is out of allowed range.");}
+
+  SizeT dims[3];
+  DByteGDL* res;
+
+  if ( tru == 0 ) {
+    dims[0] = nx_gdl;
+    dims[1] = ny_gdl;
+    dimension dim( dims, (SizeT) 2 );
+    res = new DByteGDL( dim, BaseGDL::ZERO );
+//set again dimension since tvrd does not want the 1-sized dimensions purged! (like in a=tvrd(0,0,1,1) a=Array[1,1]
+    static_cast<BaseGDL*>(res)->SetDim(dim);
+    if ( channel <= 0 ) { //channel not given, return max of the 3 channels
+      DByte mx, mx1;
+      for ( SizeT i =0; i < nx_gdl ; ++i ) {
+        for ( SizeT j = 0; j < ny_gdl ; ++j ) {
+         mx = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 0]; 
+         mx1 = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 1];
+         if ( mx1 > mx ) mx = mx1;
+         mx1 = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 2];
+         if ( mx1 > mx ) mx = mx1;
+         (*res)[j * nx_gdl + i] = mx;         
+        }
+      }
+    } else {
+      for ( SizeT i =0; i < nx_gdl ; ++i ) {
+        for ( SizeT j = 0; j < ny_gdl ; ++j ) {
+         (*res)[j * nx_gdl + i] = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + channel]; 
+        }
+      }
+    }
+    GDLDelete(bitmap);
+    // Reflect about y-axis
+    if ( orderVal == 1 ) res->Reverse( 1 );
+    return res;
+
+  } else {
+    dims[0] = 3;
+    dims[1] = nx_gdl;
+    dims[2] = ny_gdl;
+    dimension dim( dims, (SizeT) 3 );
+    res = new DByteGDL( dim, BaseGDL::NOZERO );
+//set again dimension since tvrd does not want the 1-sized dimensions purged! (like in a=tvrd(0,0,1,1,/tru) a=Array[3,1,1]
+    static_cast<BaseGDL*>(res)->SetDim(dim);
+    for ( SizeT i =0; i < nx_gdl ; ++i ) {
+      for ( SizeT j = 0; j < ny_gdl ; ++j ) {
+       for ( SizeT k = 0 ; k < 3 ; ++k) (*res)[3 * (j * nx_gdl + i) + k] = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + k]; 
+      }
+    }
+    GDLDelete(bitmap);
+    // Reflect about y-axis
+    if ( orderVal == 1 ) res->Reverse( 2 );
+
+    DUInt* perm = new DUInt[3];
+    if ( tru == 1 ) {
+      return res;
+    } else if ( tru == 2 ) {
+      perm[0] = 1;
+      perm[1] = 0;
+      perm[2] = 2;
+      return res->Transpose( perm );
+    } else if ( tru == 3 ) {
+      perm[0] = 1;
+      perm[1] = 2;
+      perm[2] = 0;
+      return res->Transpose( perm );
+    }
   }
+  assert( false );
+  return NULL;
+}
+#define MAX_COLORS 256
 
   void loadct( EnvT* e) // = LOADCT_INTERNALGDL for exclusive use by LOADCT
   {
@@ -66,11 +208,11 @@ namespace lib {
 
     DLong iCT;
 
-    DByte r[256], g[256], b[256];
-    PLINT rint[256], gint[256], bint[256];
+    DByte r[MAX_COLORS], g[MAX_COLORS], b[MAX_COLORS];
+    PLINT rint[MAX_COLORS], gint[MAX_COLORS], bint[MAX_COLORS];
     //load original table
     GDLCT* actCT = GraphicsDevice::GetCT();
-    actCT->Get(rint,gint,bint,256);
+    actCT->Get(rint,gint,bint,MAX_COLORS);
 
 
     e->AssureLongScalarPar( 0, iCT);
@@ -83,7 +225,6 @@ namespace lib {
     GraphicsDevice::LoadCT( iCT);
     //new table is:
     actCT = GraphicsDevice::GetCT();
-#define MAX_COLORS 256
     DLong bottom=0;
     DLong ncolors=MAX_COLORS;
     if ( e->KeywordSet ( "BOTTOM" ) ) e->AssureLongScalarKWIfPresent ( "BOTTOM", bottom );
@@ -93,7 +234,6 @@ namespace lib {
     if (ncolors < 1) ncolors=1;
     if (ncolors > MAX_COLORS) ncolors=MAX_COLORS;
     if (bottom+ncolors > MAX_COLORS) ncolors=MAX_COLORS-bottom;
-#undef MAX_COLORS
     for( SizeT i=0, j=bottom ; j<bottom+ncolors; ++i, ++j) {
       actCT->Get( i, r[ i], g[ i], b[ i]);
       //update section of colors
@@ -116,10 +256,13 @@ namespace lib {
       e->SetKW( rgbtableIx, rgbtable);
       return; //correct behaviour.
     }
-
-    if (actStream != NULL)
-      actStream->scmap1( rint, gint, bint, 256);
+    int nbActiveStreams=actDevice->MaxWin(); //new colormap must be given to *all* streams.
+    for (int i=0; i<nbActiveStreams; ++i) {
+      actStream = actDevice->GetStreamAt(i);
+      if (actStream != NULL) actStream->scmap0( rint, gint, bint, MAX_COLORS);
+    }
   }
+#undef MAX_COLORS
 
 } // namespace
 

@@ -156,6 +156,7 @@ private:
     yLog=FALSE;
 
     // handle Log options passing via Functions names PLOT_IO/OO/OI
+    // the behavior can be superseed by [xy]log or [xy]type
     string ProName=e->GetProName();
     if (ProName != "PLOT") {
       if (ProName == "PLOT_IO") yLog=TRUE;
@@ -167,11 +168,26 @@ private:
     }
 
     // handle Log options passing via Keywords
-    int xLogIx = e->KeywordIx("XLOG");
-    int yLogIx = e->KeywordIx("YLOG");
+    static int xTypeIx = e->KeywordIx("XTYPE");
+    static int yTypeIx = e->KeywordIx("YTYPE");
+    static int xLogIx = e->KeywordIx("XLOG");
+    static int yLogIx = e->KeywordIx("YLOG");
+
     if (e->KeywordPresent(xLogIx)) xLog = e->KeywordSet(xLogIx);
     if (e->KeywordPresent(yLogIx)) yLog = e->KeywordSet(yLogIx);
 
+    if (e->KeywordPresent(xTypeIx )) {
+      xLog=e->KeywordSet (xTypeIx );
+    } else {
+      xLog=e->KeywordSet (xLogIx );
+    }
+    
+    if (e->KeywordPresent(yTypeIx )) {
+      yLog=e->KeywordSet (yTypeIx );
+    } else {
+      yLog=e->KeywordSet (yLogIx);
+    }
+    
     //cout << xLog << " " << yLog << endl;
 
     // compute adequate values for log scale, warn adequately...
@@ -330,7 +346,6 @@ private:
       if (gdlSet3DViewPortAndWorldCoordinates(e, actStream, plplot3d, xLog, yLog,
         xStart, xEnd, yStart, yEnd) == FALSE) return;
       gdlSetGraphicsForegroundColorFromKw(e, actStream);
-      gdlSetPlotCharthick(e, actStream);
 
       DDouble  t3xStart, t3xEnd, t3yStart, t3yEnd, t3zStart, t3zEnd;
       switch (axisExchangeCode) {
@@ -421,47 +436,27 @@ private:
 
       Data3d.zValue = zValue;
       Data3d.Matrix = plplot3d; //try to change for !P.T in future?
-        switch (axisExchangeCode) {
-          case NORMAL: //X->X Y->Y plane XY
             Data3d.x0=x0;
             Data3d.y0=y0;
             Data3d.xs=xs;
             Data3d.ys=ys;
+      switch (axisExchangeCode) {
+          case NORMAL: //X->X Y->Y plane XY
             Data3d.code = code012;
             break;
           case XY: // X->Y Y->X plane XY
-            Data3d.x0=0;
-            Data3d.y0=x0;
-            Data3d.xs=ys;
-            Data3d.ys=xs;
             Data3d.code = code102;
             break;
           case XZ: // Y->Y X->Z plane YZ
-            Data3d.x0=x0;
-            Data3d.y0=y0;
-            Data3d.xs=xs;
-            Data3d.ys=ys;
             Data3d.code = code210;
             break;
           case YZ: // X->X Y->Z plane XZ
-            Data3d.x0=x0;
-            Data3d.y0=y0;
-            Data3d.xs=xs;
-            Data3d.ys=ys;
             Data3d.code = code021;
             break;
           case XZXY: //X->Y Y->Z plane YZ
-            Data3d.x0=x0;
-            Data3d.y0=y0;
-            Data3d.xs=xs;
-            Data3d.ys=ys;
             Data3d.code = code120;
             break;
           case XZYZ: //X->Z Y->X plane XZ
-            Data3d.x0=x0;
-            Data3d.y0=y0;
-            Data3d.xs=xs;
-            Data3d.ys=ys;
             Data3d.code = code201;
             break;
         }
@@ -477,7 +472,6 @@ private:
 	      xStart, xEnd, yStart, yEnd, iso)==FALSE) return; //no good: should catch an exception to get out of this mess.
       //current pen color...
       gdlSetGraphicsForegroundColorFromKw(e, actStream);
-      gdlSetPlotCharthick(e, actStream);
 
       gdlBox(e, actStream, xStart, xEnd, yStart, yEnd, xLog, yLog);
     }

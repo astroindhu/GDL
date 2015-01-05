@@ -43,15 +43,16 @@
 // #include <wx/utils.h>
 // #include <wx/file.h>
 // #include <wx/dir.h>
+#ifndef _WIN32
+#	include <fnmatch.h>
+#	include <glob.h> // glob in MinGW does not working..... why?
+#else
+#	include <shlwapi.h>
+#endif
 
 #ifndef _MSC_VER
-
-#	include <glob.h>
-#	include <fnmatch.h>
 #	include <dirent.h>
-
 #else
-
 #	include <io.h>
 
 #	define access _access
@@ -74,7 +75,6 @@
 
 #endif
 
-#include <shlwapi.h>
 
 #endif
 
@@ -244,6 +244,16 @@ namespace lib {
 
   using namespace std;
 
+  string PathSeparator()
+  {
+#ifdef _WIN32
+    string PathSep="\\"; //"
+#else
+    string PathSep="/";//"
+#endif
+    return PathSep;
+  }
+
   DString GetCWD()
   {
     SizeT bufSize = PATH_MAX;
@@ -281,7 +291,7 @@ namespace lib {
     e->AssureScalarPar<DStringGDL>( 0, dir);
    
     WordExp( dir);
-    //	  cout<< dir<<endl;
+
      
 //     // expand tilde
 //     if( dir[0] == '~')
@@ -294,24 +304,10 @@ namespace lib {
 //       }
 
     int success = chdir( dir.c_str());
-    //      cout<<success<<endl;
+ 
     if( success != 0)
       e->Throw( "Unable to change current directory to: "+dir+".");
   }
-
-//   void FileSearchWE( FileListT& fL, const DString& s)
-//   {
-//     wordexp_t p;
-//     int wERes;
-//     if( s == "")
-//       wERes = wordexp( "*", &p, WRDE_NOCMD);
-//     else
-//       wERes = wordexp( s.c_str(), &p, WRDE_NOCMD);
-//     if( wERes == 0)
-//       for( SizeT f=0; f<p.we_wordc; ++f)
-// 	fL.push_back( p.we_wordv[ f]);
-//     wordfree( &p);
-//   }
 
   bool FindInDir( const DString& dirN, const DString& pat)
   {
@@ -332,24 +328,28 @@ namespace lib {
 	if( entryStr != "." && entryStr != "..")
 	  {
 	    DString testFile = root + entryStr;
-#ifdef _MSC_VER
-
+#ifdef _WIN32
 	    int actStat = stat( testFile.c_str(), &statStruct);
-
 #else
-
 	    int actStat = lstat( testFile.c_str(), &statStruct);
-
 #endif
 
 	    if( S_ISDIR(statStruct.st_mode) == 0)
 
 	      { // only test non-dirs
 
-#ifdef _MSC_VER
-
-		int match = PathMatchSpecEx(entryStr.c_str(), pat.c_str(), 0);
-
+#ifdef _WIN32
+#	ifdef _UNICODE
+		TCHAR *tchr1 = new TCHAR[entryStr.size()+1];
+		TCHAR *tchr2 = new TCHAR[pat.size() + 1];
+		tchr1[entryStr.size()] = 0;
+		tchr2[pat.size()] = 0;
+		int match = 1 - PathMatchSpec(tchr1, tchr2);
+		delete tchr1;
+		delete tchr2;
+#	else
+		int match = 1 - PathMatchSpec(entryStr.c_str(), pat.c_str());
+#	endif
 #else
 
 		int match = fnmatch( pat.c_str(), entryStr.c_str(), 0);
@@ -371,89 +371,128 @@ namespace lib {
   void ExpandPathN( FileListT& result,
 		    const DString& dirN, 
 		    const DString& pat,
-		    bool all_dirs)
-  {
-    // expand "+"
-	    
-    int fnFlags = 0;
+		    bool all_dirs ) {
+  // expand "+"
 
-    //    fnFlags |= FNM_PERIOD;
-    //    fnFlags |= FNM_NOESCAPE;
+  int fnFlags = 0;
 
-    DString root = dirN;
-    AppendIfNeeded( root, "/");
-    
-    struct stat    statStruct;
+  //    fnFlags |= FNM_PERIOD;
+  //    fnFlags |= FNM_NOESCAPE;
 
-    FileListT recurDir;
-    
-    bool notAdded = true;
+  DString root = dirN;
+  AppendIfNeeded( root, "/" );
 
-    DIR* dir = opendir( dirN.c_str());
-    if( dir == NULL) return;
+  struct stat statStruct;
 
-    if( all_dirs)
-      notAdded = false;
-    
-    for(;;)
-      {
-	struct dirent* entry = readdir( dir);
-	if( entry == NULL) break;
+  FileListT recurDir;
 
-	DString entryStr( entry->d_name);
-	if( entryStr != "." && entryStr != "..")
-	  {
-	    DString testDir = root + entryStr;
-#ifdef _MSC_VER
+  bool notAdded = true;
 
-	    int actStat = stat( testDir.c_str(), &statStruct);
+  DIR* dir = opendir( dirN.c_str( ) );
+
+  if ( dir == NULL ) return;
+  int debug = 0;
+  if ( debug ) cout << "ExpandPathN: " << dirN << endl;
+  if ( all_dirs )
+    notAdded = false;
+  for (;; ) {
+    struct dirent* entry = readdir( dir );
+    if ( entry == NULL ) break;
+
+    DString entryStr( entry->d_name );
+    if ( entryStr != "." && entryStr != ".." ) {
+      DString testDir = root + entryStr;
+      if ( debug ) cout << "testing " << testDir <<"... ";
+#ifdef _WIN32
+      int actStat = stat( testDir.c_str( ), &statStruct );
+#else
+      int actStat = lstat( testDir.c_str( ), &statStruct );
+#endif
+      if ( actStat == 0 ) {
+        if ( S_ISDIR( statStruct.st_mode ) != 0 ) {
+          recurDir.push_back( testDir );
+          if ( debug ) cout << "..dir: " << testDir << endl;
+          ;
+        }
+        //GD Dec 2014 added test: if directory is a symlink, or if a tested file is a symlink. Note the use of 'stat'
+        //instead of 'lstat' below.
+        else if ( S_ISLNK( statStruct.st_mode ) != 0 ) 
+        { //dir link or file ?
+          struct stat lnkStatStruct;
+          int lnkActStat = stat( testDir.c_str( ), &lnkStatStruct );
+          if ( S_ISDIR( lnkStatStruct.st_mode ) != 0 ) 
+          {
+            recurDir.push_back( testDir );
+            if ( debug ) cout << "..symlinkDir: " << testDir << endl;
+          } 
+          else if ( notAdded ) 
+          {
+#ifdef _WIN32
+#ifdef _UNICODE
+            TCHAR *tchr1 = new TCHAR[entryStr.size( ) + 1];
+            TCHAR *tchr2 = new TCHAR[pat.size( ) + 1];
+            tchr1[entryStr.size( )] = 0;
+            tchr2[pat.size( )] = 0;
+            int match = 1 - PathMatchSpec( tchr1, tchr2 );
+            delete tchr1;
+            delete tchr2;
 
 #else
-
-	    int actStat = lstat( testDir.c_str(), &statStruct);
-
+            int match = 1 - PathMatchSpec( entryStr.c_str( ), pat.c_str( ) );
 #endif
-
-	    if( S_ISDIR(statStruct.st_mode) != 0)
-	      {
-		recurDir.push_back( testDir);
-	      }
-	    else if( notAdded)
-	      {
-#ifdef _MSC_VER
-
-		int match = PathMatchSpec(entryStr.c_str(), pat.c_str());
+#else
+            int match = fnmatch( pat.c_str( ), entryStr.c_str( ), 0 );
+#endif
+            if ( debug ) cout << "symlinkEntry: " << entryStr << " match " << pat <<": "<< match << "\n";
+            if ( match == 0 ) notAdded = false;
+          }
+        }
+        else if ( notAdded ) 
+        {
+#ifdef _WIN32
+#ifdef _UNICODE
+          TCHAR *tchr1 = new TCHAR[entryStr.size( ) + 1];
+          TCHAR *tchr2 = new TCHAR[pat.size( ) + 1];
+          tchr1[entryStr.size( )] = 0;
+          tchr2[pat.size( )] = 0;
+          int match = 1 - PathMatchSpec( tchr1, tchr2 );
+          delete tchr1;
+          delete tchr2;
 
 #else
-
-		int match = fnmatch( pat.c_str(), entryStr.c_str(), 0);
-
+          int match = 1 - PathMatchSpec( entryStr.c_str( ), pat.c_str( ) );
 #endif
-		if( match == 0)
-		  notAdded = false;
-	      }
-	  }
+#else
+          int match = fnmatch( pat.c_str( ), entryStr.c_str( ), 0 );
+#endif
+          if ( debug ) cout << "Entry: " << entryStr << " match " << pat <<": "<< match << "\n";
+          if ( match == 0 ) notAdded = false;
+        }
       }
-
-    int c = closedir( dir);
-    if( c == -1) return;
-
-    // recursive search
-    SizeT nRecur = recurDir.size();
-    for( SizeT d=0; d<nRecur; ++d)
-      {
-	ExpandPathN( result, recurDir[d], pat, all_dirs); 
-      }
-
-    if( !notAdded)
-      result.push_back( dirN);
+    }
+//    if ( debug ) cout << " notAdded? " << notAdded << endl;
   }
+
+  int c = closedir( dir );
+  if ( c == -1 ) return;
+
+  // recursive search
+  SizeT nRecur = recurDir.size( );
+  for ( SizeT d = 0; d < nRecur; ++d ) {
+    ExpandPathN( result, recurDir[d], pat, all_dirs );
+  }
+
+  if ( !notAdded )
+    result.push_back( dirN );
+}
 
   void ExpandPath( FileListT& result,
 		    const DString& dirN, 
 		    const DString& pat,
 		    bool all_dirs)
   {
+	int debug=0;
+	if(debug) 	cout << " ExpandPath(,dirN.pat,bool) " << dirN << endl;
     if( dirN == "") 
       return;
 
@@ -477,12 +516,11 @@ namespace lib {
 
     // dirN == "+DIRNAME"
 
-#ifdef _MSC_VER
-
-	// Windows does not use '~' as a home directory alias
-
-	DString initDir = dirN;
-
+#ifdef _WIN32
+    DString initDir = dirN;
+    if(dirN[0] == '+') 
+		 initDir = dirN.substr(1);
+        
 #else
 
     // do first a glob because of '~'
@@ -492,31 +530,23 @@ namespace lib {
     glob_t p;
 
     int offset_tilde=0;
-
     if (dirN[0] == '+') offset_tilde=1;
-
     int gRes = glob( dirN.substr(offset_tilde).c_str(), flags, NULL, &p);
-
     if( gRes != 0 || p.gl_pathc == 0)
-
       {
-
 		globfree( &p);
-
 		return;
-
       }
 
 
 
     DString initDir = p.gl_pathv[ 0];
-
     globfree( &p);
 
 #endif
-    
+ //   cout << "ExpandPath: initDir:" << initDir << dirN << endl;
     if (dirN[0] == '+')
-      {
+      { 
 	ExpandPathN( result, initDir, pat, all_dirs);
       } 
     else
@@ -534,6 +564,7 @@ namespace lib {
     e->AssureStringScalarPar( 0, s);
 
     FileListT sArr;
+    
 
     static int all_dirsIx = e->KeywordIx( "ALL_DIRS");
     bool all_dirs = e->KeywordSet( all_dirsIx);
@@ -543,14 +574,26 @@ namespace lib {
 
     static int countIx = e->KeywordIx( "COUNT");
 
+    DString pattern;
+    if(e->KeywordPresent( "PATTERN")) {
+        static int typeIx = e->KeywordIx( "PATTERN");
+	e->AssureStringScalarKWIfPresent( typeIx, pattern);
+        }
+    else      pattern = "*.pro";
+
     SizeT d;
     long   sPos=0;
+   #ifdef _WIN32
+      char pathsep[]=";";
+    #else
+      char pathsep[]=":";
+    #endif
     do
       {
-	d=s.find(':',sPos);
+	d=s.find(pathsep[0],sPos);
 	string act = s.substr(sPos,d-sPos);
 	
-	ExpandPath( sArr, act, "*.pro", all_dirs);
+	ExpandPath( sArr, act, pattern, all_dirs);
 	
 	sPos=d+1;
       }
@@ -571,14 +614,16 @@ namespace lib {
 	DStringGDL* res = new DStringGDL( dimension( nArr), BaseGDL::NOZERO);
 	for( SizeT i=0; i<nArr; ++i)
 	  (*res)[ i] = sArr[i];
+	// GJ (*res)[ i] = sArr[nArr-i-1];
 	return res;
       }
 
     // set the path
     DString cat = sArr[0];
+    // GJ DString cat = sArr[nArr-1];
     for( SizeT i=1; i<nArr; ++i)
-      cat += ":" + sArr[i];
-    
+      //GJ      cat += pathsep + sArr[nArr-i-1];
+      cat += pathsep + sArr[i];
     return new DStringGDL( cat);
   }
 
@@ -591,16 +636,12 @@ namespace lib {
   {
     int fnFlags = 0;
 
-#ifndef _MSC_VER
+#ifndef _WIN32
 
     if( !match_dot)
-
       fnFlags |= FNM_PERIOD;
 
-
-
     if( !quote)
-
       fnFlags |= FNM_NOESCAPE;
 
 #endif
@@ -664,34 +705,34 @@ namespace lib {
 	    if( root != "") // dirs for current ("") already included
 	      {
 		DString testDir = root + entryStr;
-#ifdef _MSC_VER
-
+#ifdef _WIN32
 		int actStat = stat( testDir.c_str(), &statStruct);
-
 #else
-
 		int actStat = lstat( testDir.c_str(), &statStruct);
-
 #endif
 
 		if( S_ISDIR(statStruct.st_mode) != 0)
-
 		    recurDir.push_back( testDir);
-
 	      }
 
 
 
 	    // dirs are also returned if they match
 
-#ifdef _MSC_VER
-
-	    int match = PathMatchSpec(entryStr.c_str(), pat.c_str());
-
+#ifdef _WIN32
+#	ifdef _UNICODE
+		TCHAR *tchr1 = new TCHAR[entryStr.size() + 1];
+		TCHAR *tchr2 = new TCHAR[pat.size() + 1];
+		tchr1[entryStr.size()] = 0;
+		tchr2[pat.size()] = 0;
+		int match = 1 - PathMatchSpec(tchr1, tchr2);
+		delete tchr1;
+		delete tchr2;
+#	else
+	    int match = 1 - PathMatchSpec(entryStr.c_str(), pat.c_str());
+#	endif
 #else
-
 	    int match = fnmatch( pat.c_str(), entryStr.c_str(), fnFlags);
-
 #endif
 	    if( match == 0)
 	      fL.push_back( prefix + entryStr);
@@ -709,7 +750,7 @@ namespace lib {
     SizeT nRecur = recurDir.size();
     for( SizeT d=0; d<nRecur; ++d)
       {
-	//	cout << "Recursive looking in: " << recurDir[d] << endl;
+
 	PatternSearch( fL, recurDir[d], pat, accErr, quote, 
 		       match_dot,
 		       /*prefix +*/ recurDir[d]);
@@ -757,7 +798,7 @@ DString makeInsensitive(const DString &s)
 	return insen;
 }
 
-#ifndef _MSC_VER
+#ifndef _WIN32
   void FileSearch( FileListT& fL, const DString& s, 
 		   bool environment,
 		   bool tilde,
@@ -814,23 +855,40 @@ DString makeInsensitive(const DString &s)
     }
     else 
     {
-      string pattern;
-      if 
-      (
-        st.at(0) != '/' && 
-        !(tilde && st.at(0) == '~') && 
-        !(environment && st.at(0) == '$')
-      ) 
-      { 
-        pattern = GetCWD();
-        pattern.append("/");
-        pattern.append(s);
-	if(!( st.size() ==1 && st.at(0) == '.')) pattern.append(st);
-        gRes = glob(pattern.c_str(), flags, NULL, &p);
+      int debug=0;
+      if (debug) {
+	cout << "st : " << st << endl;
+	cout << "st.size() : " << st.size() << endl;
       }
-      else 
-      {
-        gRes = glob(st.c_str(), flags, NULL, &p);
+      
+      string pattern;
+      if (st == ""){
+	pattern = GetCWD();
+	pattern.append("/*");
+	gRes = glob(pattern.c_str(), flags, NULL, &p);
+      } else {
+	if (
+	    st.at(0) != '/' && 
+	    !(tilde && st.at(0) == '~') && 
+	    !(environment && st.at(0) == '$')
+	    ) 
+	  { 
+	    pattern = GetCWD();
+	    pattern.append("/");
+	    if(!( st.size() ==1 && st.at(0) == '.')) pattern.append(st);
+	    
+	    if (debug) cout << "patern : " << pattern << endl;
+	    
+	    gRes = glob(pattern.c_str(), flags, NULL, &p);
+	  }
+	else 
+	  {
+	    gRes = glob(st.c_str(), flags, NULL, &p);
+	  }
+      }
+      if (debug) {
+	cout << "gRes : " << gRes << endl;
+	cout << "st out : " << st << endl;
       }
     }
 
@@ -862,6 +920,65 @@ DString makeInsensitive(const DString &s)
 
     if( st == "" && dir)
       fL.push_back( "");
+  }
+
+
+  // AC 16 May 2014 : preliminary (and no MSwin support !)
+  // revised by AC on June 28 
+  // PRINT, FILE_expand_path([['','.'],['$PWD','src/']])
+  // when the path is wrong, wrong output ...
+#if defined (__MINGW32__)
+//  This is includced here even though the
+//  the whole block is exluded for _WIN32
+#define realpath(N,R) _fullpath((R),(N),_MAX_PATH) 
+// ref:http://sourceforge.net/p/mingw/patches/256/ Keith Marshall 2005-12-02
+#endif
+
+  BaseGDL* file_expand_path( EnvT* e)
+  {
+    // always 1
+    SizeT nParam=e->NParam(1);
+
+    // accepting only strings as parameters
+    BaseGDL* p0 = e->GetParDefined(0);
+    if( p0->Type() != GDL_STRING)
+      e->Throw("String expression required in this context: " + e->GetParString(0));
+    DStringGDL* p0S = static_cast<DStringGDL*>(p0);
+
+    SizeT nPath = p0S->N_Elements();
+
+    //    cout << "nPath :" << nPath  << endl;
+
+    DStringGDL* res = new DStringGDL(p0S->Dim(), BaseGDL::NOZERO);
+    for( SizeT r=0; r<nPath ; ++r)
+      {
+	string tmp=(*p0S)[r];
+
+	if (tmp.length() == 0) {
+	  char* cwd;
+	  char buff[PATH_MAX + 1];
+	  cwd = getcwd( buff, PATH_MAX + 1 );
+	  if( cwd != NULL ){
+	    (*res)[r]= string(cwd);
+	  } 
+	  else {
+	    (*res)[r]=""; //( errors are not managed ...)
+	  }
+	} else {
+	  WordExp(tmp);
+	  char *symlinkpath =const_cast<char*> (tmp.c_str());
+	  char actualpath [PATH_MAX+1];
+	  char *ptr;
+	  ptr = realpath(symlinkpath, actualpath);
+	  if( ptr != NULL ){
+	    (*res)[r] =string(ptr);
+	  }else {
+	    //( errors are not managed ...)
+	    (*res)[r] = tmp ;
+	  }
+	}
+      }
+    return res;
   }
 
   // not finished yet
@@ -942,6 +1059,8 @@ DString makeInsensitive(const DString &s)
     bool onlyDir = nParam > 1;
 
     FileListT fileList;
+    int debug=0;
+    if (debug) cout << "nPath: " << nPath << endl;
 
     if( nPath == 0)
       FileSearch( fileList, "", 
@@ -958,6 +1077,9 @@ DString makeInsensitive(const DString &s)
 		  accErr, mark, noSort, quote, onlyDir, match_dot, forceAbsPath, fold_case);
 
     DLong count = fileList.size();
+
+    if (debug) cout << "Count : " << count << endl;
+    //    cout << fileList << endl;
 
     if( onlyDir)
       { // recursive search for recurPattern
@@ -1049,7 +1171,7 @@ DString makeInsensitive(const DString &s)
       //      cout << ">>"<<(*p0S)[i].c_str() << "<<" << endl;
       if (tmp.length() > 0) {
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 	char path_buffer[_MAX_PATH];
 	char drive[_MAX_DRIVE];
 	char dir[_MAX_DIR];
@@ -1124,7 +1246,7 @@ DString makeInsensitive(const DString &s)
       //tmp=strdup((*p0S)[i].c_str());
       const string& tmp = (*p0S)[i];
 
-#ifdef _MSC_VER
+#ifdef _WIN32
    char path_buffer[_MAX_PATH];
    char drive[_MAX_DRIVE];
    char dir[_MAX_DIR];
@@ -1142,14 +1264,9 @@ DString makeInsensitive(const DString &s)
 
     }
     
-#ifdef _MSC_VER
-    string PathSeparator="\\"; //"
-#else
-    string PathSeparator="/";//"
-#endif
     if (e->KeywordSet("MARK_DIRECTORY")) {
       for (SizeT i = 0; i < p0S->N_Elements(); i++) {
-	(*res)[i]=(*res)[i] + PathSeparator;
+	(*res)[i]=(*res)[i] + PathSeparator();
       }
     }
     
@@ -1292,6 +1409,9 @@ DString makeInsensitive(const DString &s)
 
     static int symlinkIx = e->KeywordIx( "SYMLINK");
     bool symlink = e->KeywordSet( symlinkIx);
+    
+    static int dSymlinkIx = e->KeywordIx( "DANGLING_SYMLINK");
+    bool dsymlink = e->KeywordSet( dSymlinkIx);
 
     static int noexpand_pathIx = e->KeywordIx( "NOEXPAND_PATH");
     bool noexpand_path = e->KeywordSet( noexpand_pathIx);
@@ -1316,84 +1436,53 @@ DString makeInsensitive(const DString &s)
       {
 	string actFile;
 
-        if (!noexpand_path) 
-        {
-	  string tmp = (*p0S)[f];
-          WordExp(tmp);
-	  if( tmp.length() > 1 && tmp[ tmp.length()-1] == '/')
-	    actFile = tmp.substr(0,tmp.length()-1);
-	  else
-	    actFile = tmp;
-        } 
-        else 
-        {
-	  const string& tmp = (*p0S)[f];
-	  if( tmp.length() > 1 && tmp[ tmp.length()-1] == '/')
-	    actFile = tmp.substr(0,tmp.length()-1);
-	  else
-	    actFile = tmp;
-        }
-
-	struct stat statStruct;
-#ifdef _MSC_VER
-
-	int actStat = stat( actFile.c_str(), &statStruct);
-
+    if ( !noexpand_path ) {
+      string tmp = (*p0S)[f];
+      WordExp( tmp );
+      if ( tmp.length( ) > 1 && tmp[ tmp.length( ) - 1] == '/' )
+        actFile = tmp.substr( 0, tmp.length( ) - 1 );
+      else
+        actFile = tmp;
+    }
+    else {
+       actFile = (*p0S)[f];
+    }
+	struct stat statStruct,statStruct2;
+#ifdef _WIN32
+	int actStat = stat( actFile.c_str(), &statStruct2);
 #else
-
-	int actStat = lstat( actFile.c_str(), &statStruct);
-
+	int actStat = lstat( actFile.c_str(), &statStruct2);
 #endif
-// // debug
-// 	if( actStat != 0)
-// 	{
-// 	  cout << "FILE_TEST: actStat != 0: " << actFile << endl;
-// 	}
 	
-	if( actStat != 0) 
-	  continue;
+	if( actStat != 0) 	  continue;
+//be more precise in case of symlinks --- use stat to find the state of the symlinked file instead:
+     bool isASymLink = S_ISLNK(statStruct2.st_mode) ; 
+     actStat = stat( actFile.c_str(), &statStruct);
+     bool isADanglingSymLink = (actStat != 0 && isASymLink); //is a dangling symlink!
+     if (isADanglingSymLink) isASymLink = FALSE;
+     
+	if( read && access( actFile.c_str(), R_OK) != 0)  continue;
+	if( write && access( actFile.c_str(), W_OK) != 0)  continue;
+	if( zero_length && statStruct.st_size != 0) 	  continue;
 
-	// 	if( !wxFileExists( actFile) && !wxDirExists( actFile))
-	// 	  continue;
+#ifndef _WIN32
 
-	// 	if( directory && !wxDirExists( actFile))
-	// 	  continue;
-	// 	if( read && !wxFile::Access( actFile, wxFile::read))
-	// 	  continue;
-	// 	if( write && !wxFile::Access( actFile, wxFile::write))
-	// 	  continue;
-	if( read && access( actFile.c_str(), R_OK) != 0)
-	  continue;
-
-	if( write && access( actFile.c_str(), W_OK) != 0)
-	  continue;
-
-	if( zero_length && statStruct.st_size != 0) 
-	  continue;
-
-#ifndef _MSC_VER
-
-	if( executable && access( actFile.c_str(), X_OK) != 0)
-	  continue;
+	if( executable && access( actFile.c_str(), X_OK) != 0)	  continue;
 
 	if( get_mode)
 	  (*getMode)[ f] = statStruct.st_mode & 
-	    (S_IRWXU | S_IRWXG | S_IRWXO);
+	                   (S_IRWXU | S_IRWXG | S_IRWXO);
 
-	if( block_special && S_ISBLK(statStruct.st_mode) == 0) 
-	  continue;
+	if( block_special && S_ISBLK(statStruct.st_mode) == 0) 	  continue;
 
-	if( character_special && S_ISCHR(statStruct.st_mode) == 0) 
-	  continue;
+	if( character_special && S_ISCHR(statStruct.st_mode) == 0) continue;
 
-	if( named_pipe && S_ISFIFO(statStruct.st_mode) == 0) 
-	  continue;
+	if( named_pipe && S_ISFIFO(statStruct.st_mode) == 0)       continue;
 
-	if( socket && S_ISSOCK(statStruct.st_mode) == 0) 
-	  continue;
+	if( socket && S_ISSOCK(statStruct.st_mode) == 0) 	  continue;
 
-	if( symlink && S_ISLNK(statStruct.st_mode) == 0) 
-	  continue;
+	if( symlink && !isASymLink ) 	  continue;
+	if( dsymlink && !isADanglingSymLink ) 	  continue;
 
 #endif
 
@@ -1435,38 +1524,34 @@ DString makeInsensitive(const DString &s)
 
     for (SizeT f = 0; f < nEl; f++)
     {
-        // NAME
-	const char* actFile;
-        string tmp;
-        if (!noexpand_path) 
-        {
-          tmp = (*p0S)[f];
-          WordExp(tmp);
-          actFile = tmp.c_str();
-        } 
-        else actFile = (*p0S)[f].c_str();
-	*(res->GetTag(tName, f)) = DStringGDL(actFile);
+      // NAME
+      string actFile;
+      string tmp;
+      if ( !noexpand_path ) {
+        string tmp = (*p0S)[f];
+        WordExp( tmp );
+        if ( tmp.length( ) > 1 && tmp[ tmp.length( ) - 1] == '/' )
+          actFile = tmp.substr( 0, tmp.length( ) - 1 );
+        else
+          actFile = tmp;
+      }
+      else {
+        actFile = (*p0S)[f];
+      }
+	  *(res->GetTag(tName, f)) = DStringGDL(actFile.c_str());
 
         // stating the file (and moving on to the next file if failed)
-	struct stat statStruct;
-#ifdef _MSC_VER
-
-	int actStat = stat(actFile, &statStruct);
-
+	struct stat statStruct,statStruct2;
+#ifdef _WIN32
+	int actStat = stat(actFile, &statStruct2);
 #else
-
-	int actStat = lstat(actFile, &statStruct);
-
+	int actStat = lstat(actFile.c_str(), &statStruct2);
 #endif
-// // debug
-// 	cout << "FILE_INFO: actStat = " << actStat << ": " << actFile << endl;
-// 	if( actStat != 0)
-// 	{
-// 	  cout << "FILE_INFO: actStat != 0: " << actFile << endl;
-// 	}
-
-	if( actStat != 0) 
-	  continue;
+//be more precise in case of symlinks --- use stat to find the state of the symlinked file instead:
+     bool isASymLink = S_ISLNK(statStruct2.st_mode);
+     actStat = stat( actFile.c_str(), &statStruct);
+     bool isADanglingSymLink = (actStat != 0 && isASymLink); //is a dangling symlink!
+	
 
         // checking struct tag indices (once)
 
@@ -1488,7 +1573,7 @@ DString makeInsensitive(const DString &s)
           tExecute =          res->Desc()->TagIndex("EXECUTE"); 
           tSetuid =           res->Desc()->TagIndex("SETUID");
           tSetgid =           res->Desc()->TagIndex("SETGID");
-	  tSocket =           res->Desc()->TagIndex("SOCKET");
+	      tSocket =           res->Desc()->TagIndex("SOCKET");
           tStickyBit =        res->Desc()->TagIndex("STICKY_BIT");
           tSymlink =          res->Desc()->TagIndex("SYMLINK");
           tDanglingSymlink =  res->Desc()->TagIndex("DANGLING_SYMLINK");
@@ -1504,19 +1589,27 @@ DString makeInsensitive(const DString &s)
           indices_known = true;
 
         }
+     // DANGLING_SYMLINK good place
+#ifndef _WIN32
+        if (isADanglingSymLink) { 
+          // warning: statStruct now describes the linked file
+          *(res->GetTag(tDanglingSymlink, f)) = DByteGDL(1);
+        }
+#endif
+     if( actStat != 0 ) continue;
 
-        // EXISTS (would not reach here if stat failed)
+       // EXISTS (would not reach here if stat failed)
         *(res->GetTag(tExists, f)) = DByteGDL(1);
         
         // READ, WRITE, EXECUTE
 
-        *(res->GetTag(tRead, f)) =    DByteGDL(access(actFile, R_OK) == 0);
+        *(res->GetTag(tRead, f)) =    DByteGDL(access(actFile.c_str(), R_OK) == 0);
 
-        *(res->GetTag(tWrite, f)) =   DByteGDL(access(actFile, W_OK) == 0);
+        *(res->GetTag(tWrite, f)) =   DByteGDL(access(actFile.c_str(), W_OK) == 0);
 
 #ifndef _MSC_VER
 
-        *(res->GetTag(tExecute, f)) = DByteGDL(access(actFile, X_OK) == 0);
+        *(res->GetTag(tExecute, f)) = DByteGDL(access(actFile.c_str(), X_OK) == 0);
 
 #endif
 
@@ -1535,27 +1628,24 @@ DString makeInsensitive(const DString &s)
         *(res->GetTag(tCharacterSpecial, f)) = DByteGDL(S_ISCHR( statStruct.st_mode) != 0);
 
         *(res->GetTag(tNamedPipe, f)) =        DByteGDL(S_ISFIFO(statStruct.st_mode) != 0);
-
+#ifndef __MINGW32__
         *(res->GetTag(tSocket, f)) =           DByteGDL(S_ISSOCK(statStruct.st_mode) != 0);
+#endif
 
 #endif  
 
         // SETUID, SETGID, STICKY_BIT
 
-#ifndef _MSC_VER
+#ifndef WIN32
 
         *(res->GetTag(tSetuid, f)) =           DByteGDL((S_ISUID & statStruct.st_mode) != 0);
-
         *(res->GetTag(tSetgid, f)) =           DByteGDL((S_ISGID & statStruct.st_mode) != 0);
-
         *(res->GetTag(tStickyBit, f)) =        DByteGDL((S_ISVTX & statStruct.st_mode) != 0);
 
         // MODE
 
         *(res->GetTag(tMode, f)) = DLongGDL(
-
           statStruct.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO | S_ISUID | S_ISGID | S_ISVTX)
-
         );
 
 #endif
@@ -1568,22 +1658,13 @@ DString makeInsensitive(const DString &s)
         // SIZE
 	*(res->GetTag(tSize, f)) = DLong64GDL(statStruct.st_size);
 
-        // SYMLINK, DANLING_SYMLINK
+        // SYMLINK
+#ifndef _WIN32
 
-#ifndef _MSC_VER // No symlinks in windows
-
-        if (S_ISLNK(statStruct.st_mode) != 0)
-
+        if (isASymLink)
         {
-
           *(res->GetTag(tSymlink, f)) = DByteGDL(1);
-
-          // warning: statStruct now describes the linked file
-
-          *(res->GetTag(tDanglingSymlink, f)) = DByteGDL(stat(actFile, &statStruct) != 0);
-
         }
-
 #endif
       }
 

@@ -23,13 +23,15 @@
 
 // get_kbrd patch
 // http://sourceforge.net/forum/forum.php?thread_id=3292183&forum_id=338691
-#ifndef _MSC_VER
+#if !defined(_WIN32) || defined(__CYGWIN__)
 #include <termios.h> 
 #include <unistd.h> 
 #endif
 
 // used to defined GDL_TMPDIR: may have trouble on MSwin, help welcome
+#ifndef WIN32
 #include <paths.h>
+#endif
 
 #include <limits>
 #include <string>
@@ -64,9 +66,12 @@ extern "C" char **environ;
 #define MAX_REGEXPERR_LENGTH 80
 
 #ifdef _MSC_VER
+#if _MSC_VER < 1800
 #define isfinite _finite
 #define isnan _isnan
 #define round(f) floor(f+0.5)
+#endif
+#define isfinite(x) isfinite((double) x)
 int strncasecmp(const char *s1, const char *s2, size_t n)
 {
   if (n == 0)
@@ -81,7 +86,9 @@ int strncasecmp(const char *s1, const char *s2, size_t n)
 
   return tolower(*(unsigned char *) s1) - tolower(*(unsigned char *) s2);
 }
-#else
+#endif
+
+#if !defined(_WIN32) || defined(__CYGWIN__)
 #include <sys/utsname.h>
 #endif
 
@@ -419,18 +426,20 @@ DULong SHAH0[] = {
   BaseGDL* ptr_new( EnvT* e)
   {
     int nParam=e->NParam();
-    
     if( nParam > 0)
       {
-	// new ptr from undefined variable is allowed as well
 	BaseGDL* p= e->GetPar( 0);
-        if( p == NULL)
+
+	// new ptr from undefined variable is allowed as well
+	// this case was discovered by chance by Leva, July 16, 2014
+	// p=ptr_new(), p=ptr_new(!null), p=ptr_new(undef_var) should work
+
+        if ((p == NULL) || (p->Type() == GDL_UNDEF))
 	  {
 	    DPtr heapID= e->NewHeap();
 	    return new DPtrGDL( heapID);
-	  }
-
-	if( e->KeywordSet(0)) // NO_COPY
+	  }	
+	if (e->KeywordSet("NO_COPY")) // NO_COPY
 	  {
 	    BaseGDL** p= &e->GetPar( 0);
 	    // 	    if( *p == NULL)
@@ -597,7 +606,7 @@ DULong SHAH0[] = {
 
   BaseGDL* obj_new( EnvT* e)
   {
-    StackGuard<EnvStackT> guard( e->Interpreter()->CallStack());
+//     StackGuard<EnvStackT> guard( e->Interpreter()->CallStack());
     
     int nParam=e->NParam();
     
@@ -627,6 +636,8 @@ DULong SHAH0[] = {
       DFun* objINIT= objDesc->GetFun( "INIT");
       if( objINIT != NULL)
 	{
+	  StackGuard<EnvStackT> guard( e->Interpreter()->CallStack());
+
 	  // morph to obj environment and push it onto the stack again
 	  e->PushNewEnvUD( objINIT, 1, &newObj);
 	
@@ -1362,10 +1373,10 @@ BaseGDL* dcomplex_fun( EnvT* e)
       {
 	// no direct call here
 	
-	StackGuard<EnvStackT> guard( e->Interpreter()->CallStack());
-
 	funIx = GDLInterpreter::GetFunIx( callF);
 	
+	StackGuard<EnvStackT> guard( e->Interpreter()->CallStack());
+
 	EnvUDT* newEnv = e->PushNewEnvUD( funList[ funIx], 1);
 	
 	// make the call
@@ -1381,8 +1392,6 @@ BaseGDL* dcomplex_fun( EnvT* e)
 
   BaseGDL* call_method_function( EnvT* e)
   {
-    StackGuard<EnvStackT> guard( e->Interpreter()->CallStack());
-
     int nParam=e->NParam();
     if( nParam < 2)
       e->Throw(  "Name and object reference must be specified.");
@@ -1399,6 +1408,8 @@ BaseGDL* dcomplex_fun( EnvT* e)
 
     if( method == NULL)
       e->Throw( "Method not found: "+callP);
+
+    StackGuard<EnvStackT> guard( e->Interpreter()->CallStack());
 
     EnvUDT* newEnv = e->PushNewEnvUD( method, 2, (DObjGDL**) &e->GetPar( 1));
     
@@ -2260,7 +2271,9 @@ TRACEOMP( __FILE__, __LINE__)
       {
 	e->SetPar( 1, new DLongGDL( count));
       }
-
+    //The system variable !ERR is set to the number of nonzero elements for compatibility with old versions of IDL
+    DVar *err=FindInVarList(sysVarList, "ERR");
+    (static_cast<DLongGDL*>(err->Data()))[0]= count;
     if( count == 0) 
     {
       if( nullKW)
@@ -5331,11 +5344,27 @@ BaseGDL* strtok_fun(EnvT* e) {
 	    {
 	      resPtr = getenv((*name)[i].c_str());
 
-	      if( resPtr != NULL)
+		  if (resPtr != NULL)
+		  {
 		(*env)[i] = resPtr;
+		  }
 	      else
+		  {
 		//		(*env)[i] = SysVar::Dir();
+#ifdef WIN32
+			  TCHAR tmpBuf[MAX_PATH];
+			  GetTempPath(MAX_PATH, tmpBuf);
+#	ifdef _UNICODE
+			  char c_tmpBuf[MAX_PATH];
+			  WideCharToMultiByte(CP_ACP, 0, tmpBuf, MAX_PATH, c_tmpBuf, MAX_PATH, NULL, NULL);
+			  (*env)[i] = c_tmpBuf;
+#	else
+			  (*env)[i] = tmpBuf;
+#	endif
+#else
 		(*env)[i] = _PATH_VARTMP ;
+#endif
+		  }
 	      
 	      AppendIfNeeded( (*env)[i], "/");
 	    }
@@ -5704,9 +5733,10 @@ BaseGDL* strtok_fun(EnvT* e) {
 	else
 	  {
 	    SizeT n = funList.size();
-	    if( n == 0) return new DStringGDL("");
-	    subList.resize( n);
-		
+	    if( n == 0) {
+	      Message("No FUNCTIONS compiled yet !");
+	      return new DStringGDL("");
+	    }
 	    for( SizeT i = 0; i<n; ++i)
 	      subList.push_back( funList[ i]->ObjectName());
 	  }
@@ -5727,9 +5757,13 @@ BaseGDL* strtok_fun(EnvT* e) {
 	else
 	  {
 	    SizeT n = proList.size();
-	    if( n == 0) return new DStringGDL("");
-	    subList.resize( n);
-		
+	    if( n == 0) {
+	      Message("No PROCEDURES compiled yet !");
+	      DStringGDL* res = new DStringGDL(1, BaseGDL::NOZERO);
+	      (*res)[0]="$MAIN$";
+	      return res;
+	    }
+	    subList.push_back("$MAIN$");
 	    for( SizeT i = 0; i<n; ++i)
 	      subList.push_back( proList[ i]->ObjectName());
 	  }
@@ -5775,11 +5809,11 @@ BaseGDL* strtok_fun(EnvT* e) {
     char c='\0'; //initialize is never a bad idea...
 
     int fd=fileno(stdin);
-#ifndef _MSC_VER
+#if !defined(_WIN32) || defined(__CYGWIN__)
     struct termios orig, get; 
 #endif
     // Get terminal setup to revert to it at end. 
-#ifndef _MSC_VER
+#if !defined(_WIN32) || defined(__CYGWIN__)
     (void)tcgetattr(fd, &orig); 
     // New terminal setup, non-canonical.
     get.c_lflag = ISIG; 
@@ -5787,7 +5821,7 @@ BaseGDL* strtok_fun(EnvT* e) {
     if (doWait)
     {
      // will wait for a character
-#ifndef _MSC_VER
+#if !defined(_WIN32) || defined(__CYGWIN__)
      get.c_cc[VTIME]=0;
      get.c_cc[VMIN]=1;
      (void)tcsetattr(fd, TCSANOW, &get); 
@@ -5797,7 +5831,7 @@ BaseGDL* strtok_fun(EnvT* e) {
     else 
     {
      // will not wait, but return EOF or next character in terminal buffer if present
-#ifndef _MSC_VER
+#if !defined(_WIN32) || defined(__CYGWIN__)
      get.c_cc[VTIME]=0;
      get.c_cc[VMIN]=0;
      (void)tcsetattr(fd, TCSANOW, &get); 
@@ -5810,7 +5844,7 @@ BaseGDL* strtok_fun(EnvT* e) {
     }
     
     // Restore original terminal settings. 
-#ifndef _MSC_VER
+#if !defined(_WIN32) || defined(__CYGWIN__)
     (void)tcsetattr(fd, TCSANOW, &orig); 
 #endif
 #if defined(HAVE_LIBREADLINE)
@@ -6665,7 +6699,7 @@ BaseGDL* strtok_fun(EnvT* e) {
   BaseGDL* get_login_info( EnvT* e)
   {
     // getting the info 
-#ifdef _MSC_VER
+#if defined(_WIN32) && !defined(__CYGWIN__)
     #define MAX_TCHAR_BUF 256
 
     char login[MAX_TCHAR_BUF];
@@ -6698,7 +6732,7 @@ BaseGDL* strtok_fun(EnvT* e) {
 
     // returning the info 
     stru->InitTag("USER_NAME", DStringGDL(login));
-#ifdef _MSC_VER
+#if defined(_WIN32) && !defined(__CYGWIN__)
     stru->InitTag("MACHINE_NAME", DStringGDL(info));
 #else
     stru->InitTag("MACHINE_NAME", DStringGDL(info.nodename));
@@ -6746,6 +6780,14 @@ BaseGDL* strtok_fun(EnvT* e) {
     return new DStringGDL("");
   }
 
+  BaseGDL* scope_level( EnvT* e) 
+  {
+    SizeT nParam=e->NParam();
+    if ( nParam > 0 ) e->Throw("Incorrect number of arguments.");
+    EnvStackT& callStack = e->Interpreter()->CallStack();
+    return new DLongGDL(callStack.size());
+  }
+  
   // note: changes here MUST be reflected in scope_varfetch_reference() as well
   // because DLibFun of this function is used for scope_varfetch_reference() the keyword
   // indices must match

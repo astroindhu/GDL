@@ -73,10 +73,41 @@ namespace lib {
   const int szdbl=sizeof(double);
   const int szflt=sizeof(float);
 
+  void matrix_input_check_dims( EnvT* e)
+  {
+    BaseGDL* p0 = e->GetNumericParDefined( 0);
+
+    //cout << p0->Rank() << endl;
+
+    SizeT nEl = p0->N_Elements();
+
+    if( nEl == 0)
+      e->Throw( "Variable is undefined: " + e->GetParString(0));
+    
+    if (p0->Rank() > 2)
+      e->Throw( "Input must be a square matrix: " + e->GetParString(0));
+    
+    if (p0->Rank() == 2) {
+      if (p0->Dim(0) != p0->Dim(1))
+        e->Throw( "Input must be a square matrix: " + e->GetParString(0));
+    }
+
+    // array singleton OK (e.g. [1]), vector not
+    if ((p0->Rank() == 1) && (nEl > 1)) {
+        e->Throw( "Input must be a square matrix: " + e->GetParString(0));
+    }
+
+    if (p0->Rank() == 0)
+      e->Throw( "Expression must be an array in this context: " + e->GetParString(0));
+    
+  }
+
   BaseGDL* AC_invert_fun( EnvT* e)
   {
     if (e->KeywordSet("GSL") && e->KeywordSet("EIGEN"))
       e->Throw("Conflicting keywords");
+
+    matrix_input_check_dims(e);
 
     bool Eigen_flag=FALSE;
 #if defined(USE_EIGEN)
@@ -86,57 +117,56 @@ namespace lib {
     if (e->KeywordSet("EIGEN") && (!Eigen_flag))
       Warning("Eigen Invert not available, GSL used");
     
-    if (e->KeywordSet("GSL") ||(!Eigen_flag)) 
+    if (e->KeywordSet("GSL") || (!Eigen_flag))
       {
 	return invert_gsl_fun(e);
       }
     else
-      {      
-	return invert_eigen_fun(e);
-      }
-    //    bool GSL_flag, Eigen_flag, debug;
-    //int GSLiX, EIGENiX;
-    //GSLiX=
+      {
+	// if /Eigen, we want to use Eigen,
+	// then we don't check the status and return ...
 
-    //   if (e->KeywordSet("GSL")) return new DLongGDL(1);
-    // if (e->KeywordSet("EIGEN")) return new DLongGDL(2);
-    //    if (e->KeywordSet("GSL")) return invert_gsl_fun(e);
-    //if (e->KeywordSet("EIGEN")) return invert_eigen_fun(e);
-    //return new DLongGDL(0);
+	if (e->KeywordSet("EIGEN")) return invert_eigen_fun(e);
+
+	// AC 2014-08-10 : during tests of Chianti Code,
+	// we discovered that the GSL code was less sensitive
+	// to very high range in matrix ... 
+	// If status used, if Eigen fails, we try GSL
+
+	BaseGDL* tmp;
+	tmp=invert_eigen_fun(e);	
+	SizeT nParam=e->NParam(1);
+	if (nParam == 2) 
+	  {
+	    BaseGDL* p1 = e->GetParDefined(1);
+	    DLongGDL* res = static_cast<DLongGDL*>
+	      (p1->Convert2(GDL_LONG, BaseGDL::COPY));
+	    DLong status;
+	    status=(*res)[0];
+	    if (status > 0) tmp=invert_gsl_fun(e);
+	  }
+	return tmp;
+      }
   }
- 
 
   BaseGDL* invert_gsl_fun( EnvT* e)
   {
+
+    BaseGDL* p0 = e->GetParDefined( 0);
+    SizeT nEl = p0->N_Elements();
+
+    // related to "status" param
+    // check here, if not done, res would be pending in case of SetPar() throws
+    // SetPar() only throws in AssureGlobalPar()
     SizeT nParam=e->NParam(1);
+    if (nParam == 2) e->AssureGlobalPar( 1);
+
+    long singular=0;
+
     int s;
     float f32;
     double f64;
     double det;
-    long singular=0;
-
-    //     if( nParam == 0)
-    //       e->Throw( "Incorrect number of arguments.");
-
-    BaseGDL* p0 = e->GetParDefined( 0);
-
-    SizeT nEl = p0->N_Elements();
-
-    if( nEl == 0)
-      e->Throw( "Variable is undefined: " + e->GetParString(0));
-    
-    if (p0->Rank() > 2)
-      e->Throw( "Input must be a square matrix:" + e->GetParString(0));
-    
-    if (p0->Rank() > 1) {
-      if (p0->Dim(0) != p0->Dim(1))
-        e->Throw( "Input must be a square matrix:" + e->GetParString(0));
-    }
-
-    // status 
-    // check here, if not done, res would be pending in case of SetPar() throws
-    // SetPar() only throws in AssureGlobalPar()
-    if (nParam == 2) e->AssureGlobalPar( 1);
 
     // only one element matrix
 
@@ -235,7 +265,7 @@ namespace lib {
        	det = gsl_linalg_complex_LU_lndet(mat);
 	if (gsl_isinf(det) == 0) {
 	  gsl_linalg_complex_LU_invert (mat, perm, inverse);
-	  if (det * LOG10E < 1e-5) singular = 2;
+	  if (abs(det) * LOG10E < 1e-5) singular = 2;
 	}
 	else singular = 1;
 
@@ -276,7 +306,7 @@ namespace lib {
 	det = gsl_linalg_complex_LU_lndet(mat);
 	if (gsl_isinf(det) == 0) {
 	  gsl_linalg_complex_LU_invert (mat, perm, inverse);
-	  if (det * LOG10E < 1e-5) singular = 2;
+	  if (abs(det) * LOG10E < 1e-5) singular = 2;
 	}
 	else singular = 1;
 
@@ -314,7 +344,7 @@ namespace lib {
 	det = gsl_linalg_LU_lndet(mat);
 	if (gsl_isinf(det) == 0) {
 	  gsl_linalg_LU_invert (mat, perm, inverse);
-	  if (det * LOG10E < 1e-5) singular = 2;
+	  if (abs(det) * LOG10E < 1e-5) singular = 2;
 	}
 	else singular = 1;
 
@@ -377,7 +407,7 @@ namespace lib {
 	det = gsl_linalg_LU_lndet(mat);
 	if (gsl_isinf(det) == 0) {
 	  gsl_linalg_LU_invert (mat, perm, inverse);
-	  if (det * LOG10E < 1e-5) singular = 2;
+	  if (abs(det) * LOG10E < 1e-5) singular = 2;
 	}
 	else singular = 1;
 
@@ -409,31 +439,15 @@ namespace lib {
 #if defined(USE_EIGEN)
   BaseGDL* invert_eigen_fun( EnvT* e)
   {
-    //obsolete
-    //#if defined _OPENMP 
-    //set_num_threads();
-    //#endif
     
     BaseGDL* p0 = e->GetParDefined( 0);
-    SizeT nParam=e->NParam(1);
-    long singular=0;
     SizeT nEl = p0->N_Elements();
 
-    if( nEl == 0)
-      e->Throw( "Variable is undefined: " + e->GetParString(0));
-    
-    if (p0->Rank() > 2)
-      e->Throw( "Input must be a square matrix:" + e->GetParString(0));
-    
-    if (p0->Rank() > 1) {
-      if (p0->Dim(0) != p0->Dim(1))
-        e->Throw( "Input must be a square matrix:" + e->GetParString(0));
-    }
-
-    if (p0->Rank() == 0) 
-        e->Throw( "Expression must be an array in this context:" + e->GetParString(0));
-
+    // related to "status" param : see comment in "invert_gsl_fun"
+    SizeT nParam=e->NParam(1);
     if (nParam == 2) e->AssureGlobalPar( 1);
+
+    long singular=0;
 
     // only one element matrix
     if( nEl == 1) {
@@ -512,9 +526,9 @@ namespace lib {
 
       FullPivLU<MatrixXcf> lu(m0);
 
-        if(lu.isInvertible()) {
+      if(lu.isInvertible()) {
 	tmp_res=lu.inverse();
-		if ( lu.determinant().real()* LOG10E < 1e-5) singular = 2;
+	if (abs(lu.determinant().real())* LOG10E < 1e-5) singular = 2;
 	}
 	else singular=1;
 
@@ -538,7 +552,7 @@ namespace lib {
 
       if(lu.isInvertible()) {
 	tmp_res=lu.inverse();
-	if (lu.determinant().real()* LOG10E < 1e-5) singular = 2;
+	if (abs(lu.determinant().real())* LOG10E < 1e-5) singular = 2;
      }
       else singular=1;
 
@@ -557,11 +571,13 @@ namespace lib {
       MatrixXd tmp_res (NbCol,NbRow);
       Map<Matrix<double,Dynamic,Dynamic> > m0(&(*p0D)[0], NbCol,NbRow);
 
-      FullPivLU<MatrixXd> lu(m0);
+      Eigen::FullPivLU<MatrixXd> lu(m0);
+      //      cout << lu.determinant() << endl;
+      //cout << lu.isInvertible() << endl;
     
       if(lu.isInvertible()) {
 	tmp_res=lu.inverse();
-	if (lu.determinant() * LOG10E < 1e-5) singular = 2;
+	if (abs(lu.determinant()) * LOG10E < 1e-5) singular = 2;
       }
       else singular=1;
 
@@ -595,12 +611,11 @@ namespace lib {
 	
 	FullPivLU<MatrixXf> lu(m0);
 	
-		if(lu.isInvertible()) {
-		  //	tmp_res=lu.solve();
-		  tmp_res=lu.inverse();
-	    if (lu.determinant() * LOG10E < 1e-5) singular = 2;
-	  }
-	  else singular=1;
+	if(lu.isInvertible()) {
+	  tmp_res=lu.inverse();
+	  if (abs(lu.determinant()) * LOG10E < 1e-5) singular = 2;
+	}
+	else singular=1;
 
 	DFloatGDL* res =new DFloatGDL(p0->Dim(), BaseGDL::NOZERO);
 	Map<MatrixXf>(&(*res)[0], NbCol, NbRow) = tmp_res.cast<float>();

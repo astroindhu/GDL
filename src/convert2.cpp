@@ -61,7 +61,7 @@ template <>
 inline float string2real_helper<float>(const char* cStart, char** cEnd)
 {
 #ifdef _MSC_VER
-  return strtod(cStart, cEnd);
+  return StrToD(cStart, cEnd);
 #else
   return strtof(cStart, cEnd);
 #endif
@@ -70,7 +70,7 @@ inline float string2real_helper<float>(const char* cStart, char** cEnd)
 template <>
 inline double string2real_helper<double>(const char* cStart, char** cEnd)
 {
-  return strtod(cStart, cEnd);
+  return StrToD(cStart, cEnd);
 }
 
 template <typename real_t>
@@ -1517,10 +1517,10 @@ TRACEOMP( __FILE__, __LINE__)
     case GDL_INT:
       {
       	Data_<SpDInt>* dest=new Data_<SpDInt>( dim, BaseGDL::NOZERO);
-TRACEOMP( __FILE__, __LINE__)
-#pragma omp parallel if (nEl >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= nEl)) shared( errorFlag, mode)
-{
-#pragma omp for
+// TRACEOMP( __FILE__, __LINE__)
+// #pragma omp parallel if (nEl >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= nEl)) shared( errorFlag, mode)
+// {
+// #pragma omp for
       	for( OMPInt i=0; i < nEl; ++i)
       	  {
       	    const char* cStart=(*this)[i].c_str();
@@ -1528,12 +1528,12 @@ TRACEOMP( __FILE__, __LINE__)
       	    (*dest)[i]=strtol(cStart,&cEnd,10);
       	    if( cEnd == cStart && (*this)[i] != "")
       	      {
-StringConversionError( errorFlag, mode, "Type conversion error: "
+		StringConversionError( errorFlag, mode, "Type conversion error: "
 				       "Unable to convert given STRING: '"+
 				       (*this)[i]+"' to INT.");
       	      }
 	  }
-}
+// }
 	if( errorFlag)
 	{
 		delete dest;

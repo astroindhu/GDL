@@ -17,8 +17,6 @@
 
 #include "includefirst.hpp"
 #include "plotting.hpp"
-#include "math_utl.hpp"
-#define PLK_Escape            0x1B
 
 namespace lib{
 
@@ -29,19 +27,23 @@ void empty(EnvT* e)
   GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
   if (actDevice->Name() == "X")
   {
-    GDLGStream *plg = actDevice->GetStream();
-    if (plg != NULL) plg->Flush();
+    GDLGStream *actStream = actDevice->GetStream();
+    if (actStream != NULL) actStream->Flush();
   }
 }
 
 void tvcrs( EnvT* e)
 {
+ 
   GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
-
-  if (actDevice->Name() != "X")
+   if (actDevice == NULL) e->Throw("No device available"); 
+  GDLGStream *actStream = actDevice->GetStream();
+  if (actStream == NULL) e->Throw("Unable to create window.");
+  if (!actStream->HasCrossHair())
   {
     e->Throw("Routine is not defined for current graphics device.");
   }
+
   SizeT nParam = e->NParam(1);
 
   if (nParam < 2 )
@@ -53,18 +55,16 @@ void tvcrs( EnvT* e)
   x = e->GetParAs< DDoubleGDL > (0);
   y = e->GetParAs< DDoubleGDL > (1);
 
-  GDLGStream *plg = actDevice->GetStream();
-  if (plg == NULL) e->Throw("Unable to create window.");
   PLINT plplot_level;
-  plg->glevel(plplot_level);
+  actStream->glevel(plplot_level);
   // when level < 2, we have to read if ![x|y].crange exist
   // if not, we have to build a [0,1]/[0,1] window
   if (plplot_level < 2)
   {
-    plg->NextPlot();
+    actStream->NextPlot();
 
-    plg->vpor(0, 1, 0, 1);
-    plg->wind(0, 1, 0, 1);
+    actStream->vpor(0, 1, 0, 1);
+    actStream->wind(0, 1, 0, 1);
 
   }
 
@@ -75,46 +75,52 @@ void tvcrs( EnvT* e)
     DDouble tempx,tempy;
     tempx=(*x)[0];
     tempy=(*y)[0];
-#ifdef USE_LIBPROJ4
     bool mapSet = false;
     get_mapset(mapSet);
     if (mapSet)
     {
-      PROJTYPE* ref = map_init();
+#ifdef USE_LIBPROJ4
       if (ref == NULL) e->Throw("Projection initialization failed.");
       LPTYPE idataN;
-#ifdef USE_LIBPROJ4_NEW
-      idataN.u = tempx* RAD_TO_DEG;
-      idataN.v = tempy* RAD_TO_DEG;
+      idataN.u = tempx* DEG_TO_RAD;
+      idataN.v = tempy* DEG_TO_RAD;
       XYTYPE odata = PJ_FWD(idataN, ref);
-      tempx = odata.u;
-      tempy = odata.v;
-#else
-      idataN.lam = tempx* RAD_TO_DEG;
-      idataN.phi = tempy* RAD_TO_DEG;
-      XYTYPE odata = PJ_FWD(idataN, ref);
-      tempx = odata.x;
-      tempy = odata.y;
-#endif	  
-    }
+      // norm to world invalid since projection. use !x.s and !y.s directly
+      DDouble *sx, *sy;
+      GetSFromPlotStructs( &sx, &sy );
+      tempx= sx[0] +odata.u * sx[1];
+      tempy= sy[0] +odata.v * sy[1]; //normed values
+      actStream->NormedDeviceToDevice(tempx,tempy,ix,iy);
+      DLong iix=ix;
+      DLong iiy=iy;
+      actStream->WarpPointer(iix,iiy);
+      actStream->Flush();
+      actStream->UnsetFocus();
+      return;
 #endif
-    bool xLog, yLog;
-    gdlGetAxisType("X", xLog);
-    gdlGetAxisType("Y", yLog);
-    if(xLog) tempx=pow(10,tempx);
-    if(yLog) tempy=pow(10,tempy);
-    plg->WorldToDevice(tempx,tempy,ix,iy);
+    }
+     bool xLog, yLog;
+     gdlGetAxisType("X", xLog);
+     gdlGetAxisType("Y", yLog);
+     if(xLog) tempx=pow(10,tempx);
+     if(yLog) tempy=pow(10,tempy);
+    actStream->WorldToDevice(tempx,tempy,ix,iy);
   }
   else if (e->KeywordSet("NORMAL"))
   {
-    plg->NormedDeviceToDevice((*x)[0],(*y)[0],ix,iy);
+    actStream->NormedDeviceToDevice((*x)[0],(*y)[0],ix,iy);
   }
   else // (e->KeywordSet("DEVICE"))
   {
     ix=(*x)[0];
     iy=(*y)[0];
   }
-  plg->WarpPointer(ix,iy);
+  DLong iix=ix;
+  DLong iiy=iy;
+  actStream->WarpPointer(iix,iiy);
+  actStream->Flush();
+  actStream->UnsetFocus();
+
 }
 
 // get cursor from plPlot     AC February 2008
@@ -128,8 +134,10 @@ void cursor(EnvT* e){
     UP //4
   };
   GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
-
-  if (actDevice->Name() != "X")
+   if (actDevice == NULL) e->Throw("No device available"); 
+  GDLGStream *actStream = actDevice->GetStream();
+  if (actStream == NULL) e->Throw("Unable to create window.");
+  if (!actStream->HasCrossHair())
   {
     e->Throw("Routine is not defined for current graphics device.");
   }
@@ -144,21 +152,18 @@ void cursor(EnvT* e){
   e->AssureGlobalPar(0);
   e->AssureGlobalPar(1);
 
-  GDLGStream *plg = actDevice->GetStream();
-  if (plg == NULL) e->Throw("Unable to create window.");
-
   static PLGraphicsIn gin;
 
   PLINT plplot_level;
-  plg->glevel(plplot_level);
+  actStream->glevel(plplot_level);
   // when level < 2, we have to read if ![x|y].crange exist
   // if not, we have to build a [0,1]/[0,1] window
   if (plplot_level < 2)
   {
-    plg->NextPlot();
+    actStream->NextPlot();
 
-    plg->vpor(0, 1, 0, 1);
-    plg->wind(0, 1, 0, 1);
+    actStream->vpor(0, 1, 0, 1);
+    actStream->wind(0, 1, 0, 1);
 
   }
   // mimic idl logic:
@@ -172,12 +177,9 @@ void cursor(EnvT* e){
   if (e->KeywordSet("WAIT")) wait=WAIT;
   if (e->KeywordSet("DOWN")) wait=DOWN;
   if (e->KeywordSet("UP")) wait=UP;
-  PLFLT xp, yp;
-  PLINT xleng, yleng, xoff, yoff;
-  plg->gpage(xp, yp, xleng, yleng, xoff, yoff);
-  if(plg->GetGin(&gin, wait)==false) return;
+  if(actStream->GetGin(&gin, wait)==false) return;
   // outside window report -1 -1 at least for DEVICE values
-  if (gin.pX < 0 || gin.pX > plg->xPageSize() || gin.pY < 0 || gin.pY > plg->yPageSize())
+  if (gin.pX < 0 || gin.pX > actStream->xPageSize() || gin.pY < 0 || gin.pY > actStream->yPageSize())
   {
     gin.pX = -1;
     gin.pY = -1;
@@ -210,29 +212,25 @@ void cursor(EnvT* e){
       if (!mapSet)
       {
 #endif
-        plg->NormToWorld((DDouble)gin.dX, (DDouble)gin.dY, tempx, tempy);
+        actStream->NormToWorld((DDouble)gin.dX, (DDouble)gin.dY, tempx, tempy);
 #ifdef USE_LIBPROJ4
       }
       else
       {
-        PROJTYPE* ref = map_init();
+        ref = map_init();
         if (ref == NULL) e->Throw("Projection initialization failed.");
         XYTYPE idata, idataN;
-#ifdef USE_LIBPROJ4_NEW
         idataN.u = gin.dX;
         idataN.v = gin.dY;
-        plg->NormToWorld(idataN.u, idataN.v, idata.u, idata.v);
+        DDouble *sx, *sy;
+        // norm to world invalid since projection. use !x.s and !y.s directly
+        // was: actStream->NormToWorld(idataN.u, idataN.v, idata.u, idata.v);
+        GetSFromPlotStructs( &sx, &sy );
+        idata.u = (idataN.u - sx[0])/sx[1];
+        idata.v = (idataN.v - sy[0])/sy[1];
         LPTYPE odata = PJ_INV(idata, ref);
         tempx = odata.u * RAD_TO_DEG;
         tempy = odata.v * RAD_TO_DEG;
-#else
-        idataN.x = gin.dX;
-        idataN.y = gin.dY;
-        plg->NormToWorld(idataN.x, idataN.y, idata.x, idata.y);
-        LPTYPE odata = PJ_INV(idata, ref);
-        tempx = odata.lam * RAD_TO_DEG;
-        tempy = odata.phi * RAD_TO_DEG;
-#endif
       }
 #endif
       bool xLog, yLog;

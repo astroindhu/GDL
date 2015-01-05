@@ -201,7 +201,7 @@ ostream& operator<<(ostream& os, const CheckNL& c)
   if( *c.actPosPtr == 0)
     {
       GDLStream* s = lib::get_journal();
-      if( s != NULL && s->OStream() == os) os << lib::JOURNALCOMMENT;
+      if( s != NULL && s->OStream().rdbuf() == os.rdbuf()) os << lib::JOURNALCOMMENT;
     }
 
   *c.actPosPtr += c.nextW;
@@ -252,7 +252,7 @@ istream& operator>>(istream& i, Data_<SpDFloat>& data_)
       const string segment = ReadElement( i);
       const char* cStart=segment.c_str();
       char* cEnd;
-      data_[ assignIx] = strtod( cStart, &cEnd);
+      data_[ assignIx] = StrToD( cStart, &cEnd);
       if( cEnd == cStart)
 	{
 	  data_[ assignIx]= -1;
@@ -277,7 +277,7 @@ istream& operator>>(istream& i, Data_<SpDDouble>& data_)
       const string segment = ReadElement( i);
       const char* cStart=segment.c_str();
       char* cEnd;
-      data_[ assignIx] = strtod( cStart, &cEnd);
+      data_[ assignIx] = StrToD( cStart, &cEnd);
       if( cEnd == cStart)
 	{
 	  data_[ assignIx]= -1;
@@ -328,9 +328,9 @@ istream& operator>>(istream& i, Data_<SpDComplex>& data_)
 	      
 	      char* cEnd1, *cEnd2;
 	      const char* c1=seg1.c_str();
-	      double re = strtod( c1, &cEnd1);
+	      double re = StrToD( c1, &cEnd1);
 	      const char* c2=seg2.c_str();
-	      double im = strtod( c2, &cEnd2);
+	      double im = StrToD( c2, &cEnd2);
 	      if( cEnd1 == c1 || cEnd2 == c2)
 		{
 		  data_[ assignIx]= DComplex(0.0,0.0);
@@ -350,7 +350,7 @@ istream& operator>>(istream& i, Data_<SpDComplex>& data_)
 	  // convert segment and assign
 	  const char* cStart=actLine.c_str();
 	  char* cEnd;
-	  double val = strtod( cStart, &cEnd);
+	  double val = StrToD( cStart, &cEnd);
 	  if( cEnd == cStart)
 	    {
 	      data_[ assignIx]= DComplex(0.0,0.0);
@@ -410,9 +410,9 @@ istream& operator>>(istream& i, Data_<SpDComplexDbl>& data_)
 	      
 	      char* cEnd1, *cEnd2;
 	      const char* c1=seg1.c_str();
-	      double re = strtod( c1, &cEnd1);
+	      double re = StrToD( c1, &cEnd1);
 	      const char* c2=seg2.c_str();
-	      double im = strtod( c2, &cEnd2);
+	      double im = StrToD( c2, &cEnd2);
 	      if( cEnd1 == c1 || cEnd2 == c2)
 		{
 		  data_[ assignIx]= DComplexDbl(0.0,0.0);
@@ -432,7 +432,7 @@ istream& operator>>(istream& i, Data_<SpDComplexDbl>& data_)
 	  // convert segment and assign
 	  const char* cStart=actLine.c_str();
 	  char* cEnd;
-	  double val = strtod( cStart, &cEnd);
+	  double val = StrToD( cStart, &cEnd);
 	  if( cEnd == cStart)
 	    {
 	      data_[ assignIx]= DComplexDbl(0.0,0.0);
@@ -783,6 +783,15 @@ ostream& Data_<SpDULong64>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr)
 }
 
 // ptr
+void HeapVarString(ostream& o, DPtr ptr)
+{
+  if( ptr != 0)
+  {
+    o << "<PtrHeapVar" << ptr << ">";
+  }
+  else
+    o << "<NullPointer>";
+}
 template<> 
 ostream& Data_<SpDPtr>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr) 
 {
@@ -794,7 +803,8 @@ ostream& Data_<SpDPtr>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr)
 
   if( this->dim.Rank() == 0)
     {
-      o << CheckNL( w, actPosPtr, 15) << "<PtrHeapVar" << (*this)[0] << ">";
+      o << CheckNL( w, actPosPtr, 15);
+      HeapVarString( o, (*this)[0]);
       return o;
     }
 
@@ -811,7 +821,10 @@ ostream& Data_<SpDPtr>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr)
       for( SizeT i1=0; i1<d1; i1++)
 	{
 	  for( SizeT i0=0; i0<d0; i0++)
-	    o << CheckNL( w, actPosPtr, 15) << "<PtrHeapVar" << (*this)[eIx++] << ">";
+	  {
+	    o << CheckNL( w, actPosPtr, 15);
+	    HeapVarString( o, (*this)[eIx++]);
+	  }
 	  InsNL( o, actPosPtr);
 	}
       InsNL( o, actPosPtr);
@@ -821,7 +834,10 @@ ostream& Data_<SpDPtr>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr)
   for( SizeT i1=0; i1<d1; i1++)
     {
       for( SizeT i0=0; i0<d0; i0++)
-	o << CheckNL( w, actPosPtr, 15) << "<PtrHeapVar" << (*this)[eIx++] << ">";
+      {
+	o << CheckNL( w, actPosPtr, 15);
+	HeapVarString( o, (*this)[eIx++]);
+      }
       //      if( (i1+1) < d1) InsNL( o, actPosPtr);
       InsNL( o, actPosPtr);
     }
@@ -1202,6 +1218,7 @@ ostream& Data_<SpDByte>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr)
 template<> 
 ostream& Data_<SpDString>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr) 
 {
+  bool someCharacterSeen=false;
   SizeT nElem=N_Elements();
   if( nElem == 0)
     throw GDLException("Variable is undefined.");
@@ -1258,14 +1275,16 @@ ostream& Data_<SpDString>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr)
       InsNL( o, actPosPtr);
     }
 
-  for( SizeT i1=1; i1<d1; i1++)
-    {
-      for( SizeT i0=1; i0<d0; i0++)
-	{
+  for ( SizeT i1 = 1; i1 < d1; i1++ ) {
+    someCharacterSeen=false;
+    for ( SizeT i0 = 1; i0 < d0; i0++ ) {
 	  length = (*this)[eIx].length() + 1;
-// 	  if( length > 1) // for array output a space should be inserted e.g. a=strarr(9)&a[8]=':'&a[0]='>'&aa=[[a],[a]]&print,aa
-	    o << CheckNL( w, actPosPtr, length) << (*this)[eIx++] << " ";
-// 	  else eIx++;
+      if( length > 1)  someCharacterSeen=true;
+      // for array output a space should be inserted e.g. a=strarr(9)&a[8]=':'&a[0]='>'&aa=[[a],[a]]&print,aa
+      // actually, blanks are inserted only between the first non-null character and the last non-null character. 
+      //see a=strarr(9)&a[6]=':'&a[1]='>'&aa=[[a],[a]]&print,aa
+      if (someCharacterSeen) o << CheckNL( w, actPosPtr, length ) << (*this)[eIx++] << " ";
+      else eIx++;
 	}
       length = (*this)[eIx].length();
       if( length > 0)
@@ -1273,13 +1292,15 @@ ostream& Data_<SpDString>::ToStream(ostream& o, SizeT w, SizeT* actPosPtr)
       else eIx++;
       InsNL( o, actPosPtr);
     }
-  
-  for( SizeT i0=1; i0<d0; i0++)
-    {
+  someCharacterSeen=false;
+  for ( SizeT i0 = 1; i0 < d0; i0++ ) {
       length = (*this)[eIx].length() + 1;
-//       if( length > 1) // for array output a space should be inserted e.g. a=strarr(9)&a[8]=':'&a[0]='>'&print,a
-	o << CheckNL( w, actPosPtr, length) << (*this)[eIx++] << " ";
-//       else eIx++;
+    // for array output a space should be inserted e.g. a=strarr(9)&a[8]=':'&a[0]='>'&aa=[[a],[a]]&print,aa
+    // actually, blanks are inserted only between the first non-null character and the last non-null character. 
+    //see a=strarr(9)&a[6]=':'&a[1]='>'&aa=[[a],[a]]&print,aa
+    if( length > 1)  someCharacterSeen=true;
+    if (someCharacterSeen) o << CheckNL( w, actPosPtr, length ) << (*this)[eIx++] << " ";
+    else eIx++;
     }
   length = (*this)[eIx].length();
   if( length > 0)

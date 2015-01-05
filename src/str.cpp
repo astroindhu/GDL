@@ -28,10 +28,8 @@ extern "C" {
 // quoting http://permalink.gmane.org/gmane.os.openbsd.tech/19860 :
 // 'wordexp() will never be in OpenBSD's libc' :)
 // (TODO: perhaps better to implement it using HAVE_WORDEXP_H? + once more below in WordExp())
-#ifndef _MSC_VER
-#if !defined(__OpenBSD__)
+#if (!defined(__OpenBSD__) && !defined(_WIN32)) || defined(__CYGWIN__)
 #  include <wordexp.h>
-#endif
 #endif
 
 #ifdef __CYGWIN__
@@ -215,6 +213,40 @@ void StrLowCaseInplace(string& s)
 //     s[i]=tolower(sCStr[i]);
 }
 
+// replacement for library routine 
+// double strtod( const char* cStart, char** cEnd);
+// to hanlde d/D instead of e/E (e. g. 1.2D5)
+// this is done very slow by copying the string and replacing the d/D with e/E
+// however, it is done only, if strtod stops at a 'd' or 'D' character 
+double StrToD( const char* cStart, char** cEnd)
+{
+  double ret = strtod( cStart, cEnd);
+  if( cEnd != NULL && (**cEnd == 'd' || **cEnd == 'D'))
+    {
+      int dPos = *cEnd - cStart;      
+
+      // copy the string here. This is very slow.
+      // but the glibc implementation is hidden
+      // I have not investigated further, but I assume this is because processor specific
+      // optimizations are used. So it might be ok to copy the string here as in the regular
+      // case the optimzed strtod function will make up for the loss.
+      string cStr( cStart);
+
+      // replace d by e and D by E
+      cStr[dPos] = (**cEnd == 'd')? 'e':'E';
+
+      char* cEndD;
+      const char* cStrc_str = cStr.c_str();
+      
+      double retD = strtod( cStrc_str, &cEndD);      
+      
+      // set end as if orignal string had the d/D replaced
+      *cEnd = const_cast<char*>(cStart) + (cEndD - cStrc_str);      
+      // return replaced result
+      return retD;
+    }
+  return ret;
+}
 double Str2D( const char* cStart)
 {
   char* cEnd;
@@ -268,8 +300,7 @@ unsigned long int Str2UL( const string& s, int base)
 void WordExp( string& s)
 {
 //cout << "WordExp  in: " << s << endl;
-#if !defined(__OpenBSD__)
-#ifndef _MSC_VER
+#if (!defined(__OpenBSD__) && !defined(_WIN32)) || defined(__CYGWIN__)
 // esc whitespace
 // which is not already escaped
 //   string sEsc;
@@ -320,15 +351,54 @@ void WordExp( string& s)
      wordfree( &p);
    }
 #endif
-#endif
 //cout << "WordExp out: " << s << endl;
 }
 
+#if defined (_WIN32)
+#define realpath(N,R) _fullpath((R),(N),_MAX_PATH) 
+// ref:http://sourceforge.net/p/mingw/patches/256/ Keith Marshall 2005-12-02
+#endif
+
+#ifdef _MSC_VER
+#define PATH_MAX _MAX_PATH
+#endif
+
+string FullPathFileName(string in_file)
+{
+  
+  string AbsolutePath;
+
+  char *symlinkpath =const_cast<char*> (in_file.c_str());
+  char actualpath [PATH_MAX+1];
+  char *ptr;
+
+  ptr = realpath(symlinkpath, actualpath);
+  if( ptr != NULL ){
+    AbsolutePath =string(ptr);
+  }else {
+    AbsolutePath = in_file;
+  }
+ 
+  int debug=0;
+  if (debug) {
+    cout << in_file << endl;
+    cout << AbsolutePath << endl;
+  }
+
+  return AbsolutePath;
+
+}
 
 // Tries to find file "fn" along GDLPATH.
 // If found, sets fn to the full pathname.
 // and returns true, else false
-// If fn starts with '/' or ".." or "./", just checks if it is readable.
+// 
+// this line is no more true : "If fn starts with '/' or ".." or "./", just checks if it is readable."
+// new since AC 11-Sept-2014: we return the absolute path, this is needed
+// for outputs in various procedures:
+// GDL> HELP, /source  ou HELP, /traceback
+// GDL> print, ROUTINE_INFO('dist',/function,/source)
+
 bool CompleteFileName(string& fn)
 {
   WordExp( fn);
@@ -338,6 +408,7 @@ bool CompleteFileName(string& fn)
   if(fp)
     {
       fclose(fp);
+      fn=FullPathFileName(fn);
       return true;
     }
 
@@ -355,7 +426,12 @@ bool CompleteFileName(string& fn)
 
       act=act+fn;
       fp = fopen(act.c_str(),"r");
-      if(fp) {fclose(fp); fn=act; return true;}
+      if(fp) {
+	fclose(fp);
+	fn=act;
+	fn=FullPathFileName(fn);
+	return true;
+      }
     }
   else
     for(unsigned p=0; p<path.size(); p++)
@@ -371,7 +447,12 @@ bool CompleteFileName(string& fn)
 
 	act=act+fn;
 	fp = fopen(act.c_str(),"r");
-	if(fp) {fclose(fp); fn=act; return true;}
+	if(fp) {
+	  fclose(fp);
+	  fn=act;
+	  fn=FullPathFileName(fn);
+	  return true;
+	}
       }
   return false;
 }

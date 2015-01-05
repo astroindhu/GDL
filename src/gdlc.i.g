@@ -225,6 +225,8 @@ protected:
     bool interruptEnable;
 
 public:
+
+    bool InterruptEnable() const { return interruptEnable;}
     // procedure (searchForPro == true) or function (searchForPro == false)
     static bool CompileFile(const std::string& f, 
                             const std::string& untilPro="",
@@ -885,6 +887,7 @@ call_fun returns[ BaseGDL* res]
 	for (; _t != NULL;) {
 
 			retCode=statement(_t);
+            _t = _retTree;
 			
 // 			if( retCode == RC_RETURN) 
 			if( retCode >= RC_RETURN) 
@@ -899,8 +902,6 @@ call_fun returns[ BaseGDL* res]
                 //     }
 			break;
 			}					
-
-		_t = _retTree;
 	}
 	
 	// default return value if none was set
@@ -1821,7 +1822,7 @@ l_indexable_expr returns [BaseGDL** res]
     | res=l_sys_var 
     ;
 
-// called from only from unused part of l_expr_internal
+// called only from unused part of l_expr_internal
 unused_l_array_expr [BaseGDL* right] returns [BaseGDL** res]
 {
    ArrayIndexListT* aL;

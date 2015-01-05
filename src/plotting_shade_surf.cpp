@@ -17,14 +17,13 @@
 
 #include "includefirst.hpp"
 #include "plotting.hpp"
-#include "math_utl.hpp"
 
 namespace lib
 {
   using namespace std;
 
 // shared parameter
-  static PLFLT lightSourcePos[3]={1.0E6,0.0,1.0};
+  static PLFLT lightSourcePos[3]={1.0,1.0,0.0};
 
   class shade_surf_call: public plotting_routine_call
   {
@@ -38,12 +37,34 @@ namespace lib
     bool yLog;
     bool zLog;
     ORIENTATION3D axisExchangeCode;
+    DLongGDL *shades;
+    Guard<BaseGDL> shades_guard;
+    bool doShade;
  private:
     bool handle_args (EnvT* e)
     {
-      xLog=e->KeywordSet ( "XLOG" );
-      yLog=e->KeywordSet ( "YLOG" );
-      zLog=e->KeywordSet ( "ZLOG" );
+
+      // undocumented keywords [xyz]type still exist and
+      // had priority on [xyz]log !
+      
+      if (e->KeywordPresent( "XTYPE" )) {
+	xLog=e->KeywordSet ( "XTYPE" );
+      } else {
+	xLog=e->KeywordSet ( "XLOG" );
+      }
+
+      if (e->KeywordPresent( "YTYPE" )) {
+	yLog=e->KeywordSet ( "YTYPE" );
+      } else {
+	yLog=e->KeywordSet ( "YLOG" );
+      }
+
+      if (e->KeywordPresent( "ZTYPE" )) {
+	zLog=e->KeywordSet ( "ZTYPE" );
+      } else {
+	zLog=e->KeywordSet ( "ZLOG" );
+      }
+
       if ( nParam ( )==1 )
       {
         if ( (e->GetNumericArrayParDefined ( 0 ))->Rank ( )!=2 )
@@ -146,6 +167,19 @@ namespace lib
       zEnd=datamax;
       setZrange = gdlGetDesiredAxisRange(e, "Z", zStart, zEnd);
 
+      //SHADES: Doing the job will be for nothing since plplot does not give the functionality.
+      static int shadesIx=e->KeywordIx ( "SHADES" ); doShade=false;
+      if ( e->GetKW ( shadesIx )!=NULL )
+      {
+        shades=e->GetKWAs<DLongGDL>( shadesIx ); doShade=true;
+      } else {
+        // Get COLOR from PLOT system variable
+        static DStructGDL* pStruct=SysVar::P();
+        shades=new DLongGDL( 1, BaseGDL::NOZERO );
+        shades_guard.Init ( shades ); // delete upon exit
+        shades=static_cast<DLongGDL*>(pStruct->GetTag(pStruct->Desc()->TagIndex("COLOR"), 0)); doShade=false;
+      }
+      if (doShade) Warning ( "SHADE_SURF: SHADES array ignored, shading with current color table." );
         return false;
     } 
 
@@ -166,11 +200,7 @@ namespace lib
       //NODATA
       static int nodataIx = e->KeywordIx( "NODATA");
       nodata=e->KeywordSet(nodataIx);
-      //SHADES
-      static int shadesIx = e->KeywordIx( "SHADES");
-      BaseGDL* shadevalues=e->GetKW ( shadesIx );
-      bool doShade=(shadevalues != NULL); //... But 3d mesh will be colorized anyway!
-      if (doShade) Warning ( "SHADE_SURF: Using Fixed (Z linear) Shade Values Only (FIXME)." );
+
       // [XYZ]STYLE
       DLong xStyle=0, yStyle=0, zStyle=0; ;
       gdlGetDesiredAxisStyle(e, "X", xStyle);
@@ -223,7 +253,7 @@ namespace lib
       // background BEFORE next plot since it is the only place plplot may redraw the background...
       gdlSetGraphicsBackgroundColorFromKw ( e, actStream ); //BACKGROUND
       gdlNextPlotHandlingNoEraseOption(e, actStream);     //NOERASE
-
+        // set the PLOT charsize before computing box, see plot command.
       gdlSetPlotCharsize(e, actStream);
 
       // Deal with T3D options -- either present and we have to deduce az and alt contained in it,
@@ -276,9 +306,6 @@ namespace lib
 
       if ( gdlSet3DViewPortAndWorldCoordinates(e, actStream, plplot3d, xLog, yLog,
         xStart, xEnd, yStart, yEnd, zStart, zEnd, zLog)==FALSE ) return;
-
-      gdlSetPlotCharthick(e,actStream);
-
 
       if (xLog) xStart=log10(xStart);
       if (yLog) yStart=log10(yStart);
@@ -348,10 +375,20 @@ namespace lib
         gdlSetGraphicsForegroundColorFromKw ( e, actStream );
         //mesh option
         PLINT meshOpt;
-        actStream->lightsource(lightSourcePos[0]*scale*(xEnd-xStart),lightSourcePos[1]*scale*(yEnd-yStart),
-                        lightSourcePos[2]*scale*(1.0-zValue)*(zEnd-zStart));
         meshOpt=(doShade)?MAG_COLOR:0;
         if (e->KeywordSet ( "SKIRT" )) meshOpt+=DRAW_SIDES;
+
+        // Get decomposed value for shades
+        DLong decomposed=GraphicsDevice::GetDevice()->GetDecomposed();
+        if (doShade) actStream->SetColorMap1DefaultColors(256,  decomposed );
+        else actStream->SetColorMap1Ramp(decomposed, 0.5); 
+        //position of light Source. Plplot does not use only the direction of the beam but the position of the illuminating
+        //source. And its illumination looks strange. We try to make the ill. source a bit far in the good direction.
+        PLFLT sun[3];
+        sun[0]=xStart+(xEnd-xStart)*(0.5+lightSourcePos[0]);
+        sun[1]=yStart+(yEnd-yStart)*(0.5+lightSourcePos[1]);
+        sun[2]=zStart+(zEnd-zStart)*((1.0-zValue)+lightSourcePos[2]);
+        actStream->lightsource(sun[0],sun[1],sun[2]);
         actStream->surf3d(xg1,yg1,map,cgrid1.nx,cgrid1.ny,meshOpt,NULL,0);
 
         if (stopClip) stopClipping(actStream);
@@ -390,7 +427,7 @@ namespace lib
  void set_shading(EnvT* e)
  {
     DDoubleGDL *light;
-    int lightIx=e->KeywordIx ( "LIGHT" );
+    static int lightIx=e->KeywordIx ( "LIGHT" );
     if ( e->GetKW ( lightIx )!=NULL )
     {
       light=e->GetKWAs<DDoubleGDL>( lightIx );

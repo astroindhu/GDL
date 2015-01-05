@@ -1,4 +1,4 @@
-/* $ANTLR 2.7.7 (20120518): "gdlc.i.g" -> "GDLInterpreter.cpp"$ */
+/* $ANTLR 2.7.7 (20130428): "gdlc.i.g" -> "GDLInterpreter.cpp"$ */
 
     // gets inserted before the antlr generated includes in the cpp file
 #include "includefirst.hpp"
@@ -697,6 +697,7 @@ GDLInterpreter::GDLInterpreter()
 		for (; _t != NULL;) {
 	
 				retCode=statement(_t);
+	_t = _retTree;
 				
 	// 			if( retCode == RC_RETURN) 
 				if( retCode >= RC_RETURN) 
@@ -711,8 +712,6 @@ GDLInterpreter::GDLInterpreter()
 	//     }
 				break;
 				}					
-	
-			_t = _retTree;
 		}
 		
 		// default return value if none was set

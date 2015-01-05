@@ -17,7 +17,6 @@
 
 #include "includefirst.hpp"
 #include "plotting.hpp"
-#include "math_utl.hpp"
 
 namespace lib
 {
@@ -43,9 +42,30 @@ namespace lib
   private:
     bool handle_args (EnvT* e)
     {
-      xLog=e->KeywordSet ( "XLOG" );
-      yLog=e->KeywordSet ( "YLOG" );
-      zLog=e->KeywordSet ( "ZLOG" );
+      // undocumented keywords [xyz]type still exist and
+      // had priority on [xyz]log !
+      
+      // cout << "xtype Present " << e->KeywordPresent( "XTYPE" ) << endl;
+      // cout << "xtype Set " << e->KeywordSet( "XTYPE" ) << endl;
+
+      if (e->KeywordPresent( "XTYPE" )) {
+	xLog=e->KeywordSet ( "XTYPE" );
+      } else {
+	xLog=e->KeywordSet ( "XLOG" );
+      }
+
+      if (e->KeywordPresent( "YTYPE" )) {
+	yLog=e->KeywordSet ( "YTYPE" );
+      } else {
+	yLog=e->KeywordSet ( "YLOG" );
+      }
+
+      if (e->KeywordPresent( "ZTYPE" )) {
+	zLog=e->KeywordSet ( "ZTYPE" );
+      } else {
+	zLog=e->KeywordSet ( "ZLOG" );
+      }
+
       if ( nParam ( )==1 )
       {
         if ( (e->GetNumericArrayParDefined ( 0 ))->Rank ( )!=2 )
@@ -157,21 +177,6 @@ namespace lib
 
     void old_body (EnvT* e, GDLGStream* actStream) // {{{
     {
-     //projection: would work only with 2D X and Y. Not supported here
-      bool mapSet=false;
-#ifdef USE_LIBPROJ4
-      static LPTYPE idata;
-      static XYTYPE odata;
-      static PROJTYPE* ref;
-      get_mapset ( mapSet );
-      if ( mapSet )
-      { // do nothing
-//        ref=map_init ( );
-//        if ( ref==NULL ) e->Throw ( "Projection initialization failed." );
-        // but warn that projection is not taken into account
-        Warning ( "SURFACE: Projection is set, but not taken into account (ony 1d X and Y) (FIX plplot first!)." );
-      }
-#endif
       //T3D
       static int t3dIx = e->KeywordIx( "T3D");
       bool doT3d=(e->KeywordSet(t3dIx)|| T3Denabled(e));
@@ -244,7 +249,7 @@ namespace lib
       // background BEFORE next plot since it is the only place plplot may redraw the background...
       gdlSetGraphicsBackgroundColorFromKw ( e, actStream ); //BACKGROUND
       gdlNextPlotHandlingNoEraseOption(e, actStream);     //NOERASE
-
+        // set the PLOT charsize before computing box, see plot command.
       gdlSetPlotCharsize(e, actStream);
 
       // Deal with T3D options -- either present and we have to deduce az and alt contained in it,
@@ -297,9 +302,6 @@ namespace lib
 
       if ( gdlSet3DViewPortAndWorldCoordinates(e, actStream, plplot3d, xLog, yLog,
         xStart, xEnd, yStart, yEnd, zStart, zEnd, zLog)==FALSE ) return;
-
-      gdlSetPlotCharthick(e,actStream);
-
 
       if (xLog) xStart=log10(xStart);
       if (yLog) yStart=log10(yStart);

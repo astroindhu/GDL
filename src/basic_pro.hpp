@@ -46,7 +46,7 @@ namespace lib {
   // help_item is used by EnvT::HeapGC
   void help_item( std::ostream& os,
 		  BaseGDL* par, DString parString, bool doIndentation);
-  void help( EnvT* e);
+  void help_pro( EnvT* e);
   void exitgdl( EnvT* e);
 
   // in print.cpp
@@ -78,9 +78,7 @@ namespace lib {
 
   void byteorder( EnvT* e);
 
-#ifndef _MSC_VER
   void spawn_pro( EnvT* e);
-#endif
 
   // the following by Peter Messmer 
   // (messmer@users.sourceforge.net)
@@ -104,7 +102,8 @@ namespace lib {
   void caldat(EnvT* e);
   BaseGDL* julday(EnvT* e);
   void pm(EnvT* e);
-
+  //dummy stub preventing !err and other !error_state to be set!
+  void pref_set_pro( EnvT* e);
   } // namespace
 
 #endif

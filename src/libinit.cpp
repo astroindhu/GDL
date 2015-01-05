@@ -92,6 +92,8 @@ void LibInit()
   const string hashKey[]={"NO_COPY", KLISTEND};
   new DLibFunRetNew(lib::hash_fun,string("HASH"),-1,hashKey);
 
+  new DLibFun(lib::scope_level,string("SCOPE_LEVEL"),0);
+
   const string scope_varfetchKey[]={"LEVEL", KLISTEND};
   new DLibFun(lib::scope_varfetch_value,string("SCOPE_VARFETCH"),-1,scope_varfetchKey);
 
@@ -111,11 +113,16 @@ void LibInit()
 				  "PARAMETERS","SOURCE", KLISTEND};
   new DLibFunRetNew(lib::routine_info,string("ROUTINE_INFO"),1,routine_infoKey);
 
-#ifndef _MSC_VER
+#ifdef _WIN32
+//Please note that NOWAIT and HIDE are WINDOWS-Reserved Keywords.
+  const string spawnKey[] = { "COUNT", "EXIT_STATUS", "PID",
+	  "SH", "NOSHELL", "UNIT", "HIDE", "NOWAIT", KLISTEND };
+#else
   const string spawnKey[]={ "COUNT","EXIT_STATUS","PID",
 			    "SH","NOSHELL","UNIT",KLISTEND};
-  new DLibPro(lib::spawn_pro,string("SPAWN"),3,spawnKey);
 #endif
+ 
+  new DLibPro(lib::spawn_pro,string("SPAWN"),3,spawnKey);
 
   const string bytsclKey[]={"MIN","MAX","TOP","NAN",KLISTEND};
   new DLibFunRetNew(lib::bytscl,string("BYTSCL"),3,bytsclKey);
@@ -143,16 +150,19 @@ void LibInit()
 			    "BIAS","NORMALIZE","NAN", "INVALID", "MISSING",KLISTEND};
   new DLibFunRetNew(lib::convol_fun,string("CONVOL"),3,convolKey);
 
-#ifndef _MSC_VER
+#ifndef _WIN32
   const string file_searchKey[]={"COUNT","EXPAND_ENVIRONMENT","EXPAND_TILDE",
 				 "FOLD_CASE","ISSUE_ACCESS_ERROR",
 				 "MARK_DIRECTORY","NOSORT","QUOTE",
 				 "MATCH_INITIAL_DOT",
 				 "MATCH_ALL_INITIAL_DOT","FULLY_QUALIFY_PATH",KLISTEND};
   new DLibFunRetNew(lib::file_search,string("FILE_SEARCH"),2,file_searchKey);
+
+  const string file_expand_pathKey[]={KLISTEND};
+  new DLibFunRetNew(lib::file_expand_path,string("FILE_EXPAND_PATH"),1,file_expand_pathKey);
 #endif
 
-  const string expand_pathKey[]={"ARRAY","ALL_DIRS","COUNT",KLISTEND};
+  const string expand_pathKey[]={"ARRAY","ALL_DIRS","COUNT","PATTERN",KLISTEND};
   new DLibFunRetNew(lib::expand_path,string("EXPAND_PATH"),1,expand_pathKey);
   
   const string strjoinKey[]={"SINGLE",KLISTEND};
@@ -179,7 +189,7 @@ void LibInit()
 			       "REGULAR","WRITE","ZERO_LENGTH",
 			       "GET_MODE",
 			       "BLOCK_SPECIAL","CHARACTER_SPECIAL",
-			       "NAMED_PIPE","SOCKET","SYMLINK","NOEXPAND_PATH",KLISTEND};
+			       "NAMED_PIPE","SOCKET","SYMLINK","NOEXPAND_PATH","DANGLING_SYMLINK",KLISTEND};
   new DLibFunRetNew(lib::file_test,string("FILE_TEST"),1,file_testKey);
 
   const string file_basenameKey[]={"FOLD_CASE",KLISTEND};
@@ -219,13 +229,21 @@ void LibInit()
   const string exitKey[]={"NO_CONFIRM","STATUS",KLISTEND};
   new DLibPro(lib::exitgdl,string("EXIT"),0,exitKey);
   
-  const string helpKey[]={"ALL_KEYS","BRIEF","CALLS","FUNCTIONS","HELP","INFO",
-			  "INTERNAL_LIB_GDL","LAST_MESSAGE","LIB","MEMORY",
+  const string helpKey[]={"ALL_KEYS","BRIEF","CALLS","DEVICE","FUNCTIONS","HELP","INFO",
+			  "INTERNAL_LIB_GDL","KEYS","LAST_MESSAGE","LIB","MEMORY","NAMES",
 			  "OUTPUT","PATH_CACHE","PREFERENCES","PROCEDURES",
-			  "RECALL_COMMANDS","ROUTINES","SOURCE_FILES","STRUCTURES", KLISTEND};
-  const string helpWarnKey[]={"FULL","TRACEBACK", KLISTEND};
-  new DLibPro(lib::help,string("HELP"),-1,helpKey,helpWarnKey);
-
+			  "RECALL_COMMANDS","ROUTINES","SOURCE_FILES","STRUCTURES","SYSTEM_VARIABLES","TRACEBACK", KLISTEND};
+  const string helpWarnKey[]={"BREAKPOINTS","DLM","FILES","FULL","HEAP_VARIABLES","LEVEL","MESSAGES",
+			      "OBJECTS","SHARED_MEMORY", KLISTEND};
+  new DLibPro(lib::help_pro,string("HELP"),-1,helpKey,helpWarnKey);
+  
+  //stub to avoid setting errors on pref_set. One may want to really write pref_set,
+  // but this function is just here to prevent setting !ERR=-1 when stumbling on a pref_set command,
+  // since !ERR=-1 is frequently checked by legacy procedures.
+  const string pref_setKey[] = {"FILENAME","COMMIT","DEFAULT", KLISTEND };
+  new DLibPro(lib::pref_set_pro, string("PREF_SET"), -1, pref_setKey);
+  
+  
   const string memoryKey[]={"CURRENT","HIGHWATER","NUM_ALLOC",
     "NUM_FREE","STRUCTURE","L64",KLISTEND};
   new DLibFunRetNew(lib::memory, string("MEMORY"), 1, memoryKey, NULL);
@@ -357,13 +375,14 @@ void LibInit()
 
   const string assocKey[]={"PACKED",KLISTEND};
   new DLibFunRetNew(lib::assoc,string("ASSOC"),3,assocKey);
-  
-  const string stringKey[]={"FORMAT","AM_PM","DAYS_OF_WEEK","MONTH",
+  //need to keep the position of the keywords until lib::string_fun does not use fixed kw index anymore (fixme).)
+  const string stringKey[]={"FORMAT","XXXXX","YYYYYYYY","ZZZZZZ",
 			    "PRINT",KLISTEND};
+  const string stringWarnKey[]={"AM_PM","DAYS_OF_WEEK","MONTHS",KLISTEND};
 //  new DLibFunRetNew(lib::string_fun,string("STRING"),-1,stringKey,NULL,true);
 //  new DLibFunRetNew(lib::byte_fun,string("BYTE"),10,NULL,NULL,true);
 // that's apparently the desired bahaviour, see bug no. 3151760
-  new DLibFun(lib::string_fun,string("STRING"),-1,stringKey,NULL);
+  new DLibFun(lib::string_fun,string("STRING"),-1,stringKey,stringWarnKey);
   new DLibFun(lib::byte_fun,string("BYTE"),10,NULL,NULL);
 
 /*
@@ -510,10 +529,15 @@ void LibInit()
 
   const string set_plotKey[]={"COPY","INTERPOLATE",KLISTEND};
   new DLibPro(lib::set_plot,string("SET_PLOT"),1,set_plotKey);
-  
-  const string get_screen_sizeKey[]={"RESOLUTION",KLISTEND};
-  new DLibFunRetNew(lib::get_screen_size,string("GET_SCREEN_SIZE"),1,get_screen_sizeKey);
 
+#ifdef HAVE_X  
+  const string get_screen_sizeKey[]={"RESOLUTION","DISPLAY_NAME",KLISTEND};
+  new DLibFunRetNew(lib::get_screen_size,string("GET_SCREEN_SIZE"),1,get_screen_sizeKey);
+#else
+  const string get_screen_sizeKey[]={"RESOLUTION",KLISTEND};
+  // DisplayName option or parameter only with X11.
+  new DLibFunRetNew(lib::get_screen_size,string("GET_SCREEN_SIZE"),0,get_screen_sizeKey);
+#endif
   const string tvlctKey[]={"GET","HLS","HSV",KLISTEND};
   new DLibPro(lib::tvlct,string("TVLCT"),4,tvlctKey);
 
@@ -525,18 +549,19 @@ void LibInit()
   
   const string deviceKey[]=
     {
-      "CLOSE_FILE","FILENAME","LANDSCAPE","PORTRAIT",
+      "CLOSE_FILE", "FILENAME", "LANDSCAPE", "PORTRAIT",
       "DECOMPOSED","GET_DECOMPOSED","Z_BUFFERING","SET_RESOLUTION",
-      "SET_CHARACTER_SIZE","GET_VISUAL_DEPTH","XSIZE","YSIZE",
-      "COLOR","GET_SCREEN_SIZE","INCHES","WINDOW_STATE","SCALE_FACTOR", 
+      "SET_CHARACTER_SIZE","XSIZE","YSIZE",
+      "COLOR","GET_PAGE_SIZE","GET_SCREEN_SIZE","INCHES","WINDOW_STATE","SCALE_FACTOR", 
       "XOFFSET", "YOFFSET", "ENCAPSULATED", "GET_GRAPHICS_FUNCTION", 
       "SET_GRAPHICS_FUNCTION", "CURSOR_STANDARD", "CURSOR_ORIGINAL",
-      "CURSOR_CROSSHAIR","RETAIN", "GET_WINDOW_POSITION", KLISTEND
+      "CURSOR_CROSSHAIR","RETAIN",
+      "GET_WINDOW_POSITION","GET_PIXEL_DEPTH","GET_VISUAL_DEPTH","GET_VISUAL_NAME","GET_WRITE_MASK", "COPY", KLISTEND
     };
-  const string deviceWarnKey[] = {"SET_FONT", "HELVETICA", 
+  const string deviceWarnKey[] = {"FONT","GET_CURRENT_FONT","GET_FONTNAMES","GET_FONTNUM","SET_FONT", "HELVETICA", 
     "AVANTGARDE", "BKMAN", "COURIER", "PALATINO", 
     "SCHOOLBOOK", "TIMES", "ZAPFCHANCERY", "ZAPFDINGBATS", "BITS_PER_PIXEL", 
-    "ITALIC", "BOLD", "TRUE_COLOR", "CURSOR_IMAGE","CURSOR_MASK","CURSOR_XY", KLISTEND};
+    "ITALIC", "BOLD", "TRUE_COLOR", "CURSOR_IMAGE","CURSOR_MASK","CURSOR_XY","TT_FONT","USER_FONT","FONT_INDEX","FONT_SIZE", KLISTEND};
   new DLibPro(lib::device,string("DEVICE"),0, deviceKey, deviceWarnKey);
 
   const string usersymKey[]= 
@@ -656,9 +681,11 @@ void LibInit()
 
   const string shade_surfKey[]=
     {
-      "AX", "AZ",  "MAX_VALUE", "MIN_VALUE", "SHADES", "XLOG", "YLOG","ZLOG", 
+      "AX", "AZ",  "MAX_VALUE", "MIN_VALUE", "SHADES", 
+      // ([xyz]type undocumented but still existing in SHADE_SURF ...)
+      "XLOG", "YLOG", "ZLOG", "XTYPE", "YTYPE", "ZTYPE", 
       //General Graphics KW
-      "BACKGROUND", "NOERASE",
+      "BACKGROUND", "NOERASE", "CLIP",
       "CHARSIZE", "CHARTHICK", "COLOR", "DATA", "DEVICE", "NORMAL", "FONT",
       "NODATA", "POSITION", "SUBTITLE", "THICK", "TICKLEN", "TITLE",
       //Axis KW
@@ -691,54 +718,27 @@ void LibInit()
   const string surfaceKey[]=
     {
      // GRAPHIC KEYWORDS
-     // 0
      "BACKGROUND","CHARSIZE","CHARTHICK","CLIP",
-     // 4
      "COLOR",     "DATA",    "DEVICE",   "FONT",
-     // 8
      "LINESTYLE", "NOCLIP",  "NODATA",   "NOERASE", 
-     // 12
      "NORMAL",    "POSITION",     "SUBTITLE",
-     // 15
-     "THICK",    "TICKLEN", 
-     // 18
-     "TITLE",
-     // 19
+     "THICK",    "TICKLEN", "TITLE",
      "XCHARSIZE",    "XGRIDSTYLE", "XMARGIN", "XMINOR",
-     // 23
      "XRANGE",       "XSTYLE",     "XTHICK",  "XTICKFORMAT",
-     // 27
      "XTICKINTERVAL","XTICKLAYOUT","XTICKLEN","XTICKNAME",
-     // 31
-     "XTICKS",       "XTICKUNITS", "XTICKV",  "XTICK_GET",
-     // 35
-     "XTITLE",
-     // 36
+     "XTICKS",       "XTICKUNITS", "XTICKV",  "XTICK_GET", "XTITLE",
      "YCHARSIZE",    "YGRIDSTYLE", "YMARGIN", "YMINOR",
-     // 40
      "YRANGE",       "YSTYLE",     "YTHICK",  "YTICKFORMAT",
-     // 44
      "YTICKINTERVAL","YTICKLAYOUT","YTICKLEN","YTICKNAME",
-     // 48
-     "YTICKS",       "YTICKUNITS", "YTICKV",  "YTICK_GET",
-     // 52
-     "YTITLE",
-     // 53
+     "YTICKS",       "YTICKUNITS", "YTICKV",  "YTICK_GET", "YTITLE",
      "ZCHARSIZE",    "ZGRIDSTYLE", "ZMARGIN", "ZMINOR",
-     // 57
      "ZRANGE",       "ZSTYLE",     "ZTHICK",  "ZTICKFORMAT",
-     // 61
      "ZTICKINTERVAL","ZTICKLAYOUT","ZTICKLEN","ZTICKNAME",
-     // 65
-     "ZTICKS",       "ZTICKUNITS", "ZTICKV",  "ZTICK_GET",
-     // 69
-     "ZTITLE",
-     // 70
-
-
+     "ZTICKS",       "ZTICKUNITS", "ZTICKV",  "ZTICK_GET", "ZTITLE",
      // SURFACE keywords
-     // 73
-     "MAX_VALUE",  "MIN_VALUE", "AX", "AZ", "XLOG", "YLOG", "ZLOG",
+     "MAX_VALUE",  "MIN_VALUE", "AX", "AZ", 
+     // ([xyz]type undocumented but still existing in SURFACE ...)
+     "XLOG", "YLOG", "ZLOG", "XTYPE", "YTYPE", "ZTYPE", 
      "HORIZONTAL", "LOWER_ONLY", "UPPER_ONLY", "SHADES", "ZAXIS",  "BOTTOM", 
      "SKIRT", "SAVE", "T3D",  "ZVALUE", KLISTEND
     };
@@ -757,9 +757,10 @@ void LibInit()
       "T3D",     "THICK",    "TICKLEN",
       "TITLE" ,    "LEVELS", "NLEVELS",
       "MAX_VALUE", "MIN_VALUE",
-      "XLOG", "YLOG", "FILL", "ISOTROPIC",
-      "FOLLOW",
-
+      // ([xy]type undocumented but still existing in CONTOUR ...)
+      "XLOG", "YLOG", "XTYPE", "YTYPE",
+      
+      "FILL", "ISOTROPIC", "FOLLOW",
       "XCHARSIZE", "YCHARSIZE", "ZCHARSIZE",
       "XGRIDSTYLE", "YGRIDSTYLE", "ZGRIDSTYLE",
       "XMARGIN", "YMARGIN", "ZMARGIN",
@@ -786,7 +787,7 @@ void LibInit()
     };
    // NO SUPPORT AT ALL for:,"CLOSED","DOWNHILL","IRREGULAR","PATH_DATA_COORDS","PATH_FILENAME",
    // "PATH_INFO","PATH_XY","TRIANGULATION","PATH_DOUBLE","ZAXIS"
-  // "CHANNEL" is supposed to be passed from CONTOUR, PLOT, OPLOT, SHADE_SURF etc to ERASER
+  // "CHANNEL" is supposed to be passed from CONTOUR, PLOT, OPLOT, SHADE_SURF etc to ERASE
    const string contourWarnKey[]=
     {
       
@@ -804,7 +805,6 @@ void LibInit()
       "ORIENTATION","ALIGNMENT","CHARSIZE","SIZE","CHARTHICK", //note SIZE is not in doc but in XYOUTS demo!
       "NOCLIP","T3D","Z","TEXT_AXES","WIDTH","FONT",KLISTEND
     };
-   const string xyoutsWarnKey[]={KLISTEND};  
    new DLibPro(lib::xyouts, string("XYOUTS"), 3, xyoutsKey);//, xyoutsWarnKey);
    
    const string polyfillKey[]=
