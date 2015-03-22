@@ -71,6 +71,7 @@ public:
   virtual bool HasCrossHair() {return true;}
   void UnMapWindow();
   DByteGDL* GetBitmapData();
+  void Color( ULong color, DLong decomposed);
 };
 
 #endif

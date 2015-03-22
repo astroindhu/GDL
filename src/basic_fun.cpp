@@ -57,6 +57,7 @@ extern "C" char **environ;
 #include "terminfo.hpp"
 #include "typedefs.hpp"
 #include "base64.hpp"
+#include "objects.hpp"
 
 #ifdef HAVE_LOCALE_H
 # include <locale.h>
@@ -6485,7 +6486,7 @@ BaseGDL* strtok_fun(EnvT* e) {
       while (p < e) 
       {
         // scheme = 1*[ lowalpha | digit | "+" | "-" | "." ]
-        if (!(isalpha(*p)) && !(isdigit(*p)) && (*p != '+') && (*p != '.') && (*p != '-')) 
+        if (!(std::isalpha(*p)) && !(std::isdigit(*p)) && (*p != '+') && (*p != '.') && (*p != '-')) 
         {
           if (e + 1 < ue) goto parse_port;
           else goto just_path;
@@ -6788,6 +6789,103 @@ BaseGDL* strtok_fun(EnvT* e) {
     return new DLongGDL(callStack.size());
   }
   
+// based on void SimpleDumpStack(EnvT* e) used in "basic_pro.cpp"
+
+  BaseGDL* scope_traceback( EnvT* e)
+  {
+    static int structureIx = e->KeywordIx("STRUCTURE");
+    bool structureKW = e->KeywordSet(structureIx);
+ 
+    if (structureKW) {
+      Warning("keyword STRUCTURE is not finished (IS_FUNCTION not OK), please contribute !");
+    }
+
+    static int systemIx = e->KeywordIx("SYSTEM");
+    bool systemKW = e->KeywordSet(systemIx);
+    if (systemKW) {
+      Warning("keyword SYSTEM is not ready here, please contribute !");
+    }
+
+    int debug=0;
+
+    EnvStackT& callStack = e->Interpreter()->CallStack();
+    long actIx = callStack.size();
+
+    if (debug) cout << "actIx : " << actIx << endl;
+
+    string tmp, filename;
+    int lineNumber;
+
+    if (!structureKW) {
+
+      DStringGDL* res;    
+      res = new DStringGDL(dimension(actIx) , BaseGDL::NOZERO);
+
+      for( SizeT i=0; i<actIx; ++i)
+	{
+	  EnvStackT::pointer_type upEnv = callStack[i]; 
+	  tmp= upEnv->GetProName();
+	  filename=upEnv->GetFilename();
+	  if( filename != "")
+	    {              
+	      lineNumber = upEnv->GetLineNumber();
+	      if( lineNumber != 0)
+		{
+		  tmp=tmp+" <"+filename+"("+i2s(lineNumber)+")>";
+		}
+	    }
+	  if (debug) cout << tmp << endl;
+	  (*res)[i]=tmp;
+	}
+      
+      return res;
+    }
+
+    if (structureKW) {
+      DStructGDL* res = new DStructGDL(
+           FindInStructList(structList, "IDL_TRACEBACK"),
+	   dimension(actIx));
+
+      int tRoutine, tFilename, tLine, tLevel, tFunction;
+      int tMethod=0, tRestored=0, tSystem=0;
+
+      for( SizeT i=0; i<actIx; ++i) {
+	
+	EnvStackT::pointer_type upEnv = callStack[i]; 
+	tmp= upEnv->GetProName();
+	filename=upEnv->GetFilename();
+	if (filename.length() == 0) filename=" ";
+	lineNumber = upEnv->GetLineNumber();
+	
+	tRoutine = res->Desc()->TagIndex("ROUTINE"); 
+	tFilename= res->Desc()->TagIndex("FILENAME"); 
+	tLine= res->Desc()->TagIndex("LINE"); 
+	tLevel= res->Desc()->TagIndex("LEVEL"); 
+	tFunction= res->Desc()->TagIndex("IS_FUNCTION"); 
+	tMethod= res->Desc()->TagIndex("METHOD"); 
+	tRestored= res->Desc()->TagIndex("RESTORED"); 
+	tSystem= res->Desc()->TagIndex("SYSTEM"); 
+
+	*(res->GetTag(tRoutine, i)) = DStringGDL(tmp);
+	*(res->GetTag(tFilename, i)) = DStringGDL(filename);
+	*(res->GetTag(tLine, i)) = DLongGDL(lineNumber);
+	*(res->GetTag(tLevel, i)) = DLongGDL(i);
+
+	// AC 2015/03/03 : HELP WELCOME
+	// I don't know how to know if we use Pro or Func
+	// we do have a long way in "dinterpreter.cpp" with 
+	// if( firstChar == "#")
+	*(res->GetTag(tFunction, i)) = DByteGDL(0);
+
+	*(res->GetTag(tMethod, i)) = DByteGDL(0);
+	*(res->GetTag(tRestored, i)) = DByteGDL(0);
+	*(res->GetTag(tSystem, i)) = DByteGDL(0);
+      }
+      return res;
+
+    }
+  }
+
   // note: changes here MUST be reflected in scope_varfetch_reference() as well
   // because DLibFun of this function is used for scope_varfetch_reference() the keyword
   // indices must match
