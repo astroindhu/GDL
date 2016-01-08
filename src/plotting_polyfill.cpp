@@ -26,24 +26,25 @@ namespace lib
   class polyfill_call: public plotting_routine_call
   {
 
-  private:
     DDoubleGDL *xVal, *yVal, *zVal;
     Guard<BaseGDL> xval_guard, yval_guard, zval_guard;
-    DDouble xStart, xEnd, yStart, yEnd, zStart, zEnd;
-    bool xLog, yLog, zLog;
+    DDouble xStart, xEnd, yStart, yEnd;
+    bool xLog, yLog;
     SizeT xEl, yEl, zEl;
     bool doClip;
+    bool restoreClipBox;
+    PLFLT savebox[4];
     bool doT3d, real3d;
     DDouble zValue;
     DDoubleGDL* plplot3d;
     Guard<BaseGDL> plplot3d_guard;
-    DDouble az, alt, ay, scale;
-    ORIENTATION3D axisExchangeCode;
+    DLongGDL *color;
     bool mapSet;
-
+    ORIENTATION3D axisExchangeCode;
+    DDouble az, alt, ay, scale;
   private:
 
-    bool handle_args(EnvT* e) // {{{
+    bool handle_args(EnvT* e)
     {
       real3d=false;
       //T3D
@@ -51,6 +52,7 @@ namespace lib
       doT3d=(e->KeywordSet(t3dIx)|| T3Denabled(e));
 
       //note: Z (VALUE) will be used uniquely if Z is not effectively defined.
+      // Then Z is useful only if (doT3d).
       static int zvIx = e->KeywordIx( "Z");
       zValue=0.0;
       e->AssureDoubleScalarKWIfPresent ( zvIx, zValue );
@@ -85,7 +87,10 @@ namespace lib
         if (dim0==3) for ( SizeT i=0; i<zEl; i++ ) (*zVal)[i]=(*val)[dim0*i+2];
         else for (SizeT i=0; i< zEl ; ++i) (*zVal)[i]=zValue;
       }
-      else if ( nParam()==2 )
+      //behaviour: if x or y are not an array, they are repeated to match minEl
+      //if x or y have less elements than s, minEl is max(x,y) else minEl is size(s)
+       //z ignored unless T3D is given or !P.T3D not 0
+      else if ( nParam()==2 || (nParam()==3 && !doT3d) )
       {
         xVal=e->GetParAs< DDoubleGDL>(0);
         xEl=xVal->N_Elements();
@@ -120,8 +125,18 @@ namespace lib
 
         yVal=e->GetParAs< DDoubleGDL>(1);
         yEl=yVal->N_Elements();
-
-        if ( xEl < 3 || yEl < 3  || zEl < 3) e->Throw("Not enough valid and unique points specified.");
+        //Z has no effect if T3D is not active, either through the T3D kw or through the !P.T3D sysvar.
+        
+        if (doT3d) {
+          if ( xEl < 3 || yEl < 3  || zEl < 3) e->Throw("Not enough valid and unique points specified.");
+        } else {
+          if ( xEl < 3 || yEl < 3 ) e->Throw("Not enough valid and unique points specified.");
+          //z will be set at Zero unless Z=value is given
+          zEl=xEl;
+          zVal=new DDoubleGDL(dimension(zEl));
+          zval_guard.Reset(zVal); // delete upon exit
+          for (SizeT i=0; i< zEl ; ++i) (*zVal)[i]=zValue;
+        }
 
         if ( !(xEl==yEl&&yEl==zEl) )
         {
@@ -143,8 +158,11 @@ namespace lib
       return false;
     }
 
-    void old_body(EnvT* e, GDLGStream* actStream) // {{{
+    void old_body(EnvT* e, GDLGStream* actStream)
     {
+      int clippingix=e->KeywordIx("CLIP");
+      DFloatGDL* clipBox=NULL;
+
       enum
       {
         DATA=0,
@@ -159,19 +177,12 @@ namespace lib
       // get_axis_type
       gdlGetAxisType("X", xLog);
       gdlGetAxisType("Y", yLog);
-      gdlGetAxisType("Z", zLog);
       // get ![XY].CRANGE
-      gdlGetCurrentAxisRange("X", xStart, xEnd);
-      gdlGetCurrentAxisRange("Y", yStart, yEnd);
-      gdlGetCurrentAxisRange("Z", zStart, zEnd);
+      GetCurrentUserLimits(e, actStream, xStart, xEnd, yStart, yEnd);
+      
 
-      if ((yStart == yEnd) || (xStart == xEnd) || (zStart == zEnd))
+      if ((yStart == yEnd) || (xStart == xEnd))
       {
-        if (zStart != 0.0 && zStart == zEnd)
-          Message("POLYFILL: !Z.CRANGE ERROR, setting to [0,1]");
-          zStart = 0;
-          zEnd = 1;
-
         if (yStart != 0.0 && yStart == yEnd)
           Message("POLYFILL: !Y.CRANGE ERROR, setting to [0,1]");
         yStart = 0;
@@ -183,7 +194,58 @@ namespace lib
         xEnd = 1;
       }
 
+      restoreClipBox=false;
+      int noclipvalue=1;
+      e->AssureLongScalarKWIfPresent( "NOCLIP", noclipvalue);
+      doClip=(noclipvalue==0); //PLOTS by default does not clip, even if clip is defined by CLIP= or !P.CLIP
+      clipBox=e->IfDefGetKWAs<DFloatGDL>(clippingix);
+      if (doClip && clipBox!=NULL && clipBox->N_Elements()>=4 ) //clipbox exist, will be used: convert to device coords
+                                   //and save in !P.CLIP...
+      {
+        restoreClipBox=true; //restore later
+        // save current !P.CLIP box, replace by our current clipbox in whatever coordinates, will
+        // give back the !P.CLIP box at end...
+        static DStructGDL* pStruct=SysVar::P();
+        static unsigned clipTag=pStruct->Desc()->TagIndex("CLIP"); //must be in device coordinates
+        static PLFLT tempbox[4];
+        for ( int i=0; i<4; ++i ) savebox[i]=(*static_cast<DLongGDL*>(pStruct->GetTag(clipTag, 0)))[i];
+        if ( coordinateSystem==DEVICE )
+        {
+          for ( int i=0; i<4; ++i ) tempbox[i]=(*clipBox)[i];
+        }
+        else if ( coordinateSystem==DATA )
+        {
+          //handle log: if existing box is already in log, use log of clipbox values.
+          PLFLT worldbox[4];
+          for ( int i=0; i<4; ++i ) worldbox[i]=(*clipBox)[i];
+          if (xLog) {worldbox[0]=log10(worldbox[0]); worldbox[2]=log10(worldbox[2]);}
+          if (yLog) {worldbox[1]=log10(worldbox[1]); worldbox[3]=log10(worldbox[3]);}
+          bool okClipBox=true;
+          for ( int i=0; i<4; ++i )
+          {
+            if (!isfinite(worldbox[i])) //NaN
+            {
+              okClipBox=false;restoreClipBox=false;doClip=false;
+            }
+          }
+          if (okClipBox)
+          {
+            actStream->WorldToDevice(worldbox[0], worldbox[1], tempbox[0], tempbox[1]);
+            actStream->WorldToDevice(worldbox[2], worldbox[3], tempbox[2], tempbox[3]);
+          }
+        }
+        else
+        {
+          actStream->NormedDeviceToDevice((*clipBox)[0],(*clipBox)[1], tempbox[0], tempbox[1]);
+          actStream->NormedDeviceToDevice((*clipBox)[2],(*clipBox)[3], tempbox[2], tempbox[3]);
+        }
+        //place in !P.CLIP
+        for ( int i=0; i<4; ++i ) (*static_cast<DLongGDL*>(pStruct->GetTag(clipTag, 0)))[i]=tempbox[i];
+      }
+
       mapSet=false;
+      actStream->OnePageSaveLayout(); // one page
+
 #ifdef USE_LIBPROJ4
       get_mapset(mapSet);
       mapSet=(mapSet && coordinateSystem==DATA);
@@ -194,22 +256,19 @@ namespace lib
         {
           e->Throw("Projection initialization failed.");
         }
+        DDouble *sx, *sy;
+        GetSFromPlotStructs( &sx, &sy );
+
+        DFloat *wx, *wy;
+        GetWFromPlotStructs( &wx, &wy );
+
+        DDouble pxStart, pxEnd, pyStart, pyEnd;
+        DataCoordLimits( sx, sy, wx, wy, &pxStart, &pxEnd, &pyStart, &pyEnd, true );
+
+        actStream->wind( pxStart, pxEnd, pyStart, pyEnd );
       }
 #endif
 
-      actStream->OnePageSaveLayout(); // one page
-
-      DDouble *sx, *sy;
-      GetSFromPlotStructs( &sx, &sy );
-
-      DFloat *wx, *wy;
-      GetWFromPlotStructs( &wx, &wy );
-
-      DDouble xStart, xEnd, yStart, yEnd;
-      DataCoordLimits( sx, sy, wx, wy, &xStart, &xEnd, &yStart, &yEnd, true );
-
-      actStream->vpor( wx[0], wx[1], wy[0], wy[1] );
-      actStream->wind( xStart, xEnd, yStart, yEnd );
     
       PLFLT wun, wdeux, wtrois, wquatre;
       if ( coordinateSystem==DATA) //with POLYFILL, we can plot *outside* the box(e)s in DATA coordinates.
@@ -218,7 +277,8 @@ namespace lib
         actStream->pageWorldCoordinates(wun, wdeux, wtrois, wquatre);
       }
 
-      actStream->vpor(0, 1, 0, 1);
+      actStream->vpor(0, 1, 0, 1); //ALL PAGE
+
       if ( coordinateSystem==DEVICE )
       {
         actStream->wind(0.0, actStream->xPageSize(), 0.0, actStream->yPageSize());
@@ -240,8 +300,14 @@ namespace lib
 
   private:
 
-    void call_plplot(EnvT* e, GDLGStream* actStream) // {{{
+    void call_plplot(EnvT* e, GDLGStream* actStream)
     {
+      
+      int colorIx=e->KeywordIx ( "COLOR" ); bool doColor=false;
+      if ( e->GetKW ( colorIx )!=NULL )
+      {
+        color=e->GetKWAs<DLongGDL>( colorIx ); doColor=true;
+      }
       static DDouble x0,y0,xs,ys; //conversion to normalized coords
       x0=(xLog)?-log10(xStart):-xStart;
       y0=(yLog)?-log10(yStart):-yStart;
@@ -281,8 +347,6 @@ namespace lib
         }
         actStream->stransform(gdl3dTo2dTransform, &Data3d);
       }
-      //handle clipping
-      bool doClip=(e->KeywordSet("CLIP")||e->KeywordSet("NOCLIP"));
       // make all clipping computations BEFORE setting graphic properties (color, size)
       bool stopClip=false;
       if ( doClip )  if ( startClipping(e, actStream, false)==TRUE ) stopClip=true;
@@ -308,9 +372,9 @@ namespace lib
       {
         actStream->psty(0);
       }
-      gdlSetGraphicsForegroundColorFromKw(e, actStream); //COLOR
       gdlSetLineStyle(e, actStream); //LINESTYLE
       gdlSetPenThickness(e, actStream); //THICK
+      gdlSetGraphicsForegroundColorFromKw(e, actStream); //COLOR
 
       if (real3d) {
         //try first if the matrix is a plplot-compatible one
@@ -367,11 +431,11 @@ namespace lib
       }
 #endif
       if (stopClip) stopClipping(actStream);
-    } // }}}
+    }
 
   private:
 
-    virtual void post_call(EnvT*, GDLGStream *actStream) // {{{
+    virtual void post_call(EnvT*, GDLGStream *actStream)
     {
       if (doT3d && !real3d)
       {
@@ -381,7 +445,14 @@ namespace lib
       actStream->RestoreLayout();
       actStream->lsty(1); //reset linestyle
       actStream->psty(0); //reset fill
+      if (restoreClipBox)
+      {
+        static DStructGDL* pStruct=SysVar::P();
+        static unsigned clipTag=pStruct->Desc()->TagIndex("CLIP"); //must be in device coordinates
+        for ( int i=0; i<4; ++i ) (*static_cast<DLongGDL*>(pStruct->GetTag(clipTag, 0)))[i]=savebox[i];
+      }
     }
+
   };
 
   void polyfill(EnvT* e)

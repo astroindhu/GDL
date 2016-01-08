@@ -244,7 +244,7 @@ return Buf();
   { 
     return (Sizeof() * N_Elements());
   }
-  SizeT ToTransfer() const // number of elements for IO tranfer  
+  SizeT ToTransfer() const // number of elements for IO transfer  
   { 
     SizeT nB = 0;
     SizeT nTags=NTags();
@@ -254,6 +254,20 @@ return Buf();
       }
     return ( nB * N_Elements()); // *** error for string?
   }
+SizeT NBytesToTransfer() // number of elements for IO transfer without padding 
+{ 
+  SizeT nB = 0;
+  SizeT nTags=this->NTags();
+  for( SizeT j=0; j < this->N_Elements(); j++) { //eventually with no error for variable-length strings (in output, input will never work)
+    for( SizeT i=0; i < nTags; i++)
+    {
+      if (this->GetTag(i,j)->Type()==GDL_STRUCT) {
+        DStructGDL* str= static_cast<DStructGDL*>(this->GetTag( i, j));
+        nB += str->NBytesToTransfer();} else nB += this->GetTag( i, j)->NBytes();
+    }
+  }
+  return nB ;
+}
   SizeT Sizeof() const
   {
     return Desc()->NBytes();
@@ -497,7 +511,7 @@ DStructGDL* NewResult() const
   BaseGDL* Convert2( DType destTy, 
 		     BaseGDL::Convert2Mode mode = BaseGDL::CONVERT);
   
-#if defined( TEMPLATE_FRIEND_OK_) || (__GNUC__ >= 4)
+#if (defined( TEMPLATE_FRIEND_OK_) || (__GNUC__ >= 4)) && (!__clang__)
   // make all other Convert2 functions friends
   template<class Sp2>  
   friend BaseGDL* Data_<Sp2>::Convert2( DType destTy, 
@@ -695,14 +709,14 @@ DStructGDL* NewResult() const
   SizeT IFmtF( std::istream* is, SizeT offs, SizeT num, int width); 
   SizeT IFmtI( std::istream* is, SizeT offs, SizeT num, int width, 
 		BaseGDL::IOMode oM = DEC);
-
+  SizeT IFmtCal( std::istream* is, SizeT offs, SizeT r, int width, BaseGDL::Cal_IOMode cMode);
 private:
   void IFmtAll( SizeT offs, SizeT r,
 		SizeT& firstOut, SizeT& firstOffs, SizeT& tCount, SizeT& tCountOut);
   
   void OFmtAll( SizeT offs, SizeT r,
 		SizeT& firstOut, SizeT& firstOffs, SizeT& tCount, SizeT& tCountOut);
-  
+  SizeT OFmtCal( std::ostream* os, SizeT offs, SizeT r, int w, int d, char *f,  BaseGDL::Cal_IOMode oMode);   
   // inserts srcIn at ixDim
   // respects the exact structure
   // used by Assign -> old data must be freed

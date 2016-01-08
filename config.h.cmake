@@ -33,6 +33,8 @@
 #cmakedefine HAVE_PLPLOT_WIDTH 1
 #cmakedefine PLPLOT_PRIVATE_NOT_HIDDEN 1
 #cmakedefine PLPLOT_HAS_LEGEND
+#cmakedefine PLPLOT_HAS_PLCALLBACK
+
 #ifndef HAVE_STDINT_H
 #cmakedefine HAVE_STDINT_H 1
 #endif
@@ -63,6 +65,7 @@
 #cmakedefine STDC_HEADERS 1
 #cmakedefine USE_FFTW 1
 #cmakedefine USE_GRIB 1
+#cmakedefine PL_HAVE_QHULL 1
 #cmakedefine USE_GSHHS 1
 #cmakedefine USE_HDF 1
 #cmakedefine USE_HDF5 1

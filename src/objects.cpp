@@ -88,6 +88,12 @@ antlr::ASTFactory DNodeFactory("DNode",DNode::factory);
 
 void ResetObjects()
 {
+#ifdef HAVE_LIBWXWIDGETS
+
+  // initialize widget system
+  GDLWidget::UnInit();
+#endif
+  
   GraphicsDevice::DestroyDevices();
 
   fileUnits.clear();
@@ -98,7 +104,9 @@ void ResetObjects()
   PurgeContainer(proList);
   PurgeContainer(structList); // now deletes member subroutines (and they in turn common block references
   // hence delete common blocks after structList
-  PurgeContainer(commonList);
+  
+  //avoid purging commonlist-->crash (probably some COMMON structures already destroyed)
+//  PurgeContainer(commonList);
   
   // don't purge library here
 //   PurgeContainer(libFunList);
@@ -703,10 +711,10 @@ void InitStructs()
   dropstruct->AddTag("TOP", &aLong);
   dropstruct->AddTag("HANDLER", &aLong);
   dropstruct->AddTag("DRAG_ID", &aLong);
-  dropstruct->AddTag("POSITION", &aLong);
+  dropstruct->AddTag("POSITION", &aInt);
   dropstruct->AddTag("X", &aLong);
   dropstruct->AddTag("Y", &aLong);
-  dropstruct->AddTag("MODIFIERS", &aLong);
+  dropstruct->AddTag("MODIFIERS", &aInt);
   // insert into structList
   structList.push_back( dropstruct); 
   
@@ -714,7 +722,7 @@ void InitStructs()
   treeselstruct->AddTag("ID", &aLong);
   treeselstruct->AddTag("TOP", &aLong);
   treeselstruct->AddTag("HANDLER", &aLong);
-  treeselstruct->AddTag("TYPE", &aLong);
+  treeselstruct->AddTag("TYPE", &aInt);
   treeselstruct->AddTag("CLICKS", &aLong);
   // insert into structList
   structList.push_back( treeselstruct);
@@ -723,7 +731,7 @@ void InitStructs()
   treeexpandstruct->AddTag("ID", &aLong);
   treeexpandstruct->AddTag("TOP", &aLong);
   treeexpandstruct->AddTag("HANDLER", &aLong);
-  treeexpandstruct->AddTag("TYPE", &aLong);
+  treeexpandstruct->AddTag("TYPE", &aInt);
   treeexpandstruct->AddTag("EXPAND", &aLong);
   // insert into structList
   structList.push_back( treeexpandstruct); 
@@ -753,15 +761,16 @@ void InitObjects()
   // add internal memeber subroutines
   SetupOverloadSubroutines();
   
-#ifdef HAVE_LIBWXWIDGETS
-
-  // initialize widget system
-  GDLWidget::Init();
-#endif
-
   // graphic devices must be initialized after system variables
   // !D must already exist
   GraphicsDevice::Init();
+
+  // AC 150414 :
+  // this line must be after the previous on Debian/Ubuntu systems.
+#ifdef HAVE_LIBWXWIDGETS
+  // initialize widget system
+  GDLWidget::Init();
+#endif
 
   // preferences
   //  Preferences::Init();
@@ -790,11 +799,16 @@ bool IsFun(antlr::RefToken rT1)
 
   //  cout << "IsFun: Searching for: " << searchName << endl;
 
-  unsigned fLSize=funList.size();
-  for( unsigned f=0; f<fLSize; f++)
-    {
-      if( funList[f]->Name() == searchName) return true;
-    }
+// Looking here for the internal functions is not the good place,
+// although it speeds up the process of finding (in gdlc.g) if a syntax like foo(bar) is a call to the function 'foo'
+// or the 'bar' element of array 'foo'.
+//  LibFunListT::iterator p=find_if(libFunList.begin(),libFunList.end(),
+//			       Is_eq<DLibFun>(searchName));
+//  if( p != libFunList.end()) if( *p != NULL) return true;
+
+  FunListT::iterator q=find_if(funList.begin(),funList.end(),
+			       Is_eq<DFun>(searchName));
+  if( q != funList.end()) if( *q != NULL) return true;
 
   //  cout << "Not found: " << searchName << endl;
 
@@ -914,6 +928,7 @@ int get_suggested_omp_num_threads() {
 
 
 #elif defined(_WIN32)
+#if 0
   //cout<<"get_suggested_omp_num_threads(): is windows"<<endl;
   iff= _popen("wmic cpu get loadpercentage|more +1", "r");
   if (!iff)
@@ -937,7 +952,9 @@ int get_suggested_omp_num_threads() {
   }
   suggested_num_threads=nbofproc-(int)(avload*((float)nbofproc/100)+0.5);
   return suggested_num_threads;
-
+#elif 1
+   return nbofproc+2;
+#endif
 #else 
   cout<<"Can't define your OS"<<endl;
   return default_num_threads;

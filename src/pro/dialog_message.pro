@@ -3,11 +3,14 @@
 ;
 ; PURPOSE:
 ;
-; This function try to reproduce the IDL's DIALOG_MESSAGE behavior using "zenity".
+; This function try to reproduce the IDL's DIALOG_MESSAGE behavior
+; using "zenity" or "wxwidgets"
 ;
 ; zenity, under GNU GPL, is available on most Linux distributions and
 ; and also on OSX (tested) and MSwin (not tested ?). It is better to
 ; have zenity version >= 2.23.1.
+;
+; wxwidgets version >= 2.8
 ;
 ; CATEGORY:
 ;
@@ -99,7 +102,7 @@
 ; 15-Nov-2012: AC: complete revision, some codes exported into common ZENITY_CHECK()
 ;              for better maintainability, better stick to orignal,
 ;              using --list when need (old Zenity or/and /cancel)
-; 
+; 05-Apr-2015: JP: Code for Windows platform is added. 
 ;-
 ;
 ; This function try to reproduce the IDL's DIALOG_MESSAGE behavior using "zenity".
@@ -122,31 +125,22 @@
 ;-
 ; LICENCE:
 ; Copyright (C) 2011, Pedro Corona and Maxime Lenoir (main author),
-; 2012 Alain Coulais.
+; 2012 Alain Coulais. 2015 JPark.
 ; This program is free software; you can redistribute it and/or modify  
 ; it under the terms of the GNU General Public License as published by  
 ; the Free Software Foundation; either version 2 of the License, or     
 ; (at your option) any later version.
 ; 
 ;-
-function DIALOG_MESSAGE, Message_Text, TITLE=title, CANCEL=cancel, $
-                         ERROR=error, INFORMATION=information, QUESTION=question, $
-                         DEFAULT_CANCEL=defaul_cancel, DEFAULT_NO=default_no, $
-                         CENTER=center, DIALOG_PARENT=dialog_parent, $
-                         DISPLAY_NAME=display_name, RESOURCE_NAME=resource_name, $
-                         HELP=help, test=test, debug=debug, $
-                         ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path
 ;
-if KEYWORD_SET(help) then begin
-    print, 'function DIALOG_MESSAGE, Message_Text, TITLE=title, CANCEL=cancel, $'
-    print, '                         ERROR=error, INFORMATION=information, QUESTION=question, $'
-    print, '                         DEFAULT_CANCEL=defaul_cancel, DEFAULT_NO=default_no, $'
-    print, '                         CENTER=center, DIALOG_PARENT=dialog_parent, $'
-    print, '                         DISPLAY_NAME=display_name, RESOURCE_NAME=resource_name, $'
-    print, '                         HELP=help, test=test, debug=debug, $'
-    print, '                         ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path'
-    return, -1
-endif
+function DIALOG_MESSAGE_ZENITY, Message_Text, TITLE=title, CANCEL=cancel, $
+                                ERROR=error, INFORMATION=information, QUESTION=question, $
+                                DEFAULT_CANCEL=defaul_cancel, DEFAULT_NO=default_no, $
+                                CENTER=center, DIALOG_PARENT=dialog_parent, $
+                                DISPLAY_NAME=display_name, RESOURCE_NAME=resource_name, $
+                                HELP=help, test=test, debug=debug, $
+                                ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path
+on_error, 2
 ;
 if (N_params() NE 1) then MESSAGE, 'Incorrect number of arguments.'
 ;
@@ -186,31 +180,35 @@ if STRLEN(title) GT 0 then cmd+='--title="'+title+'" '
 ; even with new zenity, we cannot have directly 3 buttons ...
 ;
 if KEYWORD_SET(question) then begin
-    if KEYWORD_SET(cancel) then begin
-        kindof='--list --column="selection" "Yes" "Cancel" "No"'
-    endif else begin
-        if (zenity_version GE 22301) then begin
-            kindof='--question --cancel-label="No" --ok-label="Yes"'
-        endif else begin
-            ;; old zenity: names of buttons cannot be changed ...
-            kindof='--question'
-        endelse
-    endelse    
+   if KEYWORD_SET(cancel) then begin
+      kindof='--list --column="selection" "Yes" "Cancel" "No"'
+   endif else begin
+      if (zenity_version GE 22301) then begin
+         kindof='--question --cancel-label="No" --ok-label="Yes"'
+      endif else begin
+         ;; old zenity: names of buttons cannot be changed ...
+         kindof='--question'
+      endelse
+   endelse    
 endif else begin
-    if KEYWORD_SET(cancel) then begin
-        if (zenity_version GE 22301) then begin
-            kindof='--question --cancel-label="Cancel" --ok-label="Yes"'
-        endif else begin
-            kindof='--list --column="selection" "Cancel" "OK"'
-        endelse
-    endif else begin
-        kindof='--error'
-    endelse
+   if KEYWORD_SET(cancel) then begin
+      if (zenity_version GE 22301) then begin
+         kindof='--question --cancel-label="Cancel" --ok-label="Yes"'
+      endif else begin
+         kindof='--list --column="selection" "Cancel" "OK"'
+      endelse
+   endif else begin 
+      if KEYWORD_SET(error) then begin
+         kindof='--error'    
+      endif else begin
+         kindof='--info'
+      endelse
+   endelse
 endelse
 ;
 if KEYWORD_SET(debug) then begin
-    print, 'commande :', cmd
-    print, 'option   :', kindof
+   print, 'commande :', cmd
+   print, 'option   :', kindof
 endif
 ;
 cmd+=kindof
@@ -219,21 +217,21 @@ cmd+=kindof
 SPAWN, cmd, result, error, exit_status=exit_status
 ;
 if KEYWORD_SET(debug) then begin
-    print, 'Zenity result      : ', result
-    print, 'Zenity error       : ', error
-    print, 'Zenity exit status : ', exit_status
+   print, 'Zenity result      : ', result
+   print, 'Zenity error       : ', error
+   print, 'Zenity exit status : ', exit_status
 endif
 ;
 reponse='Failed'
 
 if ~KEYWORD_SET(question) AND ~KEYWORD_SET(cancel) then reponse='OK'
 if ~KEYWORD_SET(question) AND KEYWORD_SET(cancel) then begin
-    if (zenity_version GE 22301) then begin
-        if (exit_status eq 0) then reponse='OK' else reponse='Cancel'
-    endif else begin
-        ;; because we needed to use the "--list"
-        reponse=result
-    endelse
+   if (zenity_version GE 22301) then begin
+      if (exit_status eq 0) then reponse='OK' else reponse='Cancel'
+   endif else begin
+      ;; because we needed to use the "--list"
+      reponse=result
+   endelse
 endif
 ;
 if KEYWORD_SET(question) then begin
@@ -256,3 +254,49 @@ if KEYWORD_SET(test) then STOP
 return, reponse
 ;
 end
+;
+; ------------------------------------------------------------
+;
+function DIALOG_MESSAGE, Message_Text, TITLE=title, CANCEL=cancel, $
+                         ERROR=error, INFORMATION=information, QUESTION=question, $
+                         DEFAULT_CANCEL=defaul_cancel, DEFAULT_NO=default_no, $
+                         CENTER=center, DIALOG_PARENT=dialog_parent, $
+                         DISPLAY_NAME=display_name, RESOURCE_NAME=resource_name, $
+                         HELP=help, test=test, debug=debug, $
+                         ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path, $
+                         FORCE_ZENITY=force_zenity
+on_error, 2
+;
+if KEYWORD_SET(help) then begin
+    print, 'function DIALOG_MESSAGE, Message_Text, TITLE=title, CANCEL=cancel, $'
+    print, '                         ERROR=error, INFORMATION=information, QUESTION=question, $'
+    print, '                         DEFAULT_CANCEL=defaul_cancel, DEFAULT_NO=default_no, $'
+    print, '                         CENTER=center, DIALOG_PARENT=dialog_parent, $'
+    print, '                         DISPLAY_NAME=display_name, RESOURCE_NAME=resource_name, $'
+    print, '                         HELP=help, test=test, debug=debug, $'
+    print, '                         ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path, FORCE_ZENITY=force_zenity'
+    return, -1
+endif
+;
+if (N_params() NE 1) then MESSAGE, 'Incorrect number of arguments.'
+;
+wxwidget_available = WXWIDGETS_EXISTS()
+;
+if (wxwidget_available) and not(KEYWORD_SET(FORCE_ZENITY)) then begin
+    return, DIALOG_MESSAGE_WXWIDGETS(Message_Text, TITLE=title, CANCEL=cancel, $
+                                     ERROR=error, INFORMATION=information, QUESTION=question, $
+                                     DEFAULT_CANCEL=defaul_cancel, DEFAULT_NO=default_no, $
+                                     CENTER=center, DIALOG_PARENT=dialog_parent, $
+                                     DISPLAY_NAME=display_name, RESOURCE_NAME=resource_name)
+endif else begin
+   return, DIALOG_MESSAGE_ZENITY(Message_Text, TITLE=title, CANCEL=cancel, $
+                                 ERROR=error, INFORMATION=information, QUESTION=question, $
+                                 DEFAULT_CANCEL=defaul_cancel, DEFAULT_NO=default_no, $
+                                 CENTER=center, DIALOG_PARENT=dialog_parent, $
+                                 DISPLAY_NAME=display_name, RESOURCE_NAME=resource_name, $
+                                 HELP=help, test=test, debug=debug, $
+                                 ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path)
+endelse
+;
+end
+;

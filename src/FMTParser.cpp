@@ -1,4 +1,4 @@
-/* $ANTLR 2.7.7 (20120518): "format.g" -> "FMTParser.cpp"$ */
+/* $ANTLR 2.7.7 (2006-11-01): "format.g" -> "FMTParser.cpp"$ */
 
 #include "includefirst.hpp"
 
@@ -1009,22 +1009,73 @@ void FMTParser::csub() {
 	antlr::ASTPair currentAST;
 	RefFMTNode csub_AST = RefFMTNode(antlr::nullAST);
 	
-	csubcode();
-	astFactory->addASTChild(currentAST, antlr::RefAST(returnAST));
-	{ // ( ... )*
-	for (;;) {
-		if ((LA(1) == COMMA)) {
-			match(COMMA);
-			csubcode();
-			astFactory->addASTChild(currentAST, antlr::RefAST(returnAST));
+	{
+	switch ( LA(1)) {
+	case CSTR:
+	case CD:
+	case CE:
+	case CI:
+	case CF:
+	case CG:
+	case CO:
+	case CB:
+	case CS:
+	case CX:
+	case CZ:
+	case CNUMBER:
+	case STRING:
+	case TL:
+	case TR:
+	case X:
+	case CMOA:
+	case CMoA:
+	case CmoA:
+	case CHI:
+	case ChI:
+	case CDWA:
+	case CDwA:
+	case CdwA:
+	case CAPA:
+	case CApA:
+	case CapA:
+	case CMOI:
+	case CDI:
+	case CYI:
+	case CMI:
+	case CSI:
+	case CSF:
+	case NUMBER:
+	{
+		{
+		csubcode();
+		astFactory->addASTChild(currentAST, antlr::RefAST(returnAST));
+		{ // ( ... )*
+		for (;;) {
+			if ((LA(1) == COMMA)) {
+				match(COMMA);
+				csubcode();
+				astFactory->addASTChild(currentAST, antlr::RefAST(returnAST));
+			}
+			else {
+				goto _loop27;
+			}
+			
 		}
-		else {
-			goto _loop25;
+		_loop27:;
+		} // ( ... )*
 		}
-		
+		break;
 	}
-	_loop25:;
-	} // ( ... )*
+	case RBRACE:
+	{
+		break;
+	}
+	default:
+	{
+		throw antlr::NoViableAltException(LT(1), getFilename());
+	}
+	}
+	}
 	csub_AST = RefFMTNode(currentAST.root);
 	returnAST = csub_AST;
 }
@@ -1423,10 +1474,27 @@ void FMTParser::csubcode() {
 		csubcode_AST = RefFMTNode(currentAST.root);
 		break;
 	}
+	case X:
 	case NUMBER:
 	{
-		n1=nn();
-		astFactory->addASTChild(currentAST, antlr::RefAST(returnAST));
+		{
+		switch ( LA(1)) {
+		case NUMBER:
+		{
+			n1=nn();
+			astFactory->addASTChild(currentAST, antlr::RefAST(returnAST));
+			break;
+		}
+		case X:
+		{
+			break;
+		}
+		default:
+		{
+			throw antlr::NoViableAltException(LT(1), getFilename());
+		}
+		}
+		}
 		x = LT(1);
 		x_AST = astFactory->create(x);
 		astFactory->addASTChild(currentAST, antlr::RefAST(x_AST));
@@ -1480,12 +1548,14 @@ void FMTParser::csubcode() {
 	
 	std::istringstream s(num_AST->getText());
 	char c = s.get();
+	char next = s.peek();
 	s.putback(c);
 	s >> n;
 	if (c == '0') 
 	fNode->setFill('0');
-	if (c == '+') 
-	fNode->setFill('+');
+	if (c == '+') { //test if 0 is following, I.e.:+0 something
+	if (next == '0') fNode->setFill('@'); else fNode->setFill('+');
+	}
 	
 	returnAST = nnf_AST;
 	return n;
@@ -1558,12 +1628,12 @@ const char* FMTParser::tokenNames[] = {
 	"CAPA",
 	"CApA",
 	"CapA",
-	"\"cmoi\"",
-	"\"cdi\"",
-	"\"cyi\"",
-	"\"cmi\"",
-	"\"csi\"",
-	"\"csf\"",
+	"CMOI",
+	"CDI",
+	"CYI",
+	"CMI",
+	"CSI",
+	"CSF",
 	"NUMBER",
 	"DOT",
 	"CSTRING",

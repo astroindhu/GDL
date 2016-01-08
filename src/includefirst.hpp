@@ -24,6 +24,10 @@
 #endif
 // #undef cerr if you want to try it.
 
+#ifdef WIN32
+#  define WIN32_LEAN_AND_MEAN 1
+#endif
+
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -33,6 +37,7 @@
 #ifdef _MSC_VER
 #define NOMINMAX
 #define _WINSOCKAPI_
+#pragma warning( disable : 4716 )
 #endif
 
 // Python.h must be included before everything else

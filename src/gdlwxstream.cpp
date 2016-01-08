@@ -19,8 +19,6 @@
 
 #ifdef HAVE_LIBWXWIDGETS
 
-#include <plplot/plstream.h>
-
 #include "gdlwxstream.hpp"
 
 #ifdef HAVE_OLDPLPLOT
@@ -47,10 +45,13 @@ GDLWXStream::GDLWXStream( int width, int height )
     delete m_dc;
     throw GDLException("GDLWXStream: Failed to create DC.");
   }
-
-  SETOPT("drvopt", "hrshsym=1,backend=0,text=0" ); // do not use freetype. Backend=0 enable compatibility (sort of) with X11 behaviour in plots. To be augmented one day...
-//  SETOPT("drvopt", "hrshsym=1,backend=1,text=0" ); 
-//  SETOPT("drvopt", "hrshsym=1,backend=2,text=0" );
+#if ( (PLPLOT_VERSION_MAJOR < 6) && (PLPLOT_VERSION_MINOR < 10) )
+  if ( GetEnvString("GDL_WX_BACKEND") == "2" )  SETOPT("drvopt", "hrshsym=1,backend=2,text=0" );
+  else if ( GetEnvString("GDL_WX_BACKEND") == "1") SETOPT("drvopt", "hrshsym=1,backend=1,text=0" ); 
+  else  SETOPT("drvopt", "hrshsym=1,backend=0,text=0" ); // do not use freetype. Backend=0 enable compatibility (sort of) with X11 behaviour in plots. To be augmented one day...
+#else
+  else  SETOPT("drvopt", "hrshsym=1,text=0" ); //
+#endif
   spage( 0.0, 0.0, 0, 0, 0, 0 ); //width and height have no importance, they are recomputed inside driver anyway!
   this->plstream::init();
   plstream::cmd(PLESC_DEVINIT, (void*)m_dc );
@@ -77,6 +78,7 @@ void GDLWXStream::Update()
 
 void GDLWXStream::SetSize( int width, int height )
 {
+  if ( width<1 || height <1) return;
   m_dc->SelectObject( wxNullBitmap );
   delete m_bitmap;
   m_bitmap = new wxBitmap( width, height, 32 );
@@ -145,30 +147,24 @@ unsigned long GDLWXStream::GetWindowDepth() {
 }
 
 void GDLWXStream::Clear() {
-  ::c_plbop();
+      PLINT red,green,blue;
+      DByte r,g,b;
+      PLINT red0,green0,blue0;
+      
+      GraphicsDevice::GetCT()->Get(0,r,g,b);red=r;green=g;blue=b;
+      
+      red0=GraphicsDevice::GetDevice()->BackgroundR();
+      green0=GraphicsDevice::GetDevice()->BackgroundG();
+      blue0=GraphicsDevice::GetDevice()->BackgroundB();
+      plstream::scolbg(red0,green0,blue0); //overwrites col[0]
+      ::c_plbop();
+      ::c_plclear();
+      plstream::scolbg(red,green,blue); //resets col[0]
 }
 
-//FALSE: REPLACE With Clear(DLong chan) as in X
+//FALSE: REPLACE With Clear(DLong chan) as in X //TBD
 void GDLWXStream::Clear(DLong bColor) {
-  PLINT r0, g0, b0;
-  PLINT r1, g1, b1;
-  DByte rb, gb, bb;
-
-  // Get current background color
-  plgcolbg(&r0, &g0, &b0);
-
-  // Get desired background color
-  GDLCT* actCT = GraphicsDevice::GetCT();
-  actCT->Get(bColor, rb, gb, bb);
-
-  // Convert to PLINT from GDL_BYTE
-  r1 = (PLINT) rb;
-  g1 = (PLINT) gb;
-  b1 = (PLINT) bb;
-  // this mimics better the *DL behaviour.
-  ::c_plbop();
-  plscolbg(r1, g1, b1);
-
+  Clear();
 }
 
 bool GDLWXStream::PaintImage(unsigned char *idata, PLINT nx, PLINT ny, DLong *pos,
@@ -239,7 +235,56 @@ bool GDLWXStream::PaintImage(unsigned char *idata, PLINT nx, PLINT ny, DLong *po
 }
 
 bool GDLWXStream::SetGraphicsFunction( long value) {
-  cerr<<"Set Graphics Function not ready for wxWindow draw panel, please contribute."<<endl;
+  //use switch since passing an enum to a function is problematic for some compilers, grrrrrrrrrrrr!
+  value=(value<0)?0:(value>15)?15:value;
+  switch ( value ) {
+    case 0: //wxCLEAR:
+      m_dc->SetLogicalFunction( wxCLEAR);
+      break;
+    case 1: //wxAND:
+      m_dc->SetLogicalFunction( wxAND);
+      break;
+    case 2: //wxAND_REVERSE:
+      m_dc->SetLogicalFunction( wxAND_REVERSE);
+      break;
+    default:
+    case 3: //wxCOPY:
+      m_dc->SetLogicalFunction( wxCOPY);
+      break;
+    case 4: //wxAND_INVERT:
+      m_dc->SetLogicalFunction( wxAND_INVERT);
+      break;
+    case 5: //wxNO_OP:
+      m_dc->SetLogicalFunction( wxNO_OP);
+      break;
+    case 6: //wxXOR:
+      m_dc->SetLogicalFunction( wxXOR);
+      break;
+    case 7: //wxNOR:
+      m_dc->SetLogicalFunction( wxNOR);
+      break;
+    case 8: //wxEQUIV:
+      m_dc->SetLogicalFunction( wxEQUIV);
+      break;
+    case 9: //wxINVERT:
+      m_dc->SetLogicalFunction( wxINVERT);
+      break;
+    case 10: //wxOR_REVERSE:
+      m_dc->SetLogicalFunction( wxOR_REVERSE);
+      break;
+    case 11: //wxSRC_INVERT:
+      m_dc->SetLogicalFunction( wxSRC_INVERT);
+      break;
+    case 12: //wxOR_INVERT:
+      m_dc->SetLogicalFunction( wxOR_INVERT);
+      break;
+    case 13: //wxNAND:
+      m_dc->SetLogicalFunction( wxNAND);
+      break;
+    case 14: //wxSET:
+      m_dc->SetLogicalFunction( wxSET);
+      break;
+  }
  return true;
 }
 

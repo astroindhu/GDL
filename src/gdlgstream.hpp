@@ -25,14 +25,12 @@
 #define GDL_DEBUG_PLSTREAM 0
 #endif
 
-#include <plplot/plstream.h>
-#include <plplot/plstrm.h>
-
-
 #ifdef HAVE_CONFIG_H
 // we should not add all the plplot's internal defines (which are 
 // added if HAVE_CONFIG_H is defined) to ours. Makes problem with distros.
 #undef HAVE_CONFIG_H 
+#include <plplot/plstream.h>
+#include <plplot/plstrm.h>
 #include <plplot/plplot.h>
 #define HAVE_CONFIG_H 1
 #endif
@@ -198,11 +196,17 @@ public:
       for (int maxnumdevs = numdevs_plus_one;; numdevs_plus_one = maxnumdevs += 16)
       {
 #ifdef HAVE_OLDPLPLOT
-        devlongnames = static_cast<char**>(realloc(devlongnames, maxnumdevs * sizeof(char*)));
-        devnames = static_cast<char**>(realloc(devnames, maxnumdevs * sizeof(char*)));
+        //handles gracefully the improbable failure of realloc
+        void* tmp = realloc(devlongnames, maxnumdevs * sizeof(char*));
+        if (tmp) devlongnames = static_cast<char**>(tmp); else return false;
+        tmp = realloc(devnames, maxnumdevs * sizeof(char*));
+        if (tmp) devnames = static_cast<char**>(tmp); else return false;
 #else
-        devlongnames = static_cast<const char**>(realloc(devlongnames, maxnumdevs * sizeof(char*)));
-        devnames = static_cast<const char**>(realloc(devnames, maxnumdevs * sizeof(char*)));
+        //handles gracefully the improbable failure of realloc
+        void* tmp = realloc(devlongnames, maxnumdevs * sizeof(char*));
+        if (tmp) devlongnames = static_cast<const char**>(tmp); else return false;
+        tmp = realloc(devnames, maxnumdevs * sizeof(char*));
+        if (tmp) devnames = static_cast<const char**>(tmp); else return false;
 #endif
         plgDevs(&devlongnames, &devnames, &numdevs_plus_one);
         numdevs_plus_one++;
@@ -694,6 +698,7 @@ public:
   void Thick( DFloat thick);
   virtual void Color( ULong c, DLong decomposed=0);
   void Background( ULong c, DLong decomposed=0);
+  void DefaultBackground();
   void SetColorMap1SingleColor( ULong color);
   //if decomposed, create a red ramp. If not, copy the colormap0 in colormap1
   void SetColorMap1DefaultColors(PLINT ncolors, DLong decomposed=0);

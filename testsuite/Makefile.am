@@ -91,12 +91,15 @@ TESTS = \
   test_file_copy.pro \
   test_file_delete.pro \
   test_file_dirname.pro \
+  test_file_move.pro \
   test_file_search.pro \
+  test_file_test.pro \
   test_file_which.pro \
   test_finite.pro \
   test_fix.pro \
   test_fixprint.pro \
   test_format.pro \
+  test_formats.pro \
   test_fx_root.pro \
   test_fz_roots.pro \
   test_gc.pro \
@@ -110,10 +113,14 @@ TESTS = \
   test_interpol.pro \
   test_interpolate_missing.pro \
   test_isa.pro \
+  test_ishft.pro \
   test_list.pro \
   test_ludc_lusol.pro \
+  test_la_least_squares.pro \
+  test_math_function_dim.pro \
   test_matrix_multiply.pro \
   test_memory.pro \
+  test_message.pro \
   test_modulo.pro \
   test_moment.pro \
   test_mpfit.pro \
@@ -123,8 +130,11 @@ TESTS = \
   test_netcdf.pro \
   test_null.pro \
   test_obj_new.pro \
+  test_plot_oo.pro \
   test_plotting_ranges.pro \
   test_pmulti.pro \
+  test_pmulti_basic.pro \
+  test_postscript.pro \
   test_product.pro \
   test_ps_decomposed.pro \
   test_ptrarr.pro \
@@ -136,6 +146,7 @@ TESTS = \
   test_qromo.pro \
   test_random.pro \
   test_readf.pro \
+  test_reads.pro \
   test_rebin.pro \
   test_rk4.pro \
   test_routine_names.pro \
@@ -156,12 +167,15 @@ TESTS = \
   test_suite.pro \
   test_systime.pro \
   test_trisol.pro \
+  test_tv.pro \
   test_typename.pro \
   test_url.pro \
   test_voigt.pro \
   test_wait.pro \
   test_wavelet.pro \
+  test_window_background.pro \
   test_where.pro \
   test_zeropoly.pro \
   test_zip.pro \
+  test_xdr.pro \
   checks

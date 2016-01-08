@@ -21,7 +21,7 @@
 #ifdef _MSC_VER
 #include <io.h> // isatty, windows
 #else
-#include <unistd.h> // isatty
+#include <unistd.h> // isatty, usleep
 #endif
 
 //#include <wordexp.h>
@@ -50,9 +50,17 @@
 #include "print_tree.hpp"
 #endif
 
+#if (__cplusplus >= 201103L || _MSC_VER >= 1800) && !defined(__MINGW32__)
+#   include <thread> // C++11
+#   define HAVE_CXX11THREAD
+#else
+#   include <pthread.h>
+#endif
+
 using namespace std;
 using namespace antlr;
 
+string inputstr;
 bool historyIntialized = false;
 
 // instantiation of static data
@@ -719,7 +727,7 @@ DInterpreter::CommandCode DInterpreter::CmdCompile( const string& command)
 DInterpreter::CommandCode DInterpreter::CmdRun( const string& command)
 {
   string cmdstr = command;
-  int sppos = cmdstr.find(" ",0);
+  size_t sppos = cmdstr.find(" ",0);
   if (sppos == string::npos) 
     {
       cout << "Interactive RUN not implemented yet." << endl;
@@ -733,7 +741,12 @@ DInterpreter::CommandCode DInterpreter::CmdRun( const string& command)
   while (pos < command.length()) 
     {
       sppos = command.find(" ",pos);
-      if (sppos == string::npos) sppos = command.length();
+      size_t spposComma = command.find(",",pos);
+      if (sppos == string::npos && spposComma == string::npos) 
+	sppos = command.length();
+      else if (sppos == string::npos)
+	sppos = spposComma;
+	
 
       // Found a file
       if ((sppos - pos) > 0) 
@@ -931,7 +944,9 @@ void DInterpreter::ExecuteShellCommand(const string& command)
 string GetLine( istream* in)
 {
   string line = "";
-  while( line == "" && in->good()) 
+  while( in->good() && 
+    (  line == "" 
+    || line[0] == ';' )) // skip also comment lines (bug #663) 
     {
       getline( *in, line);
       StrTrim(line);
@@ -1249,30 +1264,56 @@ DInterpreter::CommandCode DInterpreter::ExecuteLine( istream* in, SizeT lineOffs
   return CC_OK;
 }
 
+#ifdef HAVE_CXX11THREAD
+void inputThread() {
+#else
+void *inputThread(void*) {
+#endif
+    while (1) {
+        char ch = getchar();
+        inputstr += ch;
+        if (ch == '\n')
+            break;
+    }
+}
+
 // if readline is not available or !EDIT_INPUT set to zero
 char* DInterpreter::NoReadline( const string& prompt)
 {
   if (isatty(0)) cout << prompt << flush;
-
-  ostringstream ostr;
-  char ch;
   if( feof(stdin)) return NULL;
-  for(;;)
+
+#ifdef HAVE_CXX11THREAD
+  thread th(inputThread);
+#else
+  pthread_t th;
+  pthread_create(&th, NULL, inputThread, NULL);
+#endif
+
+  for (;;)
     {
-      GDLEventHandler(); 
-
-      ch = getchar();
-
-      if( ch == '\n') break;
-      if( feof(stdin)) return NULL;
-      ostr << ch;
+        GDLEventHandler();
+        if (inputstr.size() && inputstr[inputstr.size() - 1] == '\n') break;
+        if (feof(stdin)) return NULL;
+#ifdef WIN32
+        Sleep(10);
+#else
+        usleep(10);
+#endif
     }
-  ostr << ends;
-  string str = ostr.str();
+  inputstr = inputstr.substr(0, inputstr.size() - 1); // removes '\n'
+  //if (inputstr[inputstr.size() - 1] == '\r')
+  //    inputstr = inputstr.substr(0, inputstr.size() - 1); // removes '\r' too, if exists
+  char *result = (char*)malloc((inputstr.length() + 1) * sizeof(char));
+  strcpy(result, inputstr.c_str()); // copies including terminating '\0'
+  inputstr.clear();
 
-  char *result = (char*) malloc((str.length()+1) * sizeof(char));
+#ifdef HAVE_CXX11THREAD
+  th.join();
+#else
+  pthread_join(th, NULL);
+#endif
 
-  strcpy(result,str.c_str()); // copies including terminating '\0'
   return result;
 }
 
@@ -1337,7 +1378,8 @@ string DInterpreter::GetLine()
 #endif
   
     StrTrim(line);
-  } while( line == "");
+  } while( line == "" 
+	|| line[0] == ';'); // skip also comment lines (bug #663)
   
 #ifdef HAVE_LIBREADLINE
   // SA: commented out to comply with IDL behaviour- allowing to 

@@ -26,6 +26,7 @@
 
 #include "gdlgstream.hpp"
 #include <Windows.h>
+#include <map>
 
 // Copied from wingcc.c
 // Struct to hold device-specific info.
@@ -71,62 +72,78 @@ struct wingcc_Dev
 	// we only do a windows redraw if plplot is plotting
 	char              enterresize;     // Used to keep track of reszing messages from windows
 	char              already_erased;  // Used to track first and only first backgroudn erases
-        struct wingcc_Dev  *push;
+	struct wingcc_Dev  *push;
 };
-static tagWINDOWINFO Winfo;
+
+typedef struct {
+	BITMAPINFO bi;
+	RGBQUAD *lpbitmap;
+	bool has_data;
+} tv_buf_t;
+
 class GDLWINStream : public GDLGStream
 {
+private:
 	//Atom wm_protocols;
 	//Atom wm_delete_window;
-        HWND refocus;
-        
+	HWND refocus;
+
 	PLStream* pls;
 	plstream *plst;
 
+	tv_buf_t tv_buf;
+    int _mode;
+    PLGraphicsIn *_gin;
+    POINT GinPoint;
+    HCURSOR CrosshairCursor;
+    bool rbutton, xbutton, mbutton, buttonpressed = false;
 public:
+    std::map<UINT, void (CALLBACK GDLWINStream::*)(UINT, WPARAM, LPARAM)> msghooks;
+
 	GDLWINStream(int nx, int ny) :
 		GDLGStream(nx, ny, "wingcc")
-	{	
-  // get the command interpreter window's handle
-		Winfo.cbSize = sizeof(Winfo);
+	{
+		pls = 0;
+		// get the command interpreter window's handle
 		refocus = GetForegroundWindow();
 	}
 
-	~GDLWINStream()
-	{
-
-	}
-
-
+	~GDLWINStream();
 	void Init();
 	void EventHandler();
-	
-//	  static int   GetImageErrorHandler(Display *display, XErrorEvent *error);
 
-  void GetGeometry( long& xSize, long& ySize, long& xoff, long& yoff);
-  bool GetGin(PLGraphicsIn *gin, int mode);
-  
-  unsigned long GetWindowDepth();
-  DLong GetVisualDepth();
-//  DString GetVisualName();
-  
-  bool UnsetFocus();
-//  bool SetBackingStore(int value);
-//  bool SetGraphicsFunction(long value );
-  bool GetWindowPosition(long& xpos, long& ypos );
-  void Clear();
-  void Raise();
-  void Lower();
-  void Iconic();
-  void DeIconic();
-  void Flush();
-  void CheckValid();
-  bool PaintImage(unsigned char *idata, PLINT nx, PLINT ny,  DLong *pos, DLong tru, DLong chan);
+	//	  static int   GetImageErrorHandler(Display *display, XErrorEvent *error);
 
-  //  bool SetGraphicsFunction(long value );
-  virtual bool HasCrossHair() { return true;}
+	void GetGeometry(long& xSize, long& ySize, long& xoff, long& yoff);
+	bool GetGin(PLGraphicsIn *gin, int mode);
 
+	unsigned long GetWindowDepth();
+	DLong GetVisualDepth();
+	//  DString GetVisualName();
 
+	bool UnsetFocus();
+	//  bool SetBackingStore(int value);
+	//  bool SetGraphicsFunction(long value );
+	bool GetWindowPosition(long& xpos, long& ypos);
+	void Clear();
+	void Raise();
+	void Lower();
+	void Iconic();
+	void DeIconic();
+	void Flush();
+	void CheckValid();
+	bool PaintImage(unsigned char *idata, PLINT nx, PLINT ny, DLong *pos, DLong tru, DLong chan);
+
+	//  bool SetGraphicsFunction(long value );
+	virtual bool HasCrossHair() { return true; }
+
+	void SetWindowTitle(char* buf);
+	HWND GetHwnd(void);
+	void RedrawTV();
+
+    void CALLBACK GinCallback(UINT message, WPARAM wParam, LPARAM lParam);
 };
+
+typedef std::map<UINT, void (CALLBACK GDLWINStream::*)(UINT, WPARAM, LPARAM)>::iterator msghookiter;
 
 #endif

@@ -19,8 +19,6 @@
 
 #ifndef _WIN32
 #include <sys/utsname.h>
-#else
-#include <tchar.h>
 #endif
 #include <cmath>
 
@@ -44,6 +42,10 @@
 #include <sys/time.h>
 #endif
 
+#ifndef BUILD_DATE
+#define BUILD_DATE __DATE__
+#endif
+
 namespace SysVar
 {
 
@@ -55,7 +57,7 @@ namespace SysVar
     dIx, pIx, xIx, yIx, zIx, vIx, gdlWarningIx, gdlIx, cIx, MouseIx,
     errorStateIx, errorIx, errIx, err_stringIx, valuesIx,
     journalIx, exceptIx, mapIx, cpuIx, dirIx, GshhsDirIx, stimeIx,
-    warnIx, usersymIx, orderIx;
+    warnIx, usersymIx, orderIx, MakeDllIx;
 
   // !D structs
   const int nDevices = 5;
@@ -302,6 +304,13 @@ namespace SysVar
   {
     DVar& var = *sysVarList[ vIx];
     return static_cast<DStructGDL*>(var.Data());
+  } 
+  void SetFakeRelease( DString release)
+  {
+    DVar& var = *sysVarList[ vIx];
+    DStructGDL *s=static_cast<DStructGDL*>(var.Data());
+    static int tag = s->Desc()->TagIndex( "RELEASE");
+    (*static_cast<DStringGDL*>( s->GetTag( tag)))[0] = release;
   }
   DStructGDL* Values()
   {
@@ -491,11 +500,11 @@ namespace SysVar
     gdlStruct->NewTag("RELEASE", new DStringGDL( VERSION));
 
     // creating an explicit build date in !GDL (also exist in !version)
-    gdlStruct->NewTag("BUILD_DATE", new DStringGDL(__DATE__)); 
+    gdlStruct->NewTag("BUILD_DATE", new DStringGDL(BUILD_DATE));
 
     // creating and Epoch entry in order to have a simple incremental number 
     int CompilationMonth =0, CompilationYear=0, CompilationDay=0;
-    string MyDate= __DATE__;
+    string MyDate= BUILD_DATE;
     string SCompilationYear;
     SCompilationYear=MyDate.substr(7,4);
     CompilationYear=atoi(SCompilationYear.c_str());
@@ -695,7 +704,7 @@ namespace SysVar
 #ifdef _WIN32
 #ifdef __MINGW32__
 	typedef void (WINAPI *GetNativeSystemInfoFunc)(LPSYSTEM_INFO);
-	HMODULE hModule = LoadLibrary(_T("kernel32.dll"));
+	HMODULE hModule = LoadLibraryW(L"kernel32.dll");
 	GetNativeSystemInfoFunc GetNativeSystemInfo =(GetNativeSystemInfoFunc) 
             GetProcAddress(hModule, "GetNativeSystemInfo");
 #endif
@@ -730,8 +739,8 @@ namespace SysVar
 
     ver->NewTag("OS", new DStringGDL(SysName));    
     ver->NewTag("OS_NAME", new DStringGDL(SysName)); 
-    ver->NewTag("RELEASE", new DStringGDL( "6.0")); 
-    ver->NewTag("BUILD_DATE", new DStringGDL(__DATE__)); 
+    ver->NewTag("RELEASE", new DStringGDL( "6.5")); //we are at least 6.4
+    ver->NewTag("BUILD_DATE", new DStringGDL(BUILD_DATE)); 
     ver->NewTag("MEMORY_BITS", new DIntGDL( sizeof(BaseGDL*)*8)); 
     ver->NewTag("FILE_OFFSET_BITS", new DIntGDL( sizeof(SizeT)*8)); 
     DVar *v            = new DVar( "VERSION", ver);
@@ -749,6 +758,15 @@ namespace SysVar
     MouseIx          = sysVarList.size();
     sysVarList.push_back(Mouse);
 
+    // !Make_dll
+    DStructGDL*  MakeDllData = new DStructGDL( "!MAKE_DLL");
+    MakeDllData->NewTag("COMPILE_DIRECTORY", new DStringGDL("/tmp/"));
+    MakeDllData->NewTag("COMPILER_NAME", new DStringGDL("GCC"));
+    MakeDllData->NewTag("CC", new DStringGDL("gcc %X -fPIC -I%Z -c -D_REENTRANT %C -o %O"));
+    MakeDllData->NewTag("LD", new DStringGDL("ld -shared -o %L %O %X"));
+    DVar *MakeDll      = new DVar( "MAKE_DLL", MakeDllData);
+    MakeDllIx          = sysVarList.size();
+    sysVarList.push_back(MakeDll);
 
     // !ERROR_STATE
     DStructGDL*  eStateData = new DStructGDL( "!ERROR_STATE");

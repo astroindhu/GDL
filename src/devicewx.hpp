@@ -340,12 +340,11 @@ public:
         winList[ wIx]->RenewPlplotDefaultCharsize(newsize);
         // sets actWin and updates !D
         SetActWin( wIx);
-        GDLApp * theGDLApp;
-    gdlFrame->SetTheApp(theGDLApp);
-    theGDLApp=new GDLApp;
+        GDLApp* theGDLApp=new GDLApp;
     theGDLApp->OnInit();
     theGDLApp->OnRun();
         gdlFrame->Show();
+        gdlFrame->SetTheApp(theGDLApp);
  
         return true; //winList[ wIx]->Valid(); // Valid() need to called once
     }
@@ -490,8 +489,10 @@ public:
         this->GetStream(); //to open a window if none opened.
         bool ret;
         for (int i = 0; i < winList.size(); i++) {
-            if (winList[i] != NULL) ret = winList[i]->SetGraphicsFunction(gcFunction);
-            if (ret == false) return ret;
+            if (winList[i] != NULL) {
+              ret = winList[i]->SetGraphicsFunction(gcFunction);
+              if (ret == false) return ret;
+            }
         }
         return true;
     }
@@ -563,8 +564,10 @@ public:
         this->GetStream(); //to open a window if none opened.
         bool ret;
         for (int i = 0; i < winList.size(); i++) {
-            if (winList[i] != NULL) ret = winList[i]->CursorStandard(cursorNumber);
-            if (ret == false) return ret;
+            if (winList[i] != NULL) {
+              ret = winList[i]->CursorStandard(cursorNumber);
+              if (ret == false) return ret;
+            }
         }
         return true;
     }

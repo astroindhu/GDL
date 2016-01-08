@@ -94,10 +94,9 @@ namespace lib {
        if (fvalue == NULL) 
           e->Throw( "Keyword GET_SCREEN_SIZE not allowed for call to: DEVICE");
        else {
-         DIntGDL* value=new DIntGDL(dimension(2), BaseGDL::NOZERO);
-         (*value)[0]=floor((*fvalue)[0]);
-         (*value)[1]=floor((*fvalue)[1]);
-         e->SetKW( get_screen_sizeIx, value);
+         (*fvalue)[0]=floor((*fvalue)[0]);
+         (*fvalue)[1]=floor((*fvalue)[1]);
+         e->SetKW( get_screen_sizeIx, fvalue);
        }
       }
     }
@@ -303,25 +302,43 @@ namespace lib {
     {
       static int portraitIx = e->KeywordIx( "PORTRAIT");
       static int landscapeIx = e->KeywordIx( "LANDSCAPE"); 
+    //IDL consider the value of the first typed of the two options, if both are present.
+    //I dunoo how to do that with GDL parsing.
       if (e->KeywordSet(portraitIx) && e->KeywordSet(landscapeIx)) 
         Warning("Warning: both PORTRAIT and LANDSCAPE specified!");
 
       // LANDSCAPE 
       {
-        if (e->GetKW(landscapeIx) != NULL)
-	  {
-	    bool success = actDevice->SetLandscape();
-	    if (!success) e->Throw("Current device does not support keyword LANDSCAPE");
-	  }
+        BaseGDL* landscapeKW=e->GetKW(landscapeIx);
+        if (landscapeKW != NULL)
+        {
+	      DLong isLandscape;
+	      e->AssureLongScalarKW( landscapeIx, isLandscape);
+          if (isLandscape == 0) {
+            bool success = actDevice->SetPortrait();
+            if (!success) e->Throw("Current device does not support keyword LANDSCAPE");
+          } else {
+            bool success = actDevice->SetLandscape();
+            if (!success) e->Throw("Current device does not support keyword LANDSCAPE");
+          }
+        }
       }
 
       // PORTRAIT 
       {
-        if (e->GetKW(portraitIx) != NULL)
-	  {
-	    bool success = actDevice->SetPortrait();
-	    if (!success) e->Throw("Current device does not support keyword PORTRAIT");
-	  }
+        BaseGDL* portraitKW=e->GetKW(portraitIx);
+        if (portraitKW != NULL)
+        {
+	      DLong isPortrait;
+	      e->AssureLongScalarKW( portraitIx, isPortrait);
+          if (isPortrait == 0) {
+            bool success = actDevice->SetLandscape();
+            if (!success) e->Throw("Current device does not support keyword PORTRAIT");
+          } else {
+            bool success = actDevice->SetPortrait();
+            if (!success) e->Throw("Current device does not support keyword PORTRAIT");
+          }
+        }
       }
     }
 
@@ -434,6 +451,18 @@ namespace lib {
 	  if (!success) e->Throw( "Current device does not support keyword ENCAPSULATED.");
 	} 
     }
+    //BITS_PER_PIXEL
+    {
+      static int bppIx = e->KeywordIx( "BITS_PER_PIXEL");
+      BaseGDL* bppKW = e->GetKW( bppIx);
+      if( bppKW != NULL)
+	{
+	  bool success;
+      
+	  success = actDevice->SetBPP((*e->GetKWAs<DIntGDL>(bppIx))[0]);
+	  if (!success) e->Throw( "Current device does not support keyword BITS_PER_PIXEL.");
+	} 
+    }    
     // COPY
     {
       static int copyIx = e->KeywordIx("COPY");

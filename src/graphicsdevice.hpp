@@ -125,6 +125,9 @@ protected:
 
   static std::vector<GDLCT> CT; // predefined colortables
   static GDLCT           actCT; // actual used colortable
+  static DByte           deviceBckColorR;
+  static DByte           deviceBckColorG;
+  static DByte           deviceBckColorB;
 
   std::string         name;
   DStructGDL*         dStruct;
@@ -139,6 +142,7 @@ protected:
     y = (*ySize)[0];
   }
 
+
 public:
   GraphicsDevice();
   virtual ~GraphicsDevice();
@@ -148,6 +152,15 @@ public:
   static void HandleEvents();
 
   static void LoadCT(UInt iCT);
+  void SetDeviceBckColor(DByte r, DByte g, DByte b)
+  {
+    deviceBckColorR=r;
+    deviceBckColorG=g;
+    deviceBckColorB=b;
+  }
+  DByte BackgroundR() {return deviceBckColorR;}
+  DByte BackgroundG() {return deviceBckColorG;}
+  DByte BackgroundB() {return deviceBckColorB;}
   
   static GDLCT*      GetCT() { return &actCT;}
   static GDLCT*      GetCT( SizeT ix) { return &CT[ix];}
@@ -232,7 +245,7 @@ public:
   virtual int  getCursorId()                             { return -1;}
   virtual bool UnsetFocus()                           { return false;}
   virtual bool SetFocus()                             { return false;}
-  virtual bool SetBackingStore(int value)          { return false;}
+  virtual bool SetBackingStore(int value)             { return false;}
   virtual int  getBackingStore()                      { return -1;}
   virtual bool SetXPageSize( const float xs)          { return false;}
   virtual bool SetYPageSize( const float ys)          { return false;}
@@ -242,24 +255,14 @@ public:
   virtual bool SetYOffset(const float)                { return false;}
   virtual bool SetPortrait()                          { return false;}
   virtual bool SetLandscape()                         { return false;}
-  virtual bool SetEncapsulated(bool)                  { return false;}
+  virtual bool SetEncapsulated(bool val)              { return false;}
+  virtual bool SetBPP(const int bpp)                  { return false;}
   virtual bool Hide()                                 { return false;}
   virtual bool CopyRegion(DLongGDL* me)               { return false;}
 
   // Z buffer device
   virtual bool ZBuffering( bool yes)                  { return false;}
   virtual bool SetResolution( DLong nx, DLong ny)     { return false;}
-
-//  // TVRD function for a device
-//  virtual BaseGDL* TVRD( EnvT* e) 
-//  {
-//    throw GDLException( "Device "+Name()+" does not support TVRD.");
-//  }
-  
-//  virtual void TV( EnvT* e)
-//  {
-//    throw GDLException( "Device "+Name()+" does not support TV.");
-//  }
 
   virtual void ClearStream( DLong bColor)
   {

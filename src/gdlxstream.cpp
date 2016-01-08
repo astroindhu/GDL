@@ -171,23 +171,49 @@ void GDLXStream::GetGeometry(long& xSize, long& ySize, long& xOffset, long& yOff
 // plplot 5.3 does not provide the clear function for c++
 
 void GDLXStream::Clear() {
-  // dummy call to get private function set_stream() called
-  // gd: tested, fail to see why use this dummy call ?
-//  char dummy;
-//  gesc(&dummy);
-  // this mimics better the *DL behaviour but plbob create a new page, etc..
-  ::c_plbop();
+  // this mimics better the *DL behaviour but plbop create a new page, etc..
   //plclear clears only the current subpage. But it clears it. One has
   //just to set the number of subpages to 1
-  ::c_plclear();
+  PLINT red, green, blue;
+  DByte r, g, b;
+  PLINT red0, green0, blue0;
+
+  GraphicsDevice::GetCT( )->Get( 0, r, g, b );
+  red = r;
+  green = g;
+  blue = b;
+//we get around the index 0=background color "feature" of plplot. GDL uses a separate backgroud color.
+  red0 = GraphicsDevice::GetDevice( )->BackgroundR( );
+  green0 = GraphicsDevice::GetDevice( )->BackgroundG( );
+  blue0 = GraphicsDevice::GetDevice( )->BackgroundB( );
+  plstream::scolbg( red0, green0, blue0 ); //overwrites col[0]
+  ::c_plbop( );
+  ::c_plclear( );
+  plstream::scolbg( red, green, blue ); //resets col[0]
 }
+#define ToXColor(a) (((0xFF & (a)) << 8) | (a))
 
 void GDLXStream::Clear(DLong chan) {
-  static const int planemask[3]={0x0000FF,0x00FF00,0xFF0000};
-//fill screen with background (since plotting erase has called background) on channel chan
+  static const unsigned long planemask[3]={0xFF0000,0x00FF00,0x0000FF}; //like that...
+//fill screen with background value on channel chan
   XwDev *dev = (XwDev *) pls->dev;
   XwDisplay *xwd = (XwDisplay *) dev->xwd;
-  XSetForeground(xwd->display,dev->gc,xwd->cmap0[0].pixel);
+  PLINT red0,green0,blue0;
+  red0=GraphicsDevice::GetDevice()->BackgroundR();
+  green0=GraphicsDevice::GetDevice()->BackgroundG();
+  blue0=GraphicsDevice::GetDevice()->BackgroundB();
+  XColor myColor;
+  unsigned char r = (red0 & 0xFF);
+  unsigned char g = (green0 & 0xFF);
+  unsigned char b = (blue0 & 0xFF);
+
+  myColor.red = ToXColor( r );
+  myColor.green = ToXColor( g );
+  myColor.blue = ToXColor( b );
+  myColor.flags = DoRed | DoGreen | DoBlue;
+
+  if (XAllocColor( xwd->display, xwd->map, &myColor )) XSetForeground( xwd->display, dev->gc, myColor.pixel ); else return; 
+
   XSetPlaneMask(xwd->display,dev->gc,planemask[chan]);
   if (dev->write_to_pixmap==1)
     XFillRectangle(xwd->display, dev->pixmap, dev->gc, 0, 0, dev->width, dev->height);
@@ -648,7 +674,6 @@ unsigned long event_mask = (EnterWindowMask| LeaveWindowMask | KeyPressMask  | K
   XFlush(xwd->display);
   return status;
 }
-#define ToXColor(a) (((0xFF & (a)) << 8) | (a))
 
 bool GDLXStream::PaintImage(unsigned char *idata, PLINT nx, PLINT ny, DLong *pos,
         DLong trueColorOrder, DLong chan) {

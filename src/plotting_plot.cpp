@@ -32,13 +32,12 @@ namespace lib {
 
   class plot_call : public plotting_routine_call 
   {
-    DDoubleGDL *yVal, *xVal, *zVal, *xTemp, *yTemp;
+    DDoubleGDL *yVal, *xVal, *xTemp, *yTemp;
     SizeT xEl, yEl, zEl;
-    DDouble minVal, maxVal, xStart, xEnd, yStart, yEnd,
-            zValue;
+    DDouble minVal, maxVal, xStart, xEnd, yStart, yEnd, zValue;
     bool doMinMax;
     bool xLog, yLog, wasBadxLog, wasBadyLog;
-    Guard<BaseGDL> xval_guard, yval_guard, zval_guard, xtemp_guard;
+    Guard<BaseGDL> xval_guard, yval_guard, xtemp_guard;
     DLong iso;
     bool doT3d;
 
@@ -157,38 +156,53 @@ private:
 
     // handle Log options passing via Functions names PLOT_IO/OO/OI
     // the behavior can be superseed by [xy]log or [xy]type
-    string ProName=e->GetProName();
-    if (ProName != "PLOT") {
-      if (ProName == "PLOT_IO") yLog=TRUE;
-      if (ProName == "PLOT_OI") xLog=TRUE;
-      if (ProName == "PLOT_OO") {
-	xLog=TRUE;
-	yLog=TRUE;
+    string ProName = e->GetProName( );
+    if ( ProName != "PLOT" ) {
+      if ( ProName == "PLOT_IO" ) yLog = TRUE;
+      if ( ProName == "PLOT_OI" ) xLog = TRUE;
+      if ( ProName == "PLOT_OO" ) {
+        xLog = TRUE;
+        yLog = TRUE;
       }
     }
 
     // handle Log options passing via Keywords
-    static int xTypeIx = e->KeywordIx("XTYPE");
-    static int yTypeIx = e->KeywordIx("YTYPE");
-    static int xLogIx = e->KeywordIx("XLOG");
-    static int yLogIx = e->KeywordIx("YLOG");
-
+    // note: undocumented keywords [xyz]type still exist and
+    // have priority on [xyz]log !
+    static int xLogIx = e->KeywordIx( "XLOG" );
+    static int yLogIx = e->KeywordIx( "YLOG" );
     if (e->KeywordPresent(xLogIx)) xLog = e->KeywordSet(xLogIx);
     if (e->KeywordPresent(yLogIx)) yLog = e->KeywordSet(yLogIx);
 
-    if (e->KeywordPresent(xTypeIx )) {
-      xLog=e->KeywordSet (xTypeIx );
-    } else {
-      xLog=e->KeywordSet (xLogIx );
+    // note: undocumented keywords [xyz]type still exist and
+    // have priority on [xyz]log ! In fact, it is the modulo (1, 3, 5 ... --> /log)   
+    static int xTypeIx = e->KeywordIx( "XTYPE" );
+    static int yTypeIx = e->KeywordIx( "YTYPE" );
+    static int xType, yType;
+    if (e->KeywordPresent(xTypeIx)) {
+      e->AssureLongScalarKWIfPresent( "XTYPE", xType);
+      if ((xType % 2) == 1) xLog= TRUE; else xLog= FALSE;
+    }
+    if (e->KeywordPresent(yTypeIx)) {
+      e->AssureLongScalarKWIfPresent( "YTYPE", yType);
+      if ((yType % 2) == 1) yLog= TRUE; else yLog= FALSE;
     }
     
-    if (e->KeywordPresent(yTypeIx )) {
-      yLog=e->KeywordSet (yTypeIx );
-    } else {
-      yLog=e->KeywordSet (yLogIx);
+    //  cout << xType<< " " <<xLog << " "<<yType <<" " << yLog << endl;
+
+    static int xTickunitsIx = e->KeywordIx( "XTICKUNITS" );
+    static int yTickunitsIx = e->KeywordIx( "YTICKUNITS" );
+
+    if ( xLog && e->KeywordSet( xTickunitsIx ) ) {
+      Message( "PLOT: LOG setting ignored for Date/Time TICKUNITS." );
+      xLog = FALSE;
     }
-    
-    //cout << xLog << " " << yLog << endl;
+    if ( yLog && e->KeywordSet( yTickunitsIx ) ) {
+      Message( "PLOT: LOG setting ignored for Date/Time TICKUNITS." );
+      yLog = FALSE;
+    }
+
+    //    cout << xLog << " " << yLog << endl;
 
     // compute adequate values for log scale, warn adequately...
     wasBadxLog = FALSE;
@@ -279,15 +293,6 @@ private:
     iso=0;
     e->AssureLongScalarKWIfPresent( "ISOTROPIC", iso);
 
-    if (doT3d)
-    {
-      //make zVal
-      zEl=xVal->N_Elements();
-      zVal=new DDoubleGDL(dimension(zEl), BaseGDL::NOZERO);
-      zval_guard.Reset(zVal); // delete upon exit
-      for (SizeT i=0; i< zEl ; ++i) (*zVal)[i]=zValue;
-    }
-
     return false;
   }
 
@@ -306,10 +311,10 @@ private:
 
      //xStyle and yStyle apply on range values
     if ((xStyle & 1) != 1) {
-      PLFLT intv = AutoIntvAC(xStart, xEnd, xLog);
+      PLFLT intv = gdlAdjustAxisRange(xStart, xEnd, xLog);
     }
     if ((yStyle & 1) != 1) {
-      PLFLT intv = AutoIntvAC(yStart, yEnd, yLog);
+      PLFLT intv = gdlAdjustAxisRange(yStart, yEnd, yLog);
     }
 
     // MARGIN
@@ -322,6 +327,8 @@ private:
     int positionIx = e->KeywordIx( "POSITION");
     DFloatGDL* boxPosition = e->IfDefGetKWAs<DFloatGDL>( positionIx);
     if (boxPosition == NULL) boxPosition = (DFloatGDL*) 0xF;
+    else { //position values must be reviewed 
+    }
     // set the PLOT charsize before setting viewport (margin depend on charsize)
     gdlSetPlotCharsize(e, actStream);
 

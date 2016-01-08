@@ -23,6 +23,14 @@
 #define LABELOFFSET 0.003
 #define LABELSPACING 0.1
 
+// sometime after 10/14 the tr0,tr1 moved from plstream:: to plcallback::
+#undef PLCALLBACK
+#ifdef PLPLOT_HAS_PLCALLBACK
+#define PLCALLBACK plcallback
+#else
+#define PLCALLBACK plstream
+#endif
+
 namespace lib
 {
 
@@ -279,21 +287,27 @@ namespace lib
       gdlGetDesiredAxisMargin(e, "Y", yMarginB, yMarginT);
       gdlGetDesiredAxisMargin(e, "Z", zMarginF, zMarginB);
 
-      // undocumented keywords [xy]type still exist and
-      // had priority on [xy]log ! (no Ztype)
-      
-      if (e->KeywordPresent( "XTYPE" )) {
-	xLog=e->KeywordSet ( "XTYPE" );
-      } else {
-	xLog=e->KeywordSet ( "XLOG" );
-      }
+    // handle Log options passing via Keywords
+    // note: undocumented keywords [xyz]type still exist and
+    // have priority on [xyz]log ! 
+    static int xTypeIx = e->KeywordIx( "XTYPE" );
+    static int yTypeIx = e->KeywordIx( "YTYPE" );
+    static int xLogIx = e->KeywordIx( "XLOG" );
+    static int yLogIx = e->KeywordIx( "YLOG" );
+    static int xTickunitsIx = e->KeywordIx( "XTICKUNITS" );
+    static int yTickunitsIx = e->KeywordIx( "YTICKUNITS" );
 
-      if (e->KeywordPresent( "YTYPE" )) {
-	yLog=e->KeywordSet ( "YTYPE" );
-      } else {
-	yLog=e->KeywordSet ( "YLOG" );
-      }
+    if ( e->KeywordPresent( xTypeIx ) ) xLog = e->KeywordSet( xTypeIx ); else xLog = e->KeywordSet( xLogIx );
+    if ( e->KeywordPresent( yTypeIx ) ) yLog = e->KeywordSet( yTypeIx ); else yLog = e->KeywordSet( yLogIx );
 
+    if ( xLog && e->KeywordSet( xTickunitsIx ) ) {
+      Message( "PLOT: LOG setting ignored for Date/Time TICKUNITS." );
+      xLog = FALSE;
+    }
+    if ( yLog && e->KeywordSet( yTickunitsIx ) ) {
+      Message( "PLOT: LOG setting ignored for Date/Time TICKUNITS." );
+      yLog = FALSE;
+    }
       if (xLog || yLog) isLog=true; else isLog=false;
 
       // ztype does not exist in IDL
@@ -301,12 +315,12 @@ namespace lib
 
       if ( ( xStyle&1 )!=1 )
       {
-        PLFLT intv=AutoIntvAC ( xStart, xEnd, xLog );
+        PLFLT intv=gdlAdjustAxisRange ( xStart, xEnd, xLog );
       }
 
       if ( ( yStyle&1 )!=1 )
       {
-        PLFLT intv=AutoIntvAC ( yStart, yEnd, yLog );
+        PLFLT intv=gdlAdjustAxisRange ( yStart, yEnd, yLog );
       }
 
       bool hasMinVal=e->KeywordPresent("MIN_VALUE");
@@ -319,7 +333,7 @@ namespace lib
       // then only apply expansion  of axes:
       if ( ( zStyle&1 )!=1 )
       {
-        PLFLT intv=AutoIntvAC ( zStart, zEnd, zLog );
+        PLFLT intv=gdlAdjustAxisRange ( zStart, zEnd, zLog );
       }
 
       //OVERPLOT: get stored range values instead to use them!
@@ -349,25 +363,24 @@ namespace lib
         gdlGetAxisType("X", xLog);
         gdlGetAxisType("Y", yLog);
         gdlGetAxisType("Z", zLog);
-        gdlGetCurrentAxisRange("X", xStart, xEnd);
-        gdlGetCurrentAxisRange("Y", yStart, yEnd);
+        GetCurrentUserLimits(e, actStream, xStart, xEnd, yStart, yEnd);
         gdlGetCurrentAxisRange("Z", zStart, zEnd); //we should memorize the number of levels!
 
         if (!doT3d) {
           restorelayout=true;
-      actStream->OnePageSaveLayout(); // we'll give back actual plplot's setup at end
-      
-      DDouble *sx, *sy;
-      GetSFromPlotStructs( &sx, &sy );
+          actStream->OnePageSaveLayout(); // we'll give back actual plplot's setup at end
 
-      DFloat *wx, *wy;
-      GetWFromPlotStructs( &wx, &wy );
+          DDouble *sx, *sy;
+          GetSFromPlotStructs( &sx, &sy );
 
-      DDouble xStart, xEnd, yStart, yEnd;
-      DataCoordLimits( sx, sy, wx, wy, &xStart, &xEnd, &yStart, &yEnd, true );
+          DFloat *wx, *wy;
+          GetWFromPlotStructs( &wx, &wy );
 
-      actStream->vpor( wx[0], wx[1], wy[0], wy[1] );
-      actStream->wind( xStart, xEnd, yStart, yEnd );
+          DDouble pxStart, pxEnd, pyStart, pyEnd;
+          DataCoordLimits( sx, sy, wx, wy, &pxStart, &pxEnd, &pyStart, &pyEnd, true );
+
+          actStream->vpor( wx[0], wx[1], wy[0], wy[1] );
+          actStream->wind( pxStart, pxEnd, pyStart, pyEnd );
         }
       }
 
@@ -789,8 +802,8 @@ namespace lib
               1, value, 
               static_cast<PLFLT>(( *thick )[i%thick->N_Elements()]),
               0,0,0,0,
-              (plstream::fill), (oneDim),
-              (oneDim)?(plstream::tr1):(plstream::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
+              (PLCALLBACK::fill), (oneDim),
+              (oneDim)?(PLCALLBACK::tr1):(PLCALLBACK::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
             }
             actStream->psty(0);
 //            if (docolors) gdlSetGraphicsForegroundColorFromKw( e, actStream );
@@ -808,8 +821,8 @@ namespace lib
               clevel[i], maxmax, 
               1,value,
               0,0,0,0,0,
-                  plstream::fill, (oneDim), //Onedim is accelerator since rectangles are kept rectangles see plplot doc
-                  (oneDim)?(plstream::tr1):(plstream::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
+                  PLCALLBACK::fill, (oneDim), //Onedim is accelerator since rectangles are kept rectangles see plplot doc
+                  (oneDim)?(PLCALLBACK::tr1):(PLCALLBACK::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
                 }
           } else {  //every other case of fill 
             // note that plshades is not protected against 1 level (color formula is
@@ -818,8 +831,8 @@ namespace lib
             if (nlevel>2 && !(docolors)) { //acceleration with shades when no c_colors are given. use continuous table1, decomposed or not.
               //acceleration is most sensible when a (x,y) transform (rotate, stretch) is in place since plplot does not recompute the map.
               actStream->shades( map, xEl, yEl, isLog?doIt:NULL, xStart, xEnd, yStart, yEnd,
-                                clevel, nlevel, 1, 0, 0, plstream::fill, (oneDim),
-                                (oneDim)?(plstream::tr1):(plstream::tr2),
+                                clevel, nlevel, 1, 0, 0, PLCALLBACK::fill, (oneDim),
+                                (oneDim)?(PLCALLBACK::tr1):(PLCALLBACK::tr2),
                                 (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
             }
             else { //fill with colors defined with c_colors or n<=2
@@ -832,8 +845,8 @@ namespace lib
                 clevel[i], maxmax,
                 1,value,
                 0,0,0,0,0,
-                plstream::fill, (oneDim), //Onedim is accelerator since rectangles are kept rectangles see plplot doc
-                (oneDim)?(plstream::tr1):(plstream::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
+                PLCALLBACK::fill, (oneDim), //Onedim is accelerator since rectangles are kept rectangles see plplot doc
+                (oneDim)?(PLCALLBACK::tr1):(PLCALLBACK::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
               } else
 		        printf(" Problem, sorry! plplot doesn't like to FILL with a single level!");
             }
@@ -854,7 +867,7 @@ namespace lib
             if (doT3d) { //no label in T3D , bug in plplot...
               actStream->setcontlabelparam ( LABELOFFSET, (PLFLT) label_size, LABELSPACING, 0 );
               actStream->cont ( map, xEl, yEl, 1, xEl, 1, yEl, &( clevel[i] ), 1,
-                (oneDim)?(plstream::tr1):(plstream::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
+                (oneDim)?(PLCALLBACK::tr1):(PLCALLBACK::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
             } else {
               if (dolabels && i<labels->N_Elements()) 
               {
@@ -862,16 +875,16 @@ namespace lib
                                                               //else (lables thicker than contours) impossible with plplot...
                   actStream->setcontlabelparam ( LABELOFFSET, (PLFLT) label_size, LABELSPACING, 0 ); 
                   actStream->cont ( map, xEl, yEl, 1, xEl, 1, yEl, &( clevel[i] ), 1,
-                  (oneDim)?(plstream::tr1):(plstream::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2); //thick contours, no label
+                  (oneDim)?(PLCALLBACK::tr1):(PLCALLBACK::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2); //thick contours, no label
                   actStream->Thick(label_thick);
                 } 
                 actStream->setcontlabelparam ( LABELOFFSET, (PLFLT) label_size, LABELSPACING*sqrt(label_size),(PLINT)(*labels)[i] ); 
                 actStream->cont ( map, xEl, yEl, 1, xEl, 1, yEl, &( clevel[i] ), 1,
-                (oneDim)?(plstream::tr1):(plstream::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
+                (oneDim)?(PLCALLBACK::tr1):(PLCALLBACK::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
                 if (!dothick) gdlSetPenThickness(e, actStream);
               } else {
                 actStream->cont ( map, xEl, yEl, 1, xEl, 1, yEl, &( clevel[i] ), 1,
-                (oneDim)?(plstream::tr1):(plstream::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
+                (oneDim)?(PLCALLBACK::tr1):(PLCALLBACK::tr2), (oneDim)?(void *)&cgrid1:(void *)&cgrid2);
               }
             }
           }
@@ -1021,3 +1034,4 @@ namespace lib
   }
 
 } // namespace
+#undef PLCALLBACK

@@ -16,9 +16,9 @@
 ;
 ; KEYWORD PARAMETERS:
 ;
-; COMMON BLOCKS:    none
+; COMMON BLOCKS:    "MANAGED"
 ;
-; SIDE EFFECTS:     none
+; SIDE EFFECTS:     ????
 ;
 ; RESTRICTIONS:     incomplete, more functionality to be added.
 ;
@@ -36,9 +36,9 @@
 ;-
 ;
 
-pro tidyManagedCommon
+pro ValidateManagedWidgets
 
-common managed_by_gdl, ids, names
+common managed, ids, names, modalList
 catch,falseinfo
 ; if ids contains only unknown widget ids, remove silently the list
 ; after catching the error:
@@ -63,15 +63,40 @@ return
 
 end
 
-pro XMANAGER, name, id, NO_BLOCK = noBlock, GROUP_LEADER=groupLeader, EVENT_HANDLER=eventHandler, CLEANUP=Cleanup
+pro UNXREGISTER, id
+COMPILE_OPT idl2, HIDDEN  
+common managed, ids, names, modalList
 
-common managed_by_gdl, ids, names
+if (n_elements(id) eq 0) then return
+if (n_elements(ids) eq 0) then return
+if (ids[0] eq 0) then return
+occurences=where(ids eq id, count, complement=complement, ncomplement=ncomp)
+if (count le 0) then return
+if ( ncomp gt 0 ) then begin ; there are others
+ names=names[complement]
+ ids=ids[complement]
+ return
+endif else begin ; there are no others, clear lists
+ names = 0
+ ids = 0
+endelse
+end
 
-tidyManagedCommon
 
+pro XMANAGER, name, id, NO_BLOCK = noBlock, GROUP_LEADER=groupLeader, EVENT_HANDLER=eventHandler, $
+    CLEANUP=Cleanup, JUST_REG=just_reg, CATCH=catch, MODAL=modal
+
+common managed, ids, names, modalList
+
+ValidateManagedWidgets
+
+if keyword_set(modal) then message,/informational,"The MODAL keyword to the XMANAGER procedure is obsolete."+$
+" It is superseded by the MODAL keyword to the WIDGET_BASE function."
 if not keyword_set(eventHandler) then begin
   eventHandler = name + '_event'
 endif
+;if id is not the top base, get the top base:
+while (widget_info(id,/parent) ne 0) do id=widget_info(id,/parent)
  
 widget_control, id, event_pro=eventHandler
 widget_control, id, /managed

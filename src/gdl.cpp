@@ -35,6 +35,10 @@
 #endif
 #include <climits> // PATH_MAX
 
+#ifndef _WIN32
+#include <sys/resource.h> //rlimits to augment stack size (needed fot DICOM objects)
+#endif
+
 //#include <fenv.h>
 
 #include "str.hpp"
@@ -111,8 +115,24 @@ void AtExit()
   PurgeContainer(libProList);
 }
 
+#ifndef _WIN32
+void GDLSetLimits()
+{
+#define GDL_PREFERED_STACKSIZE 20480000 //20000*1024 OK for the time being
+struct rlimit* gdlstack=new struct rlimit;
+  int r=getrlimit(RLIMIT_STACK,gdlstack); 
+//  cerr <<"Current rlimit = "<<gdlstack->rlim_cur<<endl;
+//  cerr<<"Max rlimit = "<<  gdlstack->rlim_max<<endl;     
+  if (gdlstack->rlim_max > GDL_PREFERED_STACKSIZE ) gdlstack->rlim_cur=GDL_PREFERED_STACKSIZE;
+  r=setrlimit(RLIMIT_STACK,gdlstack);
+}
+#endif
+
 void InitGDL()
 {
+#ifndef _WIN32
+  GDLSetLimits();
+#endif
 #ifdef HAVE_LIBREADLINE
   // initialize readline (own version - not pythons one)
   // in includefirst.hpp readline is disabled for python_module
@@ -163,11 +183,13 @@ int main(int argc, char *argv[])
 
   // indicates if the user wants to see the welcome message
   bool quiet = false;
+  bool gdlde = false;
 
   // keeps a list of files to be executed after the startup file
   // and before entering the interactive mode
   vector<string> batch_files;
   string statement;
+  string pretendRelease;
 
   for( SizeT a=1; a< argc; ++a)
     {
@@ -179,6 +201,7 @@ int main(int argc, char *argv[])
 	  cout << "GDL options:" << endl;
 	  cout << "  --help (-h)        display this message" << endl;
 	  cout << "  --version (-V, -v) show version information" << endl;
+	  cout << "  --fakerelease X.y  pretend that !VERSION.RELEASE is X.y" << endl;
           cout << endl;
 	  cout << "IDL-compatible options:" << endl;
 	  cout << "  -arg value tells COMMAND_LINE_ARGS() to report" << endl;
@@ -254,6 +277,19 @@ int main(int argc, char *argv[])
         string(argv[a]) == "-vm" 
       )
         cerr << argv[0] << ": " << argv[a] << " option ignored." << endl;
+      else if (string(argv[a]) == "-gdlde")
+      {
+          gdlde = true;
+      }
+      else if (string(argv[a]) == "--fakerelease")
+      {
+        if (a == argc - 1)
+          {
+            cerr << "gdl: --fakerelease must be followed by a string argument like \"6.4\"" << endl;
+            return 0;
+          }
+        pretendRelease = string(argv[++a]);
+      }
       else if (*argv[a] == '-')
       {
         cerr << argv[0] << ": " << argv[a] << " option not recognized." << endl;
@@ -276,7 +312,7 @@ int main(int argc, char *argv[])
   // must be after !cpu initialisation
   InitOpenMP();
 
-  if( isatty(0) && !quiet) StartupMessage();
+  if (gdlde || (isatty(0) && !quiet)) StartupMessage();
 
   // instantiate the interpreter
   DInterpreter interpreter;
@@ -286,21 +322,23 @@ int main(int argc, char *argv[])
   if( gdlPath == "")
     {
       gdlPath = "+" GDLDATADIR "/lib";
-      if (isatty(0) && !quiet) cerr <<
+      if (gdlde || (isatty(0) && !quiet)) cerr <<
         "- Default library routine search path used (GDL_PATH/IDL_PATH env. var. not set): " << endl << 
         "  " << gdlPath << endl;
     }
   SysVar::SetGDLPath( gdlPath);
-
+  
+  if (!pretendRelease.empty()) SysVar::SetFakeRelease(pretendRelease);
+  
   string startup=GetEnvString("GDL_STARTUP");
   if( startup == "") startup=GetEnvString("IDL_STARTUP");
   if( startup == "")
     {
-      if (isatty(0) && !quiet) cerr << 
+      if (gdlde || (isatty(0) && !quiet)) cerr << 
         "- No startup file read (GDL_STARTUP/IDL_STARTUP env. var. not set). " << endl;
     }
 
-  if (isatty(0) && !quiet) 
+  if (gdlde || (isatty(0) && !quiet))
   {
     cerr << "- Please report bugs, feature or help requests and patches at:" << endl <<
       "  http://sourceforge.net/projects/gnudatalanguage/" << endl << endl;

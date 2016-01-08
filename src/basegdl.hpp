@@ -413,6 +413,8 @@ public:
   };
 
   enum Cal_IOMode {
+      WRITE=-2,
+      COMPUTE=-1,
       DEFAULT=0,
       CMOA,
       CMoA,
@@ -430,7 +432,8 @@ public:
       CdwA,
       CAPA,
       CApA,
-      CapA
+      CapA,
+      STRING
   };
   // FIRST VIRTUAL FUNCTION'S GDL_OBJ FILE CONTAINS ALSO THE VTABLE
   // therefore it must be defined non-inline (g++)
@@ -701,11 +704,12 @@ public:
   virtual SizeT OFmtI( std::ostream* os, SizeT offs, SizeT num, int width, 
 			int minN, char fill, BaseGDL::IOMode oM = DEC);
   virtual SizeT OFmtCal( std::ostream* os, SizeT offs, SizeT num, int width, 
-			int minN, char fill, BaseGDL::Cal_IOMode oM = DEFAULT);
+			 int minN, char *fill, BaseGDL::Cal_IOMode oM = DEFAULT);
   virtual SizeT IFmtA( std::istream* is, SizeT offset, SizeT num, int width);
   virtual SizeT IFmtF( std::istream* is, SizeT offs, SizeT num, int width);
   virtual SizeT IFmtI( std::istream* is, SizeT offs, SizeT num, int width, 
 			BaseGDL::IOMode oM = DEC);
+  virtual SizeT IFmtCal( std::istream* is, SizeT offs, SizeT r, int width, BaseGDL::Cal_IOMode cMode);
 
 #if defined(USE_PYTHON) || defined(PYTHON_MODULE)
 

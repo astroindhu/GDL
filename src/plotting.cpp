@@ -21,10 +21,9 @@
 
 #include <string>
 #include <fstream>
+#include <list>
 #include "envt.hpp"
 #include "dinterpreter.hpp"
-// PLplot is used for direct graphics
-#include <plplot/plstream.h>
 
 #include "initsysvar.hpp"
 #include "graphicsdevice.hpp"
@@ -140,7 +139,7 @@ namespace lib
     return absoluteMaxVal;
   }
 
-  template <typename T> void gdlDoRangeExtrema(T* xVal, T* yVal, DDouble &min, DDouble &max, DDouble xmin, DDouble xmax, bool doMinMax, DDouble minVal, DDouble maxVal)
+  void gdlDoRangeExtrema(DDoubleGDL *xVal, DDoubleGDL *yVal, DDouble &min, DDouble &max, DDouble xmin, DDouble xmax, bool doMinMax, DDouble minVal, DDouble maxVal)
   {
     DDouble valx, valy;
     SizeT i,k;
@@ -160,7 +159,6 @@ namespace lib
        k++;
     }
   }
-  template void gdlDoRangeExtrema(Data_<SpDDouble>*, Data_<SpDDouble>*, DDouble &, DDouble &, DDouble, DDouble, bool, DDouble, DDouble);
 
   void GetMinMaxVal(DDoubleGDL* val, double* minVal, double* maxVal)
   {
@@ -198,7 +196,7 @@ namespace lib
 
     DLong n=static_cast<DLong>(floor(log10(x/3.5)));
     DDouble y=(x/(3.5*pow(10., static_cast<double>(n))));
-    DLong m;
+    DLong m=0;
     if ( y>=1&&y<2 )
       m=1;
     else if ( y>=2&&y<5 )
@@ -220,7 +218,7 @@ namespace lib
 
     DLong n=static_cast<DLong>(floor(log10(x/2.82)));
     DDouble y=(x/(2.82*pow(10., static_cast<double>(n))));
-    DLong m;
+    DLong m=0;
     if ( y>=1&&y<2 )
       m=1;
     else if ( y>=2&&y<4.47 )
@@ -320,7 +318,7 @@ namespace lib
   // and "epsilon" is a coefficient if "extended range" is expected
   // input: linear min and max, output: linear min and max.
 
-  PLFLT AutoIntvAC(DDouble &start, DDouble &end, bool log)
+  PLFLT gdlAdjustAxisRange(DDouble &start, DDouble &end, bool log)
   {
     gdlHandleUnwantedAxisValue(start, end, log);
 
@@ -439,30 +437,6 @@ namespace lib
     if ((wquatre-wtrois)<0) UsymConvY*=-1.0;
     if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"GetUserSymSize(%f,%f)\n",a->wCharLength(),a->wCharHeight());
   }
-
-  void AdjustAxisOpts(string& xOpt, string& yOpt,
-                      DLong xStyle, DLong yStyle, DLong xTicks, DLong yTicks,
-                      string& xTickformat, string& yTickformat, DLong xLog, DLong yLog
-                      )
-  {
-    if ( (xStyle&8)==8 ) xOpt="b";
-    if ( (yStyle&8)==8 ) yOpt="b";
-
-    if ( xTicks==1 ) xOpt+="t";
-    else xOpt+="st";
-    if ( yTicks==1 ) yOpt+="tv";
-    else yOpt+="stv";
-
-    if ( xTickformat!="(A1)" ) xOpt+="n";
-    if ( yTickformat!="(A1)" ) yOpt+="n";
-
-    if ( xLog ) xOpt+="l";
-    if ( yLog ) yOpt+="l";
-
-    if ( (xStyle&4)==4 ) xOpt="";
-    if ( (yStyle&4)==4 ) yOpt="";
-  }
-
 
   void CheckMargin(EnvT* e, GDLGStream* actStream,
                    DFloat xMarginL,
@@ -618,6 +592,13 @@ namespace lib
     // Get !P.position default values
     static unsigned positionTag=SysVar::P()->Desc()->TagIndex("POSITION");
     for ( SizeT i=0; i<4; ++i ) positionP[i]=(PLFLT)(*static_cast<DFloatGDL*>(SysVar::P()->GetTag(positionTag, 0)))[i];
+
+    //compatibility: Position NEVER outside [0,1]:
+    positionP[0]=max(0.0,positionP[0]);
+    positionP[1]=max(0.0,positionP[1]);
+    positionP[2]=min(1.0,positionP[2]);
+    positionP[3]=min(1.0,positionP[3]);
+
     //check presence of DATA,DEVICE and NORMAL options
     if ( e->KeywordSet( "DATA")) coordinateSystem=DATA;
     if ( e->KeywordSet( "DEVICE")) coordinateSystem=DEVICE;
@@ -651,6 +632,13 @@ namespace lib
         position[2]=normx;
         position[3]=normy;
       }
+    }
+    if ( boxPosition!=(DFloatGDL*)0xF)
+    {    //compatibility again: Position NEVER outside [0,1]:
+      position[0]=max(0.0,position[0]);
+      position[1]=max(0.0,position[1]);
+      position[2]=min(1.0,position[2]);
+      position[3]=min(1.0,position[3]);
     }
 
     // New plot without POSITION=[] as argument
@@ -806,7 +794,15 @@ namespace lib
         actStream->DeviceToNormedDevice(position[2], position[3], normx, normy);
         position[2]=normx;
         position[3]=normy;
-      }
+     }
+    }
+    if ( boxPosition!=NULL && boxPosition!=(DFloatGDL*)0xF )
+    {
+       //compatibility again: Position NEVER outside [0,1]:
+      position[0]=max(0.0,position[0]);
+      position[1]=max(0.0,position[1]);
+      position[2]=min(1.0,position[2]);
+      position[3]=min(1.0,position[3]);
     }
     // Adjust Start and End for Log (convert to log)
     if ( boxPosition!=NULL ) //new box
@@ -1027,6 +1023,34 @@ namespace lib
     //    cout << *xStart <<" "<< *xEnd << " "<< *yStart <<" "<< *yEnd << ""<< endl;
   }
 
+  //This is the good way to get world start end end values.
+  void GetCurrentUserLimits(EnvT* e, GDLGStream *a, DDouble &xStart, DDouble &xEnd, DDouble &yStart, DDouble &yEnd)
+  {
+    DDouble *sx, *sy;
+    GetSFromPlotStructs( &sx, &sy );
+    
+    PLFLT x1,x2,y1,y2;
+    a->gvpd( x1, x2, y1, y2 );
+    xStart=(x1-sx[0])/sx[1];
+    xEnd=(x2-sx[0])/sx[1];
+    yStart=(y1-sy[0])/sy[1];
+    yEnd=(y2-sy[0])/sy[1];
+  //probably overkill now...
+    if ((yStart == yEnd) || (xStart == xEnd))
+      {
+        if (yStart != 0.0 && yStart == yEnd){
+          Message("PLOTS: !Y.CRANGE ERROR, setting to [0,1]");
+        yStart = 0;
+        yEnd = 1;
+        }
+        if (xStart != 0.0 && xStart == xEnd){
+          Message("PLOTS: !X.CRANGE ERROR, setting to [0,1]");
+        xStart = 0;
+        xEnd = 1;
+        }
+      }
+  }
+  
   void ac_histo(GDLGStream *a, int i_buff, PLFLT *x_buff, PLFLT *y_buff, bool xLog)
   {
     PLFLT x, x1, y, y1, val;
@@ -1176,10 +1200,24 @@ namespace lib
   }
 
 
-  //CORE PLOT FUNCTION -> Draws a line along xVal, yVal
+///
+/// Draws a line along xVal, yVal
+/// @param general environnement pointer 
+/// @param graphic stream 
+/// @param xVal pointer on DDoubleGDL x values
+/// @param yVal pointer on DDoubleGDL y values
+/// @param minVal DDouble min value to plot.
+/// @param maxVal DDouble max value to plot.
+/// @param doMinMax bool do we use minval & maxval above?
+/// @param xLog bool scale is log in x
+/// @param yLog bool scale is log in y
+/// @param psym DLong plotting symbol code
+/// @param append bool values must be drawn starting from last plotted value 
+/// @param color DLongGDL* pointer to color list (NULL if no use)
+///
 
-  template <typename T> bool draw_polyline(EnvT *e, GDLGStream *a,
-                                           T * xVal, T* yVal,
+  bool draw_polyline(EnvT *e, GDLGStream *a,
+                                           DDoubleGDL *xVal, DDoubleGDL *yVal,
                                            DDouble minVal, DDouble maxVal, bool doMinMax,
                                            bool xLog, bool yLog,
                                            DLong psym, bool append, DLongGDL *color)
@@ -1275,26 +1313,23 @@ namespace lib
     // if scalar y
     if ( yVal->N_Elements()==1&&yVal->Rank()==0 )
       minEl=xVal->N_Elements();
-//    bool mapSet=false;
-//#ifdef USE_LIBPROJ4
-//    // Map Stuff (xtype = 3)
-//    LPTYPE idata;
-//    XYTYPE odata;
-//
-//    get_mapset(mapSet);
-//
-//    DDouble xStart, xEnd;
-//    gdlGetCurrentAxisRange("X", xStart, xEnd);
-//
-//    if ( mapSet )
-//    {
-//      ref=map_init();
-//      if ( ref==NULL )
-//      {
-//        e->Throw("Projection initialization failed.");
-//      }
-//    }
-//#endif
+    bool mapSet=false;
+#ifdef USE_LIBPROJ4
+    // Map Stuff (xtype = 3)
+    LPTYPE idata;
+    XYTYPE odata;
+
+    get_mapset(mapSet);
+
+    if ( mapSet )
+    {
+      ref=map_init();
+      if ( ref==NULL )
+      {
+        e->Throw("Projection initialization failed.");
+      }
+    }
+#endif
 
     // is one of the 2 "arrays" a singleton or not ?
 
@@ -1322,9 +1357,6 @@ namespace lib
     PLFLT *x_buff=new PLFLT[GDL_POLYLINE_BUFFSIZE];
     PLFLT *y_buff=new PLFLT[GDL_POLYLINE_BUFFSIZE];
 
-    // flag to reset Buffer when a NaN or a Infinity are founded
-    int reset=0;
-
     bool isBad=FALSE;
 
     for ( SizeT i=0; i<minEl; ++i ) {
@@ -1344,21 +1376,21 @@ namespace lib
         if ( !flag_y_const ) y=static_cast<PLFLT>((*yVal)[i]);
         else y=y_ref;
       }
-//#ifdef USE_LIBPROJ4
-//      if ( mapSet&& !e->KeywordSet("NORMAL") )
-//      {
-//	    idata.u=x * DEG_TO_RAD;
-//        idata.v=y * DEG_TO_RAD;
-//        if ( i>0 )
-//        {
-//          xMapBefore=odata.u;
-//          yMapBefore=odata.v;
-//        }
-//        odata=PJ_FWD(idata, ref);
-//        x=odata.u;
-//        y=odata.v;
-//      }
-//#endif
+#ifdef USE_LIBPROJ4
+      if ( mapSet&& !e->KeywordSet("NORMAL") )
+      {
+	    idata.u=x * DEG_TO_RAD;
+        idata.v=y * DEG_TO_RAD;
+        if ( i>0 )
+        {
+          xMapBefore=odata.u;
+          yMapBefore=odata.v;
+        }
+        odata=PJ_FWD(idata, ref);
+        x=odata.u;
+        y=odata.v;
+      }
+#endif
       //note: here y is in minVal maxVal
       if ( doMinMax ) isBad=((y<minVal)||(y>maxVal));
       if ( xLog ) x=log10(x);
@@ -1366,7 +1398,6 @@ namespace lib
       isBad=(isBad||!isfinite(x)|| !isfinite(y)||isnan(x)||isnan(y));
       if ( isBad )
       {
-        reset=1;
         if ( i_buff>0 )
         {
           if ( line )
@@ -1414,30 +1445,6 @@ namespace lib
         continue;
       }
 
-//#ifdef USE_LIBPROJ4
-//      if ( mapSet&& !e->KeywordSet("NORMAL") ) //IS BROKEN FOR X/YLOG !!!!!!
-//      {
-//        if ( i>0 ) //;&& (i_buff >0))
-//        {
-//          x1=xMapBefore;
-//          if ( !isfinite(xMapBefore)|| !isfinite(yMapBefore) ) continue;
-//
-//          // Break "jumps" across maps (kludge!)
-//          if ( fabs(x-x1)>0.5*(xEnd-xStart) )
-//          {
-//            reset=1;
-//            if ( (i_buff>0)&&(line) )
-//            {
-//              a->line(i_buff, x_buff, y_buff);
-//              //		  x_buff[0]=x_buff[i_buff-1];
-//              //y_buff[0]=y_buff[i_buff-1];
-//              i_buff=0;
-//            }
-//            continue;
-//          }
-//        }
-//      }
-//#endif
       x_buff[i_buff]=x;
       y_buff[i_buff]=y;
       i_buff=i_buff+1;
@@ -1500,8 +1507,6 @@ namespace lib
     saveLastPoint(a, x, y);
     return (valid);
   }
-  // explicit instantiation for SpDDouble
-  template bool draw_polyline(EnvT*, GDLGStream*, Data_<SpDDouble>*, Data_<SpDDouble>*, DDouble, DDouble, bool, bool, bool, DLong, bool, DLongGDL*);
 
  
   //BACKGROUND COLOR
@@ -1517,7 +1522,7 @@ namespace lib
     DLong decomposed=GraphicsDevice::GetDevice()->GetDecomposed();
     a->Background(background,decomposed);
   }
-
+  
   //Very special usage only in plotting surface
   void gdlSetGraphicsPenColorToBackground(GDLGStream *a)
   {
@@ -1843,19 +1848,21 @@ namespace lib
 
   //CRANGE from struct
 
-  void gdlGetCurrentAxisRange(string axis, DDouble &Start, DDouble &End)
+  void gdlGetCurrentAxisRange(string axis, DDouble &Start, DDouble &End, bool checkMapset)
   {
     DStructGDL* Struct=NULL;
     if ( axis=="X" ) Struct=SysVar::X();
     if ( axis=="Y" ) Struct=SysVar::Y();
     if ( axis=="Z" ) Struct=SysVar::Z();
+    Start=0;
+    End=0;
     if ( Struct!=NULL )
     {
       int debug=0;
       if ( debug ) cout<<"Get     :"<<Start<<" "<<End<<endl;
       bool isProj;
       get_mapset(isProj);
-      if (isProj && axis!="Z") {
+      if (checkMapset && isProj && axis!="Z") {
         static DStructGDL* mapStruct=SysVar::Map();
         static unsigned uvboxTag=mapStruct->Desc()->TagIndex("UV_BOX");
         static DDoubleGDL *uvbox;
@@ -1868,19 +1875,35 @@ namespace lib
           End=(*uvbox)[3];
         }
       } else {
-      static unsigned crangeTag=Struct->Desc()->TagIndex("CRANGE");
-      Start=(*static_cast<DDoubleGDL*>(Struct->GetTag(crangeTag, 0)))[0];
-      End=(*static_cast<DDoubleGDL*>(Struct->GetTag(crangeTag, 0)))[1];
+        static unsigned crangeTag=Struct->Desc()->TagIndex("CRANGE");
+        Start=(*static_cast<DDoubleGDL*>(Struct->GetTag(crangeTag, 0)))[0];
+        End=(*static_cast<DDoubleGDL*>(Struct->GetTag(crangeTag, 0)))[1];
 
-      static unsigned typeTag=Struct->Desc()->TagIndex("TYPE");
-      if ( (*static_cast<DLongGDL*>(Struct->GetTag(typeTag, 0)))[0]==1 )
-      {
-        Start=pow(10., Start);
-        End=pow(10., End);
-        if ( debug ) cout<<"Get log :"<<Start<<" "<<End<<endl;
+        static unsigned typeTag=Struct->Desc()->TagIndex("TYPE");
+        if ( (*static_cast<DLongGDL*>(Struct->GetTag(typeTag, 0)))[0]==1 )
+        {
+          Start=pow(10., Start);
+          End=pow(10., End);
+          if ( debug ) cout<<"Get log :"<<Start<<" "<<End<<endl;
+        }
       }
     }
   }
+
+  void gdlGetCurrentAxisWindow(string axis, DDouble &wStart, DDouble &wEnd)
+  {
+    DStructGDL* Struct=NULL;
+    if ( axis=="X" ) Struct=SysVar::X();
+    if ( axis=="Y" ) Struct=SysVar::Y();
+    if ( axis=="Z" ) Struct=SysVar::Z();
+    wStart=0;
+    wEnd=0;
+    if ( Struct!=NULL )
+    {
+      static unsigned windowTag=Struct->Desc()->TagIndex("WINDOW");
+      wStart=(*static_cast<DFloatGDL*>(Struct->GetTag(windowTag, 0)))[0];
+      wEnd=(*static_cast<DFloatGDL*>(Struct->GetTag(windowTag, 0)))[1];
+    }
   }
 
   //Stores [XYZ].WINDOW, .REGION and .S
@@ -1901,7 +1924,7 @@ namespace lib
       (*static_cast<DFloatGDL*>(Struct->GetTag(regionTag, 0)))[0]=max(0.0,norm_min-m1*charDim);
       (*static_cast<DFloatGDL*>(Struct->GetTag(regionTag, 0)))[1]=min(1.0,norm_max+m2*charDim);
 
-      if ( log ) {Start=log10(Start); End=log10(End);}
+      //      if ( log ) {Start=log10(Start); End=log10(End);}
       static unsigned windowTag=Struct->Desc()->TagIndex("WINDOW");
       (*static_cast<DFloatGDL*>(Struct->GetTag(windowTag, 0)))[0]=norm_min;
       (*static_cast<DFloatGDL*>(Struct->GetTag(windowTag, 0)))[1]=norm_max;
@@ -2361,8 +2384,8 @@ namespace lib
 
     if (Z < 2299161) A = (PLINT)Z;
     else {
-      a = (int) ((Z - 1867216.25) / 36524.25);
-      A = (PLINT) (Z + 1 + a - (int)(a / 4));
+      a = (PLINT) ((Z - 1867216.25) / 36524.25);
+      A = (PLINT) (Z + 1 + a - (PLINT)(a / 4));
     }
 
     B = A + 1524;
@@ -2374,15 +2397,28 @@ namespace lib
     month = E < 14 ? E - 1 : E - 13;
     Month=theMonth[month-1];
     // day
-    Day=B - D - (int)(30.6001 * E);
+    Day=B - D - (PLINT)(30.6001 * E);
     // year
-    Year = month > 2 ? C - 4716 : C - 4715;
+    Year = month > 1 ? C - 4716 : C - 4715; //with a zero-based index
+    if (Year < 1 ) Year--; //No Year Zero
     // hours
     Hour = (PLINT) (F * 24);
-    F -= (double)Hour / 24;
+    { //this prevents interpreting 04:00:00 as 03:59:60 !
+      //this kind of rounding up is explained in IDL doc.
+      DDouble FF=F+6E-10;
+      PLINT test= (PLINT) (FF * 24);
+      if (test > Hour) {Hour=test;F=FF;}
+    }
+    F -= (DDouble)Hour / 24;
     // minutes
-    Minute = (int) (F * 1440);
-    F -= (double)Minute / 1440;
+    Minute = (PLINT) (F * 1440);
+    { //this prevents interpreting 04:00:00 as 03:59:60 !
+      //this kind of rounding up is explained in IDL doc.
+      DDouble FF=F+6E-10;
+      DLong test= (DLong) (FF * 1440);
+      if (test > Minute) {Minute=test;F=FF;}
+    }
+    F -= (DDouble)Minute / (DDouble)1440;
     // seconds
     Second = F * 86400;
   }
@@ -2477,13 +2513,10 @@ namespace lib
           BaseGDL* res = static_cast<DLibFun*>(newEnv->GetPro())->Fun()(newEnv);
           strcpy(label,(*static_cast<DStringGDL*>(res))[0].c_str()); 
         }
-        else if (((*ptr->TickFormat)[ptr->counter]).substr(0,10) == "LABEL_DATE")
-        { //special internal format, TBD
-          Warning("unsupported LABEL_DATE for TICKFORMAT (FIXME)");
-        }
         else // external function: if tickunits not specified, pass Axis (int), Index(int),Value(Double)
           //    else pass also Level(int)
           // Thanks to Marc for code snippet!
+          // NOTE: this encompasses the 'LABEL_DATE' format, an existing procedure in the IDL library.
         {
           EnvT *e=ptr->e;
           DString callF=(*ptr->TickFormat)[ptr->counter];
@@ -2616,40 +2649,46 @@ namespace lib
     gdlGetDesiredAxisTicks(e, axis, Ticks);
     DStringGDL* TickUnits;
     gdlGetDesiredAxisTickUnits(e, axis, TickUnits);
-    DDoubleGDL Tickv;
-    gdlGetDesiredAxisTickv(e, axis, &Tickv);
+//    DDoubleGDL *Tickv;
+//    gdlGetDesiredAxisTickv(e, axis, Tickv);
     DString Title;
     gdlGetDesiredAxisTitle(e, axis, Title);
+    
+    bool hasTickUnitDefined = (TickUnits->NBytes()>0);
+    int tickUnitArraySize=(hasTickUnitDefined)?TickUnits->N_Elements():0;
 
     if ( (Style&4)!=4 ) //if we write the axis...
     {
+      string Opt;
+      string otherOpt;
       if (TickInterval==0)
       {
         if (Ticks<=0) TickInterval=gdlComputeTickInterval(e, axis, Start, End, Log);
         else if (Ticks>1) TickInterval=(End-Start)/Ticks;
         else TickInterval=(End-Start);
       }
-      string Opt;
       //first write labels only:
       gdlSetAxisCharsize(e, a, axis);
       gdlSetPlotCharthick(e, a);
-      // axis legend if box style, else do not draw:
+      // axis legend if box style, else do not draw. Take care writing BELOW/ABOVE all axis if tickunits present:actStream->wCharHeight()
+      DDouble displacement=(tickUnitArraySize>1)?2.5*tickUnitArraySize:0;
       if (modifierCode==0 ||modifierCode==1)
       {
-        if (axis=="X") a->mtex("b", 3.5, 0.5, 0.5, Title.c_str());
-        else if (axis=="Y") a->mtex("l",5.0,0.5,0.5,Title.c_str());
+        if (axis=="X") a->mtex("b",3.5+displacement, 0.5, 0.5, Title.c_str());
+        else if (axis=="Y") a->mtex("l",5.0+displacement,0.5,0.5,Title.c_str());
       }
       else if (modifierCode==2)
       {
-        if (axis=="X") a->mtex("t", 3.5, 0.5, 0.5, Title.c_str());
-        else if (axis=="Y") a->mtex("r",5.0,0.5,0.5,Title.c_str());
+        if (axis=="X") a->mtex("t", 3.5+displacement, 0.5, 0.5, Title.c_str());
+        else if (axis=="Y") a->mtex("r",5.0+displacement,0.5,0.5,Title.c_str());
       }
       //axis, 1st time: labels
-      Opt="tvx";// the x option is in plplot 5.9.8 but not before. It permits
+      Opt="tvx";otherOpt="tv"; //draw major ticks "t" + v:values perp to Y axis + x:
+      // the x option is in plplot 5.9.8 but not before. It permits
                 // to avoid writing tick marks here (they will be written after)
                 // I hope old plplots were clever enough to ignore 'x'
                 // if they did not understand 'x'
-      if ( Log ) Opt+="l";
+      if ( Log ) Opt+="l"; //"l" for log; otherOpt is never in log I believe
       if (TickName->NBytes()>0) // /TICKNAME=[array]
       {
         data.counter=0;
@@ -2666,7 +2705,8 @@ namespace lib
         a->slabelfunc( NULL, NULL );
 #endif
       }
-      else if (TickUnits->NBytes()>0) // /TICKUNITS=[several types of axes written below each other]
+      //care Tickunits size is 10 if not defined because it is the size of !X.TICKUNITS.
+      else if (hasTickUnitDefined) // /TICKUNITS=[several types of axes written below each other]
       {
         muaxdata.counter=0;
         muaxdata.what=GDL_TICKUNITS;
@@ -2677,14 +2717,15 @@ namespace lib
           muaxdata.nTickFormat=TickFormat->N_Elements();
         }
         muaxdata.TickUnits=TickUnits;
-        muaxdata.nTickUnits=TickUnits->N_Elements();
+        muaxdata.nTickUnits=tickUnitArraySize;
 #if (HAVE_PLPLOT_SLABELFUNC)
         a->slabelfunc( gdlMultiAxisTickFunc, &muaxdata );
-        Opt+="o";
+        Opt+="o";otherOpt+="o"; //use external func custom labeling
 #endif
-        if (modifierCode==2) Opt+="m"; else Opt+="n";
+        if (modifierCode==2) {Opt+="m"; otherOpt+="m";} else {Opt+="n"; otherOpt+="n";} //m: write numerical/right above, n: below/left (normal)
         for (SizeT i=0; i< muaxdata.nTickUnits; ++i) //loop on TICKUNITS axis
         {
+          if (i>0) Opt=otherOpt+"bc"; //supplementary axes are to be wwritten with ticks, no smallticks;
           PLFLT un,deux,trois,quatre,xun,xdeux,xtrois,xquatre;
           a->plstream::gvpd(un,deux,trois,quatre);
           a->plstream::gvpw(xun,xdeux,xtrois,xquatre);
@@ -2810,14 +2851,17 @@ namespace lib
 
  bool gdlAxis3(EnvT *e, GDLGStream *a, string axis, DDouble Start, DDouble End, bool Log, DLong zAxisCode, DDouble NormedLength)
   {
-    //exit if nothing to do...
     string addCode="b"; //for X and Y, and some Z
     if(zAxisCode==1 || zAxisCode==4) addCode="cm";
-    if(zAxisCode==-1) return true;
+    bool doZ=(zAxisCode>=0);
 
     //
     static GDL_TICKNAMEDATA data;
     static GDL_MULTIAXISTICKDATA muaxdata;
+
+    static GDL_TICKDATA tdata;
+    tdata.isLog=Log;
+
     data.nTickName=0;
     muaxdata.e=e;
     muaxdata.what=GDL_NONE;
@@ -2862,11 +2906,13 @@ namespace lib
     gdlGetDesiredAxisTicks(e, axis, Ticks);
     DStringGDL* TickUnits;
     gdlGetDesiredAxisTickUnits(e, axis, TickUnits);
-    DDoubleGDL* Tickv;
-    gdlGetDesiredAxisTickv(e, axis, Tickv);
+//    DDoubleGDL* Tickv;
+//    gdlGetDesiredAxisTickv(e, axis, Tickv);
     DString Title;
     gdlGetDesiredAxisTitle(e, axis, Title);
 
+    bool hasTickUnitDefined = (TickUnits->NBytes()>0);
+    int tickUnitArraySize=(hasTickUnitDefined)?TickUnits->N_Elements():0;
     if ( (Style&4)!=4 ) //if we write the axis...
     {
       if (TickInterval==0)
@@ -2879,14 +2925,14 @@ namespace lib
       //first write labels only:
       gdlSetAxisCharsize(e, a, axis);
       gdlSetPlotCharthick(e, a);
-      // axis legend if box style, else do not draw:
-      Opt="u";
+      // axis legend if box style, else do not draw. Take care writing BELOW/ABOVE all axis if tickunits present:actStream->wCharHeight()
+      DDouble displacement=(tickUnitArraySize>1)?2.5*tickUnitArraySize:0;
 
-      if      (axis=="X") a->box3(Opt.c_str(), Title.c_str() , 0.0, 0, "", "", 0.0, 0, "", "", 0.0, 0);
-      else if (axis=="Y") a->box3("", "", 0.0 ,0, Opt.c_str(), Title.c_str(), 0.0, 0, "", "", 0.0, 0);
-      else if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), Title.c_str(), 0.0, 0);
-
-
+      //no option to care of placement of Z axis???
+      if (axis=="X") a->mtex3("xp",3.5+displacement, 0.5, 0.5, Title.c_str());
+      else if (axis=="Y") a->mtex3("yp",5.0+displacement,0.5,0.5,Title.c_str());
+      else if (doZ) a->mtex3("zp",5.0+displacement,0.5,0.5,Title.c_str());
+      
       //axis, 1st time: labels
       Opt=addCode+"nst"; //will write labels beside the left hand axis (u) at major ticks (n)
       if ( Log ) Opt+="l";
@@ -2901,7 +2947,41 @@ namespace lib
 #endif
         if      (axis=="X") a->box3(Opt.c_str(), "" , TickInterval, Minor, "", "", 0.0, 0, "", "", 0.0, 0);
         else if (axis=="Y") a->box3("", "", 0.0 ,0.0, Opt.c_str(),"", TickInterval, Minor, "", "", 0.0, 0);
-        else if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
+        else if (doZ) if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
+#if (HAVE_PLPLOT_SLABELFUNC)
+        a->slabelfunc( NULL, NULL );
+#endif
+      }
+      //care Tickunits size is 10 if not defined because it is the size of !X.TICKUNITS.
+      else if (hasTickUnitDefined) // /TICKUNITS=[several types of axes written below each other]
+      {
+        muaxdata.counter=0;
+        muaxdata.what=GDL_TICKUNITS;
+        if (TickFormat->NBytes()>0)  // with also TICKFORMAT option..
+        {
+          muaxdata.what=GDL_TICKFORMAT_AND_UNITS;
+          muaxdata.TickFormat=TickFormat;
+          muaxdata.nTickFormat=TickFormat->N_Elements();
+        }
+        muaxdata.TickUnits=TickUnits;
+        muaxdata.nTickUnits=tickUnitArraySize;
+#if (HAVE_PLPLOT_SLABELFUNC)
+        a->slabelfunc( gdlMultiAxisTickFunc, &muaxdata );
+        Opt+="o";
+#endif
+        for (SizeT i=0; i< muaxdata.nTickUnits; ++i) //loop on TICKUNITS axis
+        {
+// no equivalent in 3d yet...
+//          PLFLT un,deux,trois,quatre,xun,xdeux,xtrois,xquatre;
+//          a->plstream::gvpd(un,deux,trois,quatre);
+//          a->plstream::gvpw(xun,xdeux,xtrois,xquatre);
+            if      (axis=="X") a->box3(Opt.c_str(), "", TickInterval, Minor, "", "", 0.0, 0, "", "", 0.0, 0);
+            else if (axis=="Y") a->box3("", "", 0.0 ,0.0, Opt.c_str(),"", TickInterval, Minor, "", "", 0.0, 0);
+            else if (doZ) if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
+//          a->plstream::vpor(un,deux,trois,quatre);
+//          a->plstream::wind(xun,xdeux,xtrois,xquatre);
+            muaxdata.counter++;
+        }
 #if (HAVE_PLPLOT_SLABELFUNC)
         a->slabelfunc( NULL, NULL );
 #endif
@@ -2918,17 +2998,24 @@ namespace lib
 #endif
         if      (axis=="X") a->box3(Opt.c_str(), "", TickInterval, Minor, "", "", 0.0, 0, "", "", 0.0, 0);
         else if (axis=="Y") a->box3("", "", 0.0 ,0.0, Opt.c_str(),"", TickInterval, Minor, "", "", 0.0, 0);
-        else if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
-
-#if (HAVE_PLPLOT_SLABELFUNC)
+        else if (doZ) if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
+        
+#if (HAVE_PLPLOT_SLABELFUNC)        
         a->slabelfunc( NULL, NULL );
 #endif
       }
       else
       {
+#if (HAVE_PLPLOT_SLABELFUNC)
+        a->slabelfunc( doOurOwnFormat, &tdata );
+        Opt+="o";
+#endif
         if      (axis=="X") a->box3(Opt.c_str(), "", TickInterval, Minor, "", "", 0.0, 0, "", "", 0.0, 0);
         else if (axis=="Y") a->box3("", "", 0.0 ,0.0, Opt.c_str(),"", TickInterval, Minor, "", "", 0.0, 0);
-        else if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
+        else if (doZ) if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
+#if (HAVE_PLPLOT_SLABELFUNC)
+        a->slabelfunc( NULL, NULL );
+#endif
       }
 
       if (TickLayout==0)
@@ -2937,9 +3024,13 @@ namespace lib
         a->smin((PLFLT)OtherAxisSizeInMm/2.0,1.0); //idem min (plplt defaults)
         //thick for box and ticks.
         a->Thick(Thick);
+        
         //ticks or grid eventually with style and length:
         if (abs(TickLen)<1e-6) Opt=""; else Opt="st"; //remove ticks if ticklen=0
         if (TickLen<0) {Opt+="i"; TickLen=-TickLen;}
+        
+        //no modifier code...
+        
         bool bloatsmall=(TickLen<0.3);
         //gridstyle applies here:
         gdlLineStyle(a,GridStyle);
@@ -2948,7 +3039,7 @@ namespace lib
         if ( Log ) Opt+="l";
         if      (axis=="X") a->box3(Opt.c_str(), "", TickInterval, Minor, "", "", 0.0, 0, "", "", 0.0, 0);
         else if (axis=="Y") a->box3("", "", 0.0 ,0.0, Opt.c_str(),"", TickInterval, Minor, "", "", 0.0, 0);
-        else if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
+        else if (doZ) if (axis=="Z") a->box3("", "", 0.0, 0, "", "", 0.0, 0, Opt.c_str(), "", TickInterval, Minor);
         //reset ticks to default plplot value...
         a->smaj( 3.0, 1.0 );
         a->smin( 1.5, 1.0 );
@@ -2958,7 +3049,7 @@ namespace lib
         Opt="b";
         if      (axis=="X") a->box3(Opt.c_str(), "", TickInterval, Minor, "","",0,0,"","",0,0);
         else if (axis=="Y") a->box3("","",0,0, Opt.c_str(), "", TickInterval, Minor, "","",0,0);
-        else if (axis=="Z") a->box3("","",0,0,"","",0,0, Opt.c_str(), "", TickInterval, Minor);
+        else if (doZ) if (axis=="Z") a->box3("","",0,0,"","",0,0, Opt.c_str(), "", TickInterval, Minor);
       }
       //reset charsize & thick
       a->Thick(1.0);
@@ -3404,9 +3495,17 @@ namespace lib
 }
 
 static DDouble bad=sqrt(-1);
+  
+inline DDouble DistanceOnSphere(DDouble x, DDouble y, DDouble z, DDouble px, DDouble py, DDouble pz)
+{
+  DDouble dotp=x*px+y*py+z*pz;
+  DDouble crossp=sqrt((y*pz-z*py)*(y*pz-z*py) + (z*px-x*pz)*(z*px-x*pz) + (x*py-y*px)*(x*py-y*px)) ;
+  return atan2(crossp,dotp);
+}
 
 #define PROJEPSILON 1E-6
-  //plane-vector intersection 
+  //plane-vector intersection. Problem is: we cannot afford (x1,y1,z1) or (x2,y2,z2) to be exactly on the plane.
+//in this case, the result, within the numerical error, can be on the "wrong" side. 
   inline void OnSphereVectorPlaneIntersection(DDouble x1,DDouble y1,DDouble z1,DDouble x2,DDouble y2,
   DDouble z2,DDouble u,DDouble v,DDouble w,DDouble h,
   DDouble &x, DDouble &y, DDouble &z, DDouble incr=0.0){
@@ -3414,8 +3513,10 @@ static DDouble bad=sqrt(-1);
     DDouble b=y2-y1;
     DDouble c=z2-z1;
     DDouble t=u*a+v*b+w*c;
-    if (abs(t)<PROJEPSILON) {x=bad; y=bad; z=bad; return;}
     t=(-h-u*x1-v*y1-w*z1)/t;
+    if (!isfinite(t)) {x=x1; y=y1; z=z1; return;}
+    if ((t+incr)<PROJEPSILON) {x=x1; y=y1; z=z1; return;}
+    if ((t+incr)>(1.0-PROJEPSILON)) {x=x2; y=y2; z=z2; return;}
     x=a*(t+incr)+x1;
     y=b*(t+incr)+y1;
     z=c*(t+incr)+z1;
@@ -3446,20 +3547,88 @@ DStructGDL *GetMapAsMapStructureKeyword(EnvT *e, bool &externalmap)
     }
     return map;
 }
+#define error 5E-7 //approx 0.1 arc sec
+#define epsilon 1E-2
+#define HALFPI 2*(double)(atan(1.0))
+#define DELTA  (double)(0.5*DEG_TO_RAD) //0.5 degree for increment between stitch vertexes.
 
+struct Vertex {
+  DDouble x;
+  DDouble y;
+};
+
+//struct Range {
+//  DDouble xmin;
+//  DDouble xmax;
+//  DDouble ymin;
+//  DDouble ymax;
+//};
+struct Polygon {
+  std::list<Vertex> VertexList;
+  int type; //+1 before cut, -1 after cut
+  int index; //keep cut index
+  DDouble cutDistAtStart; //cut distance for reordering
+  DDouble cutDistAtEnd; //cut distance for reordering
+ };
+ bool OrderPolygonsAfter(const Polygon& first, const Polygon & second){
+   return (first.cutDistAtStart < second.cutDistAtStart);
+ }
+ bool OrderPolygonsBefore(const Polygon& first, const Polygon & second){
+   return (first.cutDistAtEnd < second.cutDistAtEnd);
+ }
+ 
+ bool IsPolygonInsideBefore(const Polygon * first, const Polygon * second){ //is second inside first?
+   cerr<<first->cutDistAtEnd/DEG_TO_RAD<<"<="<< second->cutDistAtEnd/DEG_TO_RAD<<"? && "<<first->cutDistAtStart/DEG_TO_RAD<<" >= "<<second->cutDistAtStart/DEG_TO_RAD<<"?";
+   bool ret = (first->cutDistAtEnd <= second->cutDistAtEnd && first->cutDistAtStart >= second->cutDistAtStart);
+   return ret;
+ }
+  bool IsPolygonInsideAfter(const Polygon * first, const Polygon * second){ //is second inside first?
+   cerr<<first->cutDistAtStart/DEG_TO_RAD<<"<="<< second->cutDistAtStart/DEG_TO_RAD<<"? && "<<first->cutDistAtEnd/DEG_TO_RAD<<" >= "<<second->cutDistAtEnd/DEG_TO_RAD<<"?";
+   bool ret = (first->cutDistAtStart <= second->cutDistAtStart && first->cutDistAtEnd >= second->cutDistAtEnd);
+   return ret;
+ }
+ 
+ void StitchOnePolygonOnGreatCircle(Polygon *p, bool invert=FALSE){
+  DDouble x, y, z, xs, ys, zs, xe, ye, ze;
+    Vertex *start=new Vertex (invert?p->VertexList.back():p->VertexList.front());
+    xs = cos( start->x ) * cos( start->y );
+    ys = sin( start->x ) * cos( start->y);
+    zs = sin( start->y );
+    Vertex *end=new Vertex (invert?p->VertexList.front():p->VertexList.back());
+    xe = cos( end->x ) * cos( end->y );
+    ye = sin( end->x ) * cos( end->y );
+    ze = sin( end->y );
+    DDouble dist=DistanceOnSphere( xs, ys, zs, xe, ye, ze);
+    int nvertex=abs(dist/DELTA);
+    if (nvertex > 0) {
+      DDouble dx=(xe-xs)/nvertex;
+      DDouble dy=(ye-ys)/nvertex;
+      DDouble dz=(ze-zs)/nvertex;
+      for (int k=0; k<nvertex; k++) {
+        Vertex *stitch=new Vertex;
+        x=xe-k*dx;
+        y=ye-k*dy;
+        z=ze-k*dz;
+        DDouble norm=sqrt(x*x+y*y+z*z);
+        x/=norm;y/=norm;z/=norm;
+        stitch->x=atan2( y, x );
+        stitch->y=asin( z ); 
+        p->VertexList.push_back(*stitch); 
+      }
+    }
+    p->VertexList.push_back(*start); //close contour
+}
 DDoubleGDL* gdlProjForward(PROJTYPE ref, DStructGDL* map, DDoubleGDL *lonsIn, DDoubleGDL *latsIn, DLongGDL *connIn,
 bool doConn, DLongGDL *&gonsOut, bool doGons, DLongGDL *&linesOut, bool doLines, bool const doFill ) {
 
-//rule: we do not change input values, we copy them.
-  
-  //DATA MUST BE IN RADIANS
+//DATA MUST BE IN RADIANS
 #ifdef USE_LIBPROJ4
   LPTYPE idata;
   XYTYPE odata;
 #endif
   
   unsigned pTag = map->Desc( )->TagIndex( "PIPELINE" );
-  DDoubleGDL* pipeline = (static_cast<DDoubleGDL*> (map->GetTag( pTag, 0 )));
+  DDoubleGDL* pipeline = (static_cast<DDoubleGDL*> (map->GetTag( pTag, 0 ))->Dup());
   DLong dims[2];
 
   enum {
@@ -3468,11 +3637,16 @@ bool doConn, DLongGDL *&gonsOut, bool doGons, DLongGDL *&linesOut, bool doLines,
     CLIP_PLANE,
     TRANSFORM,
     CLIP_UV
-  } action;
+  };
   
   dims[0] = pipeline->Dim( 0 );
   dims[1] = pipeline->Dim( 1 );
   int line = 0;
+//if pipeline is void, a TRANSFORM will be applied anyway.This test is just for that.
+  bool PerformTransform=(pipeline->Sum()==0);
+  if (PerformTransform) (*pipeline)[0]=TRANSFORM; //just change value of pipeline (which is a copy)
+  bool fill=(doFill||doGons);
+  
   int icode = (*pipeline)[dims[0] * line + 0];
   DDouble a = (*pipeline)[dims[0] * line + 1]; //plane a,b,c,d
   DDouble b = (*pipeline)[dims[0] * line + 2];
@@ -3481,18 +3655,16 @@ bool doConn, DLongGDL *&gonsOut, bool doGons, DLongGDL *&linesOut, bool doLines,
   DDouble px = (*pipeline)[dims[0] * line + 5]; //pole x,y,z
   DDouble py = (*pipeline)[dims[0] * line + 6];
   DDouble pz = (*pipeline)[dims[0] * line + 7];
-  DDouble x, y, z, before, after, xs, ys, zs, xe, ye, ze, x1, y1, z1, x2, y2, z2;
-  SizeT out,nOut, nEl, iconn, nConn, lastConn;
+  DDouble x, y, z, before, after, xs, ys, zs, xe, ye, ze, xcut, ycut, zcut;
   OMPInt in;
   DDoubleGDL *lons;
   DDoubleGDL *lats;
-  DLongGDL *currentConn,*nextConn,*tmpConn;
-  DDoubleGDL *oldLons;
-  DDoubleGDL *oldLats;
+  DLongGDL *currentConn;
+  bool isVisible;
   //interpolations for GONS on cuts is every 2.5 degrees.
   //Gons takes precedence on Lines
-
-  nEl=lonsIn->N_Elements();
+  
+  SizeT nEl=lonsIn->N_Elements();
   //if connectivity does not exist, fake a simple one
   if (!doConn) {
     currentConn=new DLongGDL( dimension( nEl+1 ), BaseGDL::INDGEN);
@@ -3505,183 +3677,377 @@ bool doConn, DLongGDL *&gonsOut, bool doGons, DLongGDL *&linesOut, bool doLines,
   //copy Input
   lons=lonsIn->Dup();
   lats=latsIn->Dup();
-  int pass=0;
+
+
+  //convert to lists
   SizeT index;
   SizeT size;
   SizeT start;
-  SizeT k,chunksize,ichunk;
-  bool isVisible;
+  SizeT k;
+
+  std::list<Polygon> PolygonList;
+  //explore conn and construct polygon list
+  index=0;
+  SizeT num=0;   
+  while(index >= 0 && index < currentConn->N_Elements() ) {
+    size=(*currentConn)[index];
+    if (size<0) break;
+    if (size>0) {
+      Polygon currentPol;
+      start=index+1; //start new chunk...
+      num++;
+      std::list<Vertex> currentVertexList;
+
+      k=(*currentConn)[start+0];
+      Vertex currstart;
+      currstart.x=(*lons)[k];
+      currstart.y=(*lats)[k];
+      currentVertexList.push_back(currstart);
+      for ( in = 1; in < size; in++ ) {
+        k=(*currentConn)[start+in]; //conn is a list of indexes...
+        Vertex curr;
+        curr.x=(*lons)[k];
+        curr.y=(*lats)[k];
+        currentVertexList.push_back(curr);
+      }
+      if (fill) {
+        Vertex last=currentVertexList.back();
+        if ( !((last.x-currstart.x == 0.0) && (last.y-currstart.y == 0.0)) ) {//close polygon.
+         Vertex curr;
+         curr.x=currstart.x;
+         curr.y=currstart.y;
+         currentVertexList.push_back(curr);
+        }
+      }
+      currentPol.VertexList=currentVertexList;
+      currentPol.type=1; //before cut
+      PolygonList.push_back(currentPol);
+    }
+    index+=(size+1); 
+  }
+  GDLDelete(lons);
+  GDLDelete(lats);
+  GDLDelete(currentConn);
+
+  std::list<Polygon> newPolygonList;
+  std::list<Polygon> tmpPolygonList;
   while ( icode > 0 ) {
     switch ( icode ) {
       case SPLIT:
-      case CLIP_PLANE:
-        pass++;
-        //explore conn; for each segment, work inside the segment and determine the needed output sizes.
-        index=0;
-        nOut=0;
-        nConn=0;
-        //fprintf( stderr, "\npass%d lon=%d conn=%d, ",pass,lons->N_Elements( ), currentConn->N_Elements());
-
-        while(index >= 0 && index < currentConn->N_Elements() ) {
-          size=(*currentConn)[index];
-          if (size<0) break;
-          start=index+1; //start new chunk...
-          nConn++; nConn++;
-          k=(*currentConn)[start+0];
-          x = cos( (*lons)[k] ) * cos( (*lats)[k] );
-          y = sin( (*lons)[k] ) * cos( (*lats)[k] );
-          z = sin( (*lats)[k] );
-          before = a * x + b * y + c * z + d;
-          isVisible = ( before > 0.0  || icode == SPLIT ); //use isVisible only for CLIP_PLANE
-          nOut++;
-          for ( in = 1; in < size; in++ ) {
-            k=(*currentConn)[start+in]; //conn is a list of indexes...
-            x = cos( (*lons)[k] ) * cos( (*lats)[k] );
-            y = sin( (*lons)[k] ) * cos( (*lats)[k] );
-            z = sin( (*lats)[k] );
-            after = a * x + b * y + c * z + d;
-            if ( before * after < 0.0 ) {
-              nOut += 2; //two more points
-              if (doGons) nConn += 3; else nConn += 3;  //on more for size---> need to close polygons TODO!!!
-            }
-            nOut++; 
-            nConn++;
-            before = after;
-          }
-          index+=(size+1); 
-        }
-        //fprintf( stderr, "end: found lon=%d conn=%d...",nOut,nConn);
-        //2nd pass, cut if necessary.
-        if (true) {//nOut > nEl ) { //switch lons,lats,lines,gons with new ones
-          //fprintf( stderr, "(replace)\n",nOut,nConn);
-          oldLons = lons;
-          oldLats = lats;
-          lons = new DDoubleGDL( nOut, BaseGDL::NOZERO );
-          lats = new DDoubleGDL( nOut, BaseGDL::NOZERO );
-          nextConn = new DLongGDL( nConn, BaseGDL::NOZERO );
-          in = 0;
-          out = 0;
-          iconn = -1;
+        if ( PolygonList.empty() ) break;
+        for (std::list<Polygon>::iterator p=PolygonList.begin(); p != PolygonList.end(); p++) {
+          
+          //cut current polygon, copy in a new polygon list the cuts
+          Polygon * currentPol;
           index=0;
-          ichunk=0;
-          while(index >= 0 && index < currentConn->N_Elements() ) {
-            size=(*currentConn)[index];
-            if (size<0) break;
-            start=index+1;
-            ichunk++;
-            k=(*currentConn)[start+0];
+          std::list<Vertex> * currentVertexList;
+          Vertex *curr;
 
-            iconn++;  (*nextConn)[iconn] = -1; lastConn=iconn;  chunksize=0;
-            
-            //fprintf( stderr, "\nchunk %d size %d starts at %d with %d at %d, running index in lon: %d\n", ichunk, size, start,(*nextConn)[lastConn],lastConn,k);
-
-            xs = cos( (*oldLons)[k] ) * cos( (*oldLats)[k] );
-            ys = sin( (*oldLons)[k] ) * cos( (*oldLats)[k] );
-            zs = sin( (*oldLats)[k] );
+          std::list<Vertex>::iterator v=(*p).VertexList.begin();
+          xs = cos( (*v).x ) * cos( (*v).y );
+          ys = sin( (*v).x ) * cos( (*v).y );
+          zs = sin( (*v).y );
+          before = a * xs + b * ys + c * zs + d;
+          if (abs(before)<error) { //avoid starting in the dead zone epsilon around cut plane. 
+                                   //Due to rounding errors, we do not know where we start.
+            xs-=2*error; //move a tiny bit xs
+            ys-=2*error; //move a tiny bit xs
+            zs-=2*error; //move a tiny bit xs
             before = a * xs + b * ys + c * zs + d;
-
-            isVisible = ( before > 0.0  || icode == SPLIT ); //use isVisible only for CLIP_PLANE
-            
-            if (isVisible) {(*lons)[out] = (*oldLons)[k]; (*lats)[out] = (*oldLats)[k];} 
-            else {(*lons)[out]=bad;(*lats)[out] =bad;}
-            
-            iconn++; (*nextConn)[iconn] = out; out++; chunksize++;
-            
-            //fprintf( stderr, "[%d", (*nextConn)[iconn]);
-
-            for ( in = 1; in < size; in++) {
-              k=(*currentConn)[start+in]; //conn is a list of indexes...
-              
-              xe = cos( (*oldLons)[k] ) * cos( (*oldLats)[k] );
-              ye = sin( (*oldLons)[k] ) * cos( (*oldLats)[k] );
-              ze = sin( (*oldLats)[k] );
-              after = a * xe + b * ye + c * ze + d;
-
-              if ( before * after < 0.0 ) { //insert two or more points
-                //find intersection epsilon before  
-                OnSphereVectorPlaneIntersection( xs, ys, zs, xe, ye, ze, a, b, c, d , x, y, z, -0.001 );
-                if (isVisible) (*lons)[out] = atan2( y, x ); else (*lons)[out] = bad;
-                if (isVisible) (*lats)[out] = asin( z ); else (*lats)[out] = bad;
-                iconn++;  (*nextConn)[iconn] = out;   out++; chunksize++;
-                
-                if (icode == CLIP_PLANE ) isVisible = !isVisible;
-                
-                //fprintf( stderr, ",%d", (*nextConn)[iconn]);
-                //fprintf( stderr, "]; %d->", (*nextConn)[lastConn]);
-                (*nextConn)[lastConn] = chunksize; //give back total of points
-                //fprintf( stderr, "%d\n", (*nextConn)[lastConn]);
-              
-                chunksize=0; //reset chunksize
-                iconn++; lastConn=iconn;(*nextConn)[iconn]=-1;
-                
-                //fprintf( stderr, "next at index %d says %d", lastConn, (*nextConn)[lastConn]);
-              
-                OnSphereVectorPlaneIntersection( xs, ys, zs, xe, ye, ze, a, b, c, d, x, y, z, +0.001 );
-                if (isVisible) (*lons)[out] = atan2( y, x ); else (*lons)[out] = bad;
-                if (isVisible) (*lats)[out] = asin( z ); else (*lats)[out] = bad;
-                iconn++; (*nextConn)[iconn] = out; out++; chunksize++;
-              
-                //fprintf( stderr, "[%d", (*nextConn)[iconn]);
-              }
-              
-              if (isVisible) {(*lons)[out] = (*oldLons)[k]; (*lats)[out] = (*oldLats)[k];} 
-              else {(*lons)[out] = bad; (*lats)[out] = bad;}
-              iconn++;  (*nextConn)[iconn] = out; out++; chunksize++;
-
-              //fprintf( stderr, ",%d", (*nextConn)[iconn]);
-            
-              before = after;
-              xs=xe;ys=ye;zs=ze;
-            }
-            //fprintf( stderr, "]; end chunk; %d->", (*nextConn)[lastConn]);
-            (*nextConn)[lastConn] = chunksize; //give back total of points
-            //fprintf( stderr, "%d\n -last written conn index: %d of %d", (*nextConn)[lastConn],iconn,nextConn->N_Elements());
-            index+=(size+1); 
+            (*v).x= atan2( ys, xs );
+            (*v).y = asin( zs );
           }
-          //switch connexions...
-          tmpConn=currentConn;
-          currentConn=nextConn;
-          GDLDelete(tmpConn);
+
+          currentPol=new Polygon;
+          currentPol->type=(*p).type; //inherit type at start
+          currentPol->index=index;
+          currentVertexList = new std::list<Vertex>;
+          curr = new Vertex;
+          curr->x=(*v).x;
+          curr->y=(*v).y;
+          currentVertexList->push_back(*curr); delete curr;
+          for (v++; v != (*p).VertexList.end(); v++)
+          {
+            xe = cos( (*v).x ) * cos( (*v).y );
+            ye = sin( (*v).x ) * cos( (*v).y );
+            ze = sin( (*v).y );
+            after = a * xe + b * ye + c * ze + d;
+            if (abs(after)<error) { //avoid starting in the dead zone epsilon around cut plane. 
+                                     //Due to rounding errors, we do not know where we start.
+              xe-=2*error; //move a tiny bit xs
+              ye-=2*error; //move a tiny bit xs
+              ze-=2*error; //move a tiny bit xs
+              after = a * xe + b * ye + c * ze + d;
+              (*v).x= atan2( ye, xe );
+              (*v).y = asin( ze );
+            }             
+            if ( before * after < 0.0 ) { //cut and start a new polygon
+              //find intersection epsilon before  
+              OnSphereVectorPlaneIntersection( xs, ys, zs, xe, ye, ze, a, b, c, d , x, y, z, -epsilon );
+              if (fill || DistanceOnSphere( x, y, z, px, py, pz) > HALFPI) { //need to cut everywhere for current dumb(?) polygon filling 
+                curr = new Vertex;
+                curr->x=atan2( y, x );
+                curr->y=asin( z );
+                currentVertexList->push_back(*curr); delete curr;
+                //end of current Pol. Memorize cut position of first cut for cut ordering if filling occurs:
+                if (index==0) {xcut=x; ycut=y; zcut=z;}
+                currentPol->VertexList=(*currentVertexList);
+                int newtype=-1*currentPol->type;
+
+                tmpPolygonList.push_back(*currentPol); delete currentPol;
+                
+                //find intersection epsilon after
+                OnSphereVectorPlaneIntersection( xs, ys, zs, xe, ye, ze, a, b, c, d, x, y, z, +epsilon );
+
+                //create a new polygon list
+                currentPol=new Polygon;
+                index++;
+                currentPol->type=newtype; //inherit type at start
+                currentPol->index=index;
+                currentVertexList = new std::list<Vertex>;
+                curr = new Vertex;
+                curr->x=atan2( y, x );
+                curr->y=asin( z );
+                currentVertexList->push_back(*curr);
+              } 
+            }
+            curr = new Vertex;
+            curr->x=(*v).x;
+            curr->y=(*v).y;
+            currentVertexList->push_back(*curr);
+            before = after;
+            xs=xe;ys=ye;zs=ze; 
+          }
+          currentPol->VertexList=(*currentVertexList);
+          tmpPolygonList.push_back(*currentPol); delete currentPol;
+          
+          //tmpPolygonList contains the current polygon, splitted. It must be stitched if filling occurs.
+          //level-0 filling consist in adding last portion at beginning of first one 
+          if (fill && tmpPolygonList.size() > 1) {
+            std::list<Polygon>::iterator beg=tmpPolygonList.begin();
+            std::list<Polygon>::reverse_iterator end=tmpPolygonList.rbegin();
+            (*beg).VertexList.splice((*beg).VertexList.begin(),(*end).VertexList); //concatenate
+//            (*end).type=1;
+            tmpPolygonList.pop_back();
+          }
+        
+          if (fill && tmpPolygonList.size() > 1) { // else already stitched!
+            //stitch polygons. "West" are the polygons on the side of the first polygon. East on the other side;
+            //polygons are 1 2 3 4 .. N. 1..N is sorted relatively with distance from (nearest?) pole .
+            //all polygons are closed on themselves following an arc of meridian sampled every 1 degree.
+            
+            //a) compute distances from first cut, start & end:
+            for (std::list<Polygon>::iterator p=tmpPolygonList.begin(); p != tmpPolygonList.end(); p++) {
+              Vertex v = (*p).VertexList.front();
+              x = cos( v.x ) * cos( v.y );
+              y = sin( v.x ) * cos( v.y );
+              z = sin( v.y );              
+              (*p).cutDistAtStart=DistanceOnSphere(xcut, ycut, zcut,  x, y, z ); 
+//              (*p).cutDistAtStart=v.y; 
+              v = (*p).VertexList.back();
+              x = cos( v.x ) * cos( v.y );
+              y = sin( v.x ) * cos( v.y );
+              z = sin( v.y );              
+              (*p).cutDistAtEnd=DistanceOnSphere(xcut, ycut, zcut,  x, y, z ); 
+//              (*p).cutDistAtEnd=v.y; 
+            }
+            //b) zero index, it will serve anew after.
+            for (std::list<Polygon>::iterator p=tmpPolygonList.begin(); p != tmpPolygonList.end(); p++) (*p).index=0;
+
+            //c) now produce 2 lists: before and after cut
+            std::list<Polygon> beforePolygonList;
+            std::list<Polygon> afterPolygonList;
+            for (std::list<Polygon>::iterator p=tmpPolygonList.begin(); p != tmpPolygonList.end(); p++) {
+              if ((*p).type==1) {
+                beforePolygonList.push_back((*p)); //on side of first vertex.
+              } else {
+                afterPolygonList.push_back((*p)); //on side of first vertex.
+              }
+            }
+            tmpPolygonList.clear();
+
+            //d) sort the 2 lists by increasing distance from first cut position:
+            beforePolygonList.sort(OrderPolygonsBefore);
+            afterPolygonList.sort(OrderPolygonsAfter);
+
+              //e) compute a complexity number: number of polygons surrounding the polygon. replaces index which is not useful anymore.
+              cerr<<"Before"<<endl;
+              for (std::list<Polygon>::iterator p=beforePolygonList.begin(); p != beforePolygonList.end(); p++) {
+                Polygon * pi=&(*p);
+                for (std::list<Polygon>::iterator q=beforePolygonList.begin(); q != beforePolygonList.end(); q++) { 
+                  Polygon * pj=&(*q);
+                  bool isin=IsPolygonInsideBefore(pj,pi);
+                  if (isin) pi->index+=1;
+                }
+              }
+              for (std::list<Polygon>::iterator p=beforePolygonList.begin(); p != beforePolygonList.end(); p++) cerr<<"("<<(*p).type<<","<<(*p).index<<"),"; cerr<<endl;
+
+              cerr<<"After"<<endl;
+              for (std::list<Polygon>::iterator p=afterPolygonList.begin(); p != afterPolygonList.end(); p++) {
+                Polygon * pi=&(*p);
+                for (std::list<Polygon>::iterator q=afterPolygonList.begin(); q != afterPolygonList.end(); q++) { 
+                  Polygon * pj=&(*q);
+                  bool isin=IsPolygonInsideAfter(pj,pi);
+                  if (isin) pi->index+=1;
+                }
+              }
+
+              for (std::list<Polygon>::iterator p=afterPolygonList.begin(); p != afterPolygonList.end(); p++) cerr<<"("<<(*p).type<<","<<(*p).index<<"),"; cerr<<endl;
+
+//              //stitch end to start:
+              for (std::list<Polygon>::iterator q=beforePolygonList.begin(); q != beforePolygonList.end(); q++) {
+                Polygon * p=&(*q);
+                if (p->index==1) {
+                  StitchOnePolygonOnGreatCircle(p);
+                  //add closed polygon to end of newPolygonList
+                  newPolygonList.push_back(*q);
+                } 
+                //code below must be changed! WORK IN PROGRESS
+                else {
+                  StitchOnePolygonOnGreatCircle(p);
+                  //add closed polygon to end of newPolygonList
+                  newPolygonList.push_back(*q);
+                }
+              }
+//               
+              for (std::list<Polygon>::iterator q=afterPolygonList.begin(); q != afterPolygonList.end(); q++) {
+                Polygon * p=&(*q);
+                if (p->index==1) {
+                  StitchOnePolygonOnGreatCircle(p);
+                  //add closed polygon to end of newPolygonList
+                  newPolygonList.push_back(*q);
+                } 
+                //code below must be changed! WORK IN PROGRESS
+                else {
+                  StitchOnePolygonOnGreatCircle(p);
+                  //add closed polygon to end of newPolygonList
+                  newPolygonList.push_back(*q);
+                }
+              }
+
+              beforePolygonList.clear();
+              afterPolygonList.clear();
+              
+            
+          } else {
+            //just add tmpPolygonList content to end of newPolygonList
+            newPolygonList.splice(newPolygonList.end(),tmpPolygonList);
+            //clear tmp (normally should be empty!)
+            tmpPolygonList.clear();
+          }
         }
+        //end of all the input list of polygons, newPolygonList contains cut and stitched polygons:
+        //exchange new & old contents and void new
+        PolygonList.swap(newPolygonList);
+        newPolygonList.clear();
+
+        //Should remove empty polygons: TODO
+        break;
+      case CLIP_PLANE:
+        if ( PolygonList.empty() ) break;
+
+        //copy & cut...
+        for (std::list<Polygon>::iterator p=PolygonList.begin(); p != PolygonList.end(); p++) {
+          Polygon * currentPol;
+          std::list<Vertex> * currentVertexList;
+          Vertex *curr;
+
+          std::list<Vertex>::iterator v=(*p).VertexList.begin();
+          xs = cos( (*v).x ) * cos( (*v).y );
+          ys = sin( (*v).x ) * cos( (*v).y );
+          zs = sin( (*v).y );
+          before = a * xs + b * ys + c * zs + d;
+          isVisible = ( before >= 0.0 );
+          if (isVisible) {
+            currentPol=new Polygon;
+            currentVertexList = new std::list<Vertex>;
+            curr = new Vertex;
+            curr->x=(*v).x;
+            curr->y=(*v).y;
+            currentVertexList->push_back(*curr); delete curr;
+          }
+          for (v++; v != (*p).VertexList.end(); v++)
+          {
+            xe = cos( (*v).x ) * cos( (*v).y );
+            ye = sin( (*v).x ) * cos( (*v).y );
+            ze = sin( (*v).y );
+            after = a * xe + b * ye + c * ze + d;
+
+            if ( before * after < 0.0 ) { //cut and start a new polygon
+              //find intersection epsilon before  
+              OnSphereVectorPlaneIntersection( xs, ys, zs, xe, ye, ze, a, b, c, d , x, y, z, -epsilon );
+              if (isVisible) {
+                curr = new Vertex;
+                curr->x=atan2( y, x );
+                curr->y=asin( z );
+                currentVertexList->push_back(*curr); delete curr;
+                //end of current Pol.
+                currentPol->VertexList=(*currentVertexList);
+                newPolygonList.push_back(*currentPol); delete currentPol;
+              }
+              isVisible=!isVisible;
+
+              //find intersection epsilon after
+              OnSphereVectorPlaneIntersection( xs, ys, zs, xe, ye, ze, a, b, c, d, x, y, z, +epsilon );
+
+              if (isVisible) {
+                //create a new polygon list
+                currentPol=new Polygon;
+                currentVertexList = new std::list<Vertex>;
+                curr = new Vertex;
+                curr->x=atan2( y, x );
+                curr->y=asin( z );
+                currentVertexList->push_back(*curr); delete curr;
+              }
+            }
+            if (isVisible) {
+              curr = new Vertex;
+              curr->x=(*v).x;
+              curr->y=(*v).y;
+              currentVertexList->push_back(*curr); delete curr;
+            }
+            before = after;
+            xs=xe;ys=ye;zs=ze; 
+          }
+          if (isVisible) {
+            currentPol->VertexList=(*currentVertexList);
+            newPolygonList.push_back(*currentPol); delete currentPol;
+          }
+        }
+        //exchange new & old contents and void new
+        if ( newPolygonList.empty() ) PolygonList.clear(); else  PolygonList.swap(newPolygonList); 
+        newPolygonList.clear();          
+
         break;
       case TRANSFORM:
+        if ( PolygonList.empty() ) break;
+
 #ifdef USE_LIBPROJ4
-        nEl = lons->N_Elements( );
-#ifdef PROJ_IS_THREADSAFE
-#pragma omp parallel if (nEl >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= nEl))
-    {
-#pragma omp for
-#endif
-        for ( in = 0; in < nEl; in++ ) {
-          idata.u = (*lons)[in];
-          idata.v = (*lats)[in];
-          odata = PJ_FWD( idata, ref );
-          (*lons)[in] = odata.u;
-          (*lats)[in] = odata.v;
-        }
-#ifdef PROJ_IS_THREADSAFE
-    }
-#endif
+       for (std::list<Polygon>::iterator p=PolygonList.begin(); p != PolygonList.end(); p++) {
+         for (std::list<Vertex>::iterator v=(*p).VertexList.begin(); v != (*p).VertexList.end(); v++) {
+           idata.u = (*v).x;
+           idata.v = (*v).y;
+           odata = PJ_FWD( idata, ref );
+           (*v).x = odata.u;
+           (*v).y = odata.v;
+         }
+       }
 #endif   //USE_LIBPROJ4 
         break;
       case CLIP_UV:
-        nEl = lons->N_Elements( );
-#pragma omp parallel if (nEl >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= nEl))
-      {
-  #pragma omp for
-            for ( in = 0; in < nEl; in++ ) { //use abcd, here  Umin, Vmin, Umax, Vmax
-            if (finite((*lons)[in]*(*lats)[in])) if ( (*lons)[in] < a || (*lons)[in] > c || (*lats)[in] < b || (*lats)[in] > d ) {
-              (*lons)[in] = sqrt( -1.0 );
-              (*lats)[in] = sqrt( -1.0 );
-            }
+        if ( PolygonList.empty() ) break;
+//NO NO NO you must interpolate from outside to inside box!
+        for (std::list<Polygon>::iterator p=PolygonList.begin(); p != PolygonList.end(); p++) {
+          for (std::list<Vertex>::iterator v=(*p).VertexList.begin(); v != (*p).VertexList.end(); v++) {
+            if (isfinite((*v).x*(*v).y)) if ( (*v).x < a-epsilon || (*v).x > c+epsilon || (*v).y < b-epsilon || (*v).y > d+epsilon ) {
+              (*v).x = bad;
+              (*v).y = bad;
+            } 
           }
-      }
+        }
         break;
       default:
         continue;
-//        fprintf( stderr, "BUG in map_pipeline, please report!\n" );
-//        for ( SizeT i = 1; i < dims[0]; ++i ) fprintf( stderr, "%f, ", (*pipeline)[dims[0] * line + i] );
-//        fprintf( stderr, "\n" );
     }
     line++;
     icode = (*pipeline)[dims[0] * line + 0];
@@ -3693,7 +4059,40 @@ bool doConn, DLongGDL *&gonsOut, bool doGons, DLongGDL *&linesOut, bool doLines,
     py = (*pipeline)[dims[0] * line + 6];
     pz = (*pipeline)[dims[0] * line + 7];
   }
-  
+
+  //recreate lons, lats, gons, ..
+  if ( PolygonList.empty() ) {
+    if (doGons) gonsOut=new DLongGDL(-1); else linesOut=new DLongGDL(-1);
+    return new DDoubleGDL(-1);
+  }
+
+  //size
+  SizeT nelem=0;
+  SizeT ngons=0;
+
+  for (std::list<Polygon>::iterator p=PolygonList.begin(); p != PolygonList.end(); p++) {
+    if ((*p).VertexList.size()>0) {
+      ngons++;
+      ngons+=(*p).VertexList.size();
+      nelem+=(*p).VertexList.size();
+    }
+  }
+  lons = new DDoubleGDL( nelem, BaseGDL::NOZERO );
+  lats = new DDoubleGDL( nelem, BaseGDL::NOZERO );
+  currentConn = new DLongGDL( ngons, BaseGDL::NOZERO );    
+  SizeT i=0;
+  SizeT j=0;
+  for (std::list<Polygon>::iterator p=PolygonList.begin(); p != PolygonList.end(); p++) {
+    if ((*p).VertexList.size()>0) {
+      (*currentConn)[j++]=(*p).VertexList.size();
+      for (std::list<Vertex>::iterator v=(*p).VertexList.begin(); v != (*p).VertexList.end(); v++,i++) {
+        (*lons)[i]=(*v).x;
+        (*lats)[i]=(*v).y;
+        (*currentConn)[j++]=i;
+      }
+    }
+  }
+
   nEl = lons->N_Elements( ); 
   DLong odims[2];
   odims[0] = 2;
@@ -3716,22 +4115,14 @@ bool doConn, DLongGDL *&gonsOut, bool doGons, DLongGDL *&linesOut, bool doLines,
   } else  GDLDelete(currentConn);
   return res;
 }
+  
 
-///
-/// Performs all projections and clips defined in a !map.pipeline structure on a vector of lons and lats.
-/// eventually with connectivity 'conn'. Depending on doFill, fill or plot the vectors.
-/// @param general environnement pointer 
-/// @param graphic stream 
-/// @param ref pointer on proj.4 opaque projection
-/// @param map pointer to a DStructGDL of type !MAP (can be null, the internal !MAP is used)
-/// @param lons pointer on DDouble longitude-type values
-/// @param lats pointer on DDouble latitude-type values
-/// @param isRadians bool false if lon/lat are not in radians (performs conversion to radians)
-/// @param doFill const bool if output u,v path has to be filled.
-/// @param conn pointer to a DLongGDL connectivity list (can be null)
-///
-  void GDLgrProjectedPolygonPlot( EnvT* e, GDLGStream * a, PROJTYPE ref, DStructGDL* map,
-  DDoubleGDL *lons, DDoubleGDL *lats, bool isRadians, bool const doFill, DLongGDL *conn ) {
+void GDLgrProjectedPolygonPlot( EnvT* e, GDLGStream * a, PROJTYPE ref, DStructGDL* map,
+  DDoubleGDL *lons_donottouch, DDoubleGDL *lats_donottouch, bool isRadians, bool const doFill, DLongGDL *conn ) {
+    DDoubleGDL *lons,*lats;
+    lons=lons_donottouch->Dup();
+    lats=lats_donottouch->Dup();
+
     DStructGDL* localMap = map;
     if (localMap==NULL) localMap=SysVar::Map( );
     bool mapSet; 
@@ -3750,8 +4141,9 @@ bool doConn, DLongGDL *&gonsOut, bool doGons, DLongGDL *&linesOut, bool doLines,
       }
     }
     DDoubleGDL *res = gdlProjForward( ref, localMap, lons, lats, conn, doConn, gons, doFill, lines, !doFill, false );
-    res = static_cast<DDoubleGDL*> (static_cast<BaseGDL*> (res)->Transpose( NULL ));
     SizeT nout = res->N_Elements( ) / 2;
+    if (nout < 1) {GDLDelete(res); return;} //projection clipped totally these values.
+    res = static_cast<DDoubleGDL*> (static_cast<BaseGDL*> (res)->Transpose( NULL ));
     int minpoly;
     if ( doFill ) {
       conn = gons;

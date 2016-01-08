@@ -14,7 +14,7 @@ cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
 project(GDL)
 
 # X.X.X CVS becomes release X.X.X+1
-set(VERSION "0.9.5 CVS")
+set(VERSION "0.9.6")
 enable_testing()
 
 include(CheckIncludeFile)
@@ -63,6 +63,8 @@ set(PNGLIBDIR "" CACHE PATH "GDL: Specify the libpng directory tree")
 set(GRIB OFF CACHE BOOL "GDL: Enable Grib ?")
 set(GRIBDIR "" CACHE PATH "GDL: Specifiy the GRIB directory tree")
 
+set(QHULL OFF CACHE BOOL "GDL: Enable Qhull ?")
+set(QHULLDIR "" CACHE PATH "GDL: Specifiy the QHULL directory tree")
 
 set(MAGICK ON CACHE BOOL "GDL: Enable ImageMagick ?")
 set(MAGICKDIR "" CACHE PATH "GDL: Specifiy the ImageMagick directory tree")
@@ -96,7 +98,9 @@ set(PYTHONVERSION "" CACHE STRING "GDL: Specify the Python version to use")
 set(GSHHS ON CACHE BOOL "GDL: Enable GSHHS ?")
 set(GSHHSDIR "" CACHE PATH "GDL: Specifiy the GSHHS directory tree")
 
-set(NCURSESDIR "" CACHE PATH "GDL: Specify the ncurses (or curses) directory tree")
+if(NOT WIN32)
+  set(NCURSESDIR "" CACHE PATH "GDL: Specify the ncurses (or curses) directory tree")
+endif(NOT WIN32)
 
 set(OPENMP ON CACHE BOOL "GDL: Enable OpenMP ?")
 
@@ -174,22 +178,8 @@ check_include_file(mpi.h HAVE_MPI_H)
 #     version of antlr in system-wide directories
 include_directories(src)
 
-if(WIN32 AND NOT CYGWIN)
-	# For Win32 find Pdcureses instead of (N)Curses
-	# -DPDCURSESDIR=DIR
-	set(CMAKE_PREFIX_PATH ${PDCURSESDIR})
-	find_package(Pdcurses)
-	if(PDCURSES_FOUND)
-		set(LIBRARIES ${LIBRARIES} ${PDCURSES_LIBRARIES})
-		include_directories(${PDCURSES_INCLUDE_DIR})
-		set(HAVE_LIBPDCURSES 1)
-	else(PDCURSES_FOUND)
-		message("${PDCURSES_LIBRARIES}\n${PDCURSES_LIBRARY}\n${PDCURSES_INCLUDE_DIR}\n")
-		message(FATAL_ERROR "PDCurses was not found.\n"
-			"Use -DPDCURSESDIR=DIR to specify the curses directory tree.\n")
-	endif(PDCURSES_FOUND)
-else(WIN32 AND NOT CYGWIN)
-	# Ncurses MANDATORY
+if (NOT WIN32)
+	# Ncurses MANDATORY for readline on POSIX
 	# -DNCURSESDIR=DIR
 	set(CMAKE_PREFIX_PATH ${NCURSESDIR})	
 	set(CURSES_NEED_NCURSES TRUE)
@@ -213,18 +203,20 @@ else(WIN32 AND NOT CYGWIN)
 				"(suitable Debian/Ubuntu package: libncurses-dev)\n")
 		endif(CURSES_FOUND)
 	endif(CURSES_FOUND)
-endif(WIN32 AND NOT CYGWIN)
+endif (NOT WIN32)
 
 # Readline
 # -DREADLINE=ON|OFF
 # -DREADLINEDIR=DIR
 if(READLINE)
-	# readline needs (n)curses
 	set(CMAKE_PREFIX_PATH ${READLINEDIR})
 	find_package(Readline QUIET)
 	set(HAVE_LIBREADLINE ${READLINE_FOUND})
 	if(READLINE_FOUND)
-		set(CMAKE_REQUIRED_LIBRARIES ${CURSES_LIBRARIES})
+    if(NOT WIN32)
+     	# readline needs (n)curses (not on Windows)
+ 		  set(CMAKE_REQUIRED_LIBRARIES ${CURSES_LIBRARIES})
+    endif(NOT WIN32)
 		check_library_exists("${READLINE_LIBRARIES}" rl_get_screen_size "" RL_GET_SCREEN_SIZE)
 		if(NOT RL_GET_SCREEN_SIZE)
 			message(STATUS "WARNING: Older GNU readline without rl_get_screen_size was found.\n"
@@ -283,11 +275,13 @@ if(OPENMP)
 	find_package(OpenMP QUIET)
 	if(OPENMP_FOUND)
 		add_definitions(${OpenMP_CXX_FLAGS})
-		if(WIN32 AND NOT CYGWIN)
+		if(MSVC)
 			set(LIBRARIES ${LIBRARIES} vcomp)
-		else(WIN32 AND NOT CYGWIN)
+		elseif(WIN32)
+      set(LIBRARIES ${LIBRARIES} gomp pthread)
+    else()
 			set(LIBRARIES ${LIBRARIES} ${OpenMP_CXX_FLAGS})
-		endif(WIN32 AND NOT CYGWIN)
+		endif()
 	endif(OPENMP_FOUND)
 else(OPENMP)
   # we need to define those semaphore posix symbols, do it with threads libs
@@ -372,20 +366,22 @@ if(PLPLOT_FOUND)
 	endif(HAVE_PLPLOT_SLABELFUNC)
 	set(CMAKE_REQUIRED_INCLUDES "${PLPLOT_INCLUDE_DIR}")
 	set(CMAKE_REQUIRED_LIBRARIES "${PLPLOT_LIBRARIES}")
+
 #the following does not work with clang (???)
-#	check_cxx_source_compiles("
-##include <plplot/plstream.h>
-#int main(int argc, char **argv) {
-#  plstream *p = new plstream();
-#  PLFLT w = 0.5;
-#  p->width(w);
-#}" HAVE_PLPLOT_WIDTH)
+	check_cxx_source_compiles("#include <plplot/plstream.h>
+                                    int main(int argc, char **argv) {
+                                      plstream *p = new plstream();
+                                      PLFLT w = 0.5;
+                                      p->width(w);
+                                    }" HAVE_PLPLOT_WIDTH)
 
 #give it a 2nd try...
-	 check_library_exists("${PLPLOT_LIBRARIES}" c_plwidth "" HAVE_PLPLOT_WIDTH)
-	if(HAVE_PLPLOT_WIDTH)
-	  set(HAVE_PLPLOT_WIDTH 1)
-	endif(HAVE_PLPLOT_WIDTH)
+        if(NOT HAVE_PLPLOT_WIDTH)
+	    check_library_exists("${PLPLOT_LIBRARIES}" c_plwidth "" HAVE_PLPLOT_WIDTH)
+            if(HAVE_PLPLOT_WIDTH)
+              set(HAVE_PLPLOT_WIDTH 1)
+            endif(HAVE_PLPLOT_WIDTH)
+        endif(NOT HAVE_PLPLOT_WIDTH)
 	check_library_exists("${PLPLOT_LIBRARIES}" plstrl "" PLPLOT_PRIVATE_NOT_HIDDEN)
 	if(PLPLOT_PRIVATE_NOT_HIDDEN)
 	  set(PLPLOT_PRIVATE_NOT_HIDDEN 1)
@@ -398,17 +394,20 @@ if(PLPLOT_FOUND)
 	else(PLPLOT_HAS_LEGEND)
 	  message(STATUS "Your plplot lib is too old for some gdl functions, please upgrade.")
 	endif(PLPLOT_HAS_LEGEND)
+	check_cxx_source_compiles("#include <plplot/plstream.h>
+				   main(){PLINT n; PLFLT x,y;plcallback::fill(n,&x,&y);}" PLPLOT_HAS_PLCALLBACK)
+	if(PLPLOT_HAS_PLCALLBACK)
+	  set(PLPLOT_HAS_PLCALLBACK 1)
+	endif(PLPLOT_HAS_PLCALLBACK)
 endif(PLPLOT_FOUND)
 	
-# GRAPHICSMAGICK is an alternative to the classical ImageMagick Lib.
+# GraphicsMagick (GM) is an alternative to the classical ImageMagick Lib (IM).
+# It was experienced that GM was more stable in time than IM
 #
 # -DGRAPHICSMAGICK=ON|OFF
 # -DGRAPHICSMAGICKDIR=DIR
+#
 if(GRAPHICSMAGICK)
-	if (MAGICK_FOUND)
-	   message("We prefer to use GraphicsMagick than ImageMagick")
-	   set(MAGICK off)
-	endif(MAGICK_FOUND)
 	set(CMAKE_PREFIX_PATH ${GRAPHICSMAGICKDIR})
 	find_package(GraphicsMagick QUIET)
 	set(USE_MAGICK ${GRAPHICSMAGICK_FOUND})
@@ -427,47 +426,21 @@ if(GRAPHICSMAGICK)
 	endif(GRAPHICSMAGICK_FOUND)
 endif(GRAPHICSMAGICK)
 
+#
+# if GM found, we do not look for IM
+#
+
 if(GRAPHICSMAGICK_FOUND)
-	set(MAGICK OFF)
+	if (MAGICK)
+	   message(STATUS "INFO: We prefer to use GraphicsMagick than ImageMagick")
+	   set(MAGICK OFF)
+        endif(MAGICK)
 endif(GRAPHICSMAGICK_FOUND)
 
-if(MAGICK) # support Magick
-	check_library_exists("${PLPLOT_LIBRARIES}" plGetDrvDir "" HAVE_PLGETDRVDIR)
-	if(HAVE_PLGETDRVDIR)
-		message(STATUS "WARNING: Dynamic drivers may have to be disabled in plplot.\n"
-		"To make plplot work with ImageMagick:\n"
-		"use -DENABLE_DYNDRIVERS=OFF cmake option when compiling plplot or\n"
-		"use -DMAGICK=OFF here to not use ImageMagick in GDL.")
-	endif(HAVE_PLGETDRVDIR)
-endif(MAGICK)
-
-# wxWdigets
-# -DWXWIDGET=ON|OFF
-# -DWXWIDGETDIR=DIR
-set(wxWidgets_USE_DEBUG OFF) # Use release build
-if(WXWIDGETS)
-	set(CMAKE_PREFIX_PATH ${WXWIDGETSDIR})
-	find_package(wxWidgets QUIET REQUIRED base core adv)
-	set(HAVE_LIBWXWIDGETS ${wxWidgets_FOUND})
-	if(wxWidgets_FOUND)
-		set(LIBRARIES ${LIBRARIES} ${wxWidgets_LIBRARIES})
-		set(LINK_DIRECTORIES ${LINK_DIRECTORIES} ${wxWidgets_LIBRARY_DIRS})
-		foreach(WXDEF ${wxWidgets_DEFINITIONS})
-			add_definitions(-D${WXDEF})
-		endforeach(WXDEF ${wxWidgets_DEFINITIONS})
-		include_directories(${wxWidgets_INCLUDE_DIRS})
-	else(wxWidgets_FOUND)
-		message(FATAL_ERROR "wxWidgets are required but were not found.\n"
-		"Use -DWXWIDGETSDIR=DIR to specify the wxWidgets directory tree.\n"
-		"Use -DWXWIDGETS=OFF to not use it.\n"
-                "(suitable Debian/Ubuntu package: libwxgtk2.8-dev)\n"
-                "(suitable Fedora package: wxGTK-devel)")
-	endif(wxWidgets_FOUND)
-endif(WXWIDGETS)
-
-# Magick
+# ImageMagick
 # -DMAGICK=ON|OFF
 # -DMAGICKDIR=DIR
+
 if(MAGICK)
 	set(CMAKE_PREFIX_PATH ${MAGICKDIR})
 	find_package(ImageMagick QUIET COMPONENTS Magick++ MagickWand MagickCore)
@@ -497,6 +470,52 @@ if(MAGICK)
                 "(suitable Fedora package: ImageMagick-c++-devel)")
 	endif(ImageMagick_FOUND)
 endif(MAGICK)
+
+# if GM or IM activated, we check whether Plplot is OK for that
+if(USE_MAGICK AND NOT WIN32)
+	check_library_exists("${PLPLOT_LIBRARIES}" plGetDrvDir "" HAVE_PLGETDRVDIR)
+	if(HAVE_PLGETDRVDIR)
+		message(STATUS "WARNING: Dynamic drivers may have to be disabled in plplot.\n"
+		"To make plplot work with ImageMagick:\n"
+		"use -DENABLE_DYNDRIVERS=OFF cmake option when compiling plplot or\n"
+		"use -DMAGICK=OFF here to not use ImageMagick in GDL.")
+	endif(HAVE_PLGETDRVDIR)
+endif(USE_MAGICK AND NOT WIN32)
+
+# wxWidgets
+# -DWXWIDGETS=ON|OFF
+# -DWXWIDGETSDIR=DIR
+set(wxWidgets_USE_DEBUG OFF) # Use release build
+if(WXWIDGETS)
+	#
+	# we check whether plplot was compiled within wxwidgets
+	#
+# AC 2015/04/07 this is not working well, just on few cases :( 
+#	check_library_exists("${PLPLOT_LIBRARIES}" plD_DEVICE_INFO_wxwidgets "" HAVE_PLPLOT_WXWIDGETS)
+#	if(NOT HAVE_PLPLOT_WXWIDGETS)
+#	       message(FATAL_ERROR  "wxWidgets are required but PLplot wxWidgets NOT found.\n"
+#	       "If -DWXWIDGETS=ON (default) then PLplot must have be compiled with -DPLD_wxwidgets=ON\n"
+#	       "use -DWXWIDGETS=OFF to not use wxWidgets since it is not available here in PLplot")
+#        endif(NOT HAVE_PLPLOT_WXWIDGETS)
+	#
+	set(CMAKE_PREFIX_PATH ${WXWIDGETSDIR})
+	find_package(wxWidgets COMPONENTS base core adv)
+	set(HAVE_LIBWXWIDGETS ${wxWidgets_FOUND})
+	if(wxWidgets_FOUND)
+		set(LIBRARIES ${LIBRARIES} ${wxWidgets_LIBRARIES})
+		set(LINK_DIRECTORIES ${LINK_DIRECTORIES} ${wxWidgets_LIBRARY_DIRS})
+		foreach(WXDEF ${wxWidgets_DEFINITIONS})
+			add_definitions(-D${WXDEF})
+		endforeach(WXDEF ${wxWidgets_DEFINITIONS})
+		include_directories(${wxWidgets_INCLUDE_DIRS})
+	else(wxWidgets_FOUND)
+		message(FATAL_ERROR "wxWidgets are required but were not found.\n"
+		"Use -DWXWIDGETSDIR=DIR to specify the wxWidgets directory tree.\n"
+		"Use -DWXWIDGETS=OFF to not use it.\n"
+                "(suitable Debian/Ubuntu package: libwxgtk2.8-dev)\n"
+                "(suitable Fedora package: wxGTK-devel)")
+	endif(wxWidgets_FOUND)
+endif(WXWIDGETS)
 
 # netCDF
 # -DNETCDF=ON|OFF
@@ -771,18 +790,28 @@ endif(UDUNITS)
 # -DEIGEN3=ON|OFF
 # -DEIGEN3DIR=DIR
 if(EIGEN3)
-	set(CMAKE_PREFIX_PATH ${EIGEN3DIR})
-	find_package(Eigen3 QUIET)
+      set(CMAKE_PREFIX_PATH ${EIGEN3DIR})
+      find_package(Eigen3 3.2.4 QUIET)
+      if(EIGEN3_TOO_OLD)
+	# on iCore 3/5/7 we must have Eigen >=3.2.4 to avoid fatal error in "test_matrix_multiply.pro"
+	message(FATAL_ERROR "\nEIGEN3 is required but the version found is TOO OLD."
+	  " Please download a recent version (>=3.2.4) in a local directory."
+	  " Then use -DEIGEN3DIR=DIR to specify the Eigen3 local directory tree.\n")
+      else(EIGEN3_TOO_OLD)	 
 	set(USE_EIGEN ${EIGEN3_FOUND})
 	if(EIGEN3_FOUND)
-		include_directories(${EIGEN3_INCLUDE_DIR})	
+	  include_directories(${EIGEN3_INCLUDE_DIR})
+	  if(MINGW)
+	    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-ipa-cp-clone")
+	  endif(MINGW)
 	else(EIGEN3_FOUND)
-		message(FATAL_ERROR "EIGEN3 is required but was not found.\n"
-		"Use -DEIGEN3DIR=DIR to specify the Eigen3 directory tree.\n"
-		"Use -DEIGEN3=OFF to not use it.\n"
-                "(suitable Fedora package: eigen3-devel)\n"
-                "(suitable Debian/Ubuntu package: libeigen3-dev)")
+	  message(FATAL_ERROR "EIGEN3 is required but was not found.\n"
+	    "Use -DEIGEN3DIR=DIR to specify the Eigen3 directory tree.\n"
+	    "Use -DEIGEN3=OFF to not use it.\n"
+            "(suitable Fedora package: eigen3-devel)\n"
+            "(suitable Debian/Ubuntu package: libeigen3-dev)")
 	endif(EIGEN3_FOUND)
+      endif(EIGEN3_TOO_OLD)
 endif(EIGEN3)
 
 # pslib
@@ -825,6 +854,24 @@ if(GRIB)
                 "(suitable Fedora package: grib_api-devel)")
 	endif(GRIB_FOUND)
 endif(GRIB)
+
+# Qhull (enable TRIANGULATE and QHULL commands)
+# -DQHULL=ON|OFF
+# -DQHULLDIR=DIR
+if(QHULL)
+	set(CMAKE_PREFIX_PATH ${QHULLDIR})
+	find_package(QHULL QUIET)
+	set(PL_HAVE_QHULL ${QHULL_FOUND})
+	if(QHULL_FOUND)
+		set(LIBRARIES ${LIBRARIES} ${QHULL_LIBRARIES})
+		include_directories(${QHULL_INCLUDE_DIR})
+	else(QHULL_FOUND)
+		message(FATAL_ERROR "QHULL is required but was not found.\n"
+		"Use -DQHULLDIR=DIR to specify the QHULL directory tree.\n"
+		"Use -DQHULL=OFF to not use it.\n"
+                "(suitable Fedora package: libqhull-devel)")
+	endif(QHULL_FOUND)
+endif(QHULL)
 
 # gshhs
 # -DGSHHS=ON|OFF
@@ -942,7 +989,6 @@ elseif(CMAKE_BUILD_TYPE STREQUAL MinSizeRel)
 	set(FLAGS ${CMAKE_CXX_FLAGS_MINSIZEREL})
 endif(CMAKE_BUILD_TYPE STREQUAL None OR NOT CMAKE_BUILD_TYPE)
 
-
 message(STATUS
 "Summary
 
@@ -974,13 +1020,14 @@ module(UDUNITS   "UDUNITS-2  ")
 module(EIGEN3    "EIGEN3     ")
 module(GRAPHICSMAGICK "GRAPHICSMAGICK")
 module(GRIB      "GRIB       ")
+module(QHULL     "QHULL      ")
 set(GSHHS_LIBRARIES ${GSHHS_INCLUDE_DIR})
 module(GSHHS     "GSHHS      ")
 module(PSLIB	 "pslib      ")
 if(WIN32 AND NOT CYGWIN)
-module(XPORTMINGW	 "XPortMinGW (Win32 Xlib)       ")
+  module(XPORTMINGW	 "XPortMinGW (Win32 Xlib)       ")
 else(WIN32 AND NOT CYGWIN)
-module(X11	 "Xlib       ")
+  module(X11	 "Xlib       ")
 endif(WIN32 AND NOT CYGWIN)
 module(PNGLIB    "libpng     ")
 message("")
@@ -989,11 +1036,15 @@ set(PLPLOT ON)
 set(READLINE ON)
 set(GSL ON)
 set(ZLIB ON)
-set(CURSES ON)
+if(NOT WIN32)
+  set(CURSES ON)
+endif(NOT WIN32)
 module(PLPLOT    "Plplot     ")
 module(OLDPLPLOT "Old Plplot ")
 module(READLINE  "Readline   ")
 module(GSL       "GSL        ")
 module(ZLIB      "Zlib       ")
-module(CURSES    "(N or PD)curses    ")
+if(NOT WIN32)
+  module(CURSES    "(N)curses    ")
+endif(NOT WIN32)
 message("")

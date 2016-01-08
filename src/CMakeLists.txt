@@ -63,6 +63,8 @@ deviceps.hpp
 devicesvg.hpp
 devicez.hpp
 dimension.hpp
+dialog.cpp
+dialog.hpp
 dinterpreter.cpp
 dinterpreter.hpp
 dnode.cpp
@@ -168,6 +170,8 @@ initsysvar.hpp
 io.cpp
 io.hpp
 lapack.cpp
+least_squares.cpp
+least_squares.hpp
 libinit.cpp
 libinit_ac.cpp
 libinit_cl.cpp
@@ -175,6 +179,7 @@ libinit_gm.cpp
 libinit_jmg.cpp
 libinit_mes.cpp
 libinit_ng.cpp
+libinit_jp.cpp
 list.cpp
 list.hpp
 magick_cl.cpp
@@ -245,8 +250,8 @@ semshm.cpp
 semshm.hpp
 sigfpehandler.cpp
 sigfpehandler.hpp
-smooth.cpp
-smooth.hpp
+#smooth.cpp
+#smooth.hpp
 specializations.hpp
 str.cpp
 str.hpp

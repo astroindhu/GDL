@@ -91,12 +91,12 @@ namespace lib {
 //      e->Throw(  "Unable to create window "
 //		 "(BadValue (integer parameter out of range for operation)).");
     
-    DLong retainType ; 
+    DLong retainType = 0; 
     if( e->KeywordPresent( "RETAIN"))
     {
       e->AssureLongScalarKWIfPresent( "RETAIN", retainType);
     }
-    bool success = actDevice->SetBackingStore(retainType);    
+    bool success = actDevice->SetBackingStore(retainType);  
     success = actDevice->WOpen( wIx, title, xSize, ySize, xPos, yPos);
     if( !success)
       e->Throw(  "Unable to create window.");
@@ -105,6 +105,9 @@ namespace lib {
       success = actDevice->Hide();
     }
     else success = actDevice->UnsetFocus();
+    actDevice->GetStream()->DefaultBackground();
+    actDevice->GetStream()->Clear();
+
  }
 
   void wset( EnvT* e)
@@ -135,7 +138,9 @@ namespace lib {
 	      e->Throw( "Unable to create window.");
 //        success = actDevice->UnsetFocus();  // following a deviceXXX->WOpen
         //FIXME: ADD support for RETAIN (BackingSTORE))
-	    return;
+        actDevice->GetStream()->DefaultBackground();
+        actDevice->GetStream()->Clear();
+        return;
 	  }
       }
 

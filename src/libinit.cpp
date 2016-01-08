@@ -74,6 +74,7 @@ void LibInit_mes(); // libinit_mes.cpp
 void LibInit_ac(); // libinit_ac.cpp
 void LibInit_gm(); // libinit_gm.cpp
 void LibInit_ng(); // libinit_ng.cpp
+void LibInit_jp(); // libinit_jp.cpp
 
 void LibInit()
 {
@@ -84,6 +85,7 @@ void LibInit()
   LibInit_ac();
   LibInit_gm();
   LibInit_ng(); 
+  LibInit_jp();
   const char KLISTEND[] = "";
 
   const string listKey[]={"EXTRACT", "LENGTH", "NO_COPY", KLISTEND};
@@ -152,17 +154,22 @@ void LibInit()
 			    "BIAS","NORMALIZE","NAN", "INVALID", "MISSING",KLISTEND};
   new DLibFunRetNew(lib::convol_fun,string("CONVOL"),3,convolKey);
 
-#ifndef _WIN32
   const string file_searchKey[]={"COUNT","EXPAND_ENVIRONMENT","EXPAND_TILDE",
 				 "FOLD_CASE","ISSUE_ACCESS_ERROR",
 				 "MARK_DIRECTORY","NOSORT","QUOTE",
 				 "MATCH_INITIAL_DOT",
-				 "MATCH_ALL_INITIAL_DOT","FULLY_QUALIFY_PATH",KLISTEND};
+                                 "MATCH_ALL_INITIAL_DOT","FULLY_QUALIFY_PATH",
+                                "TEST_DIRECTORY", "TEST_EXECUTABLE", "TEST_READ",
+                                 "TEST_REGULAR", "TEST_WRITE", "TEST_ZERO_LENGTH",
+                                 "TEST_SYMLINK",
+                                 KLISTEND};
   new DLibFunRetNew(lib::file_search,string("FILE_SEARCH"),2,file_searchKey);
 
   const string file_expand_pathKey[]={KLISTEND};
   new DLibFunRetNew(lib::file_expand_path,string("FILE_EXPAND_PATH"),1,file_expand_pathKey);
-#endif
+
+  const string file_readlinkKey[]={"ALLOW_NONEXISTENT","ALLOW_NONSYMLINK","NOEXPAND_PATH",KLISTEND};
+  new DLibFunRetNew(lib::file_readlink,string("FILE_READLINK"),1,file_readlinkKey);
 
   const string expand_pathKey[]={"ARRAY","ALL_DIRS","COUNT","PATTERN",KLISTEND};
   new DLibFunRetNew(lib::expand_path,string("EXPAND_PATH"),1,expand_pathKey);
@@ -177,12 +184,12 @@ void LibInit()
 
   new DLibFunRetNew(lib::arg_present,string("ARG_PRESENT"),1);
 
-  const string messageKey[]={"CONTINUE","INFORMATIONAL","IOERROR",
+  const string messageKey[]={"CONTINUE","INFORMATIONAL","IOERROR","LEVEL",
 			     "NONAME","NOPREFIX","NOPRINT",
 			     "RESET","REISSUE_LAST","TRACEBACK", KLISTEND}; 
   //TRACEBACK is in MESSAGE but obsolete since 5.0. it is used widely in CMSVlib !
-  const string messageWarnKey[]={"LEVEL", "NAME", "BLOCK",KLISTEND};
-  new DLibPro(lib::message,string("MESSAGE"),1,messageKey,messageWarnKey);
+  const string messageWarnKey[]={"NAME", "BLOCK",KLISTEND};
+  new DLibPro(lib::message_pro,string("MESSAGE"),-1,messageKey,messageWarnKey);
   
   const string cdKey[]={"CURRENT",KLISTEND};
   new DLibPro(lib::cd_pro,string("CD"),1,cdKey);
@@ -231,11 +238,11 @@ void LibInit()
   const string exitKey[]={"NO_CONFIRM","STATUS",KLISTEND};
   new DLibPro(lib::exitgdl,string("EXIT"),0,exitKey);
   
-  const string helpKey[]={"ALL_KEYS","BRIEF","CALLS","DEVICE","FUNCTIONS","HELP","INFO",
+  const string helpKey[]={"ALL_KEYS","BRIEF","FULL","CALLS","DEVICE","FUNCTIONS","HELP","INFO",
 			  "INTERNAL_LIB_GDL","KEYS","LAST_MESSAGE","LIB","MEMORY","NAMES",
 			  "OUTPUT","PATH_CACHE","PREFERENCES","PROCEDURES",
 			  "RECALL_COMMANDS","ROUTINES","SOURCE_FILES","STRUCTURES","SYSTEM_VARIABLES","TRACEBACK", KLISTEND};
-  const string helpWarnKey[]={"BREAKPOINTS","DLM","FILES","FULL","HEAP_VARIABLES","LEVEL","MESSAGES",
+  const string helpWarnKey[]={"BREAKPOINTS","DLM","FILES","HEAP_VARIABLES","LEVEL","MESSAGES",
 			      "OBJECTS","SHARED_MEMORY", KLISTEND};
   new DLibPro(lib::help_pro,string("HELP"),-1,helpKey,helpWarnKey);
   
@@ -253,8 +260,9 @@ void LibInit()
   // printKey, readKey and stringKey are closely associated
   // as the same functions are called "FORMAT" till "MONTH"
   // must be the first four keywords. The inner print_os function is BASED on this ORDER!
-  #define COMMONKEYWORDSFORSTRINGFORMATTING "FORMAT","AM_PM","DAYS_OF_WEEK","MONTH"
-  const string printKey[]={COMMONKEYWORDSFORSTRINGFORMATTING,"STDIO_NON_FINITE",KLISTEND};
+  //NOTE THAT AM_PM, DAYS_OF_WEEK and MONTHS are silently ignored!!!
+  #define COMMONKEYWORDSFORSTRINGFORMATTING "FORMAT","AM_PM","DAYS_OF_WEEK","MONTHS"
+  const string printKey[]={COMMONKEYWORDSFORSTRINGFORMATTING, "STDIO_NON_FINITE",KLISTEND};
   new DLibPro(lib::print,string("PRINT"),-1,printKey);
   new DLibPro(lib::printf,string("PRINTF"),-1,printKey);
   // allow printing (of expressions) with all keywords 
@@ -265,7 +273,7 @@ void LibInit()
   new DLibPro(lib::read,string("READ"),-1,readKey);
   new DLibPro(lib::readf,string("READF"),-1,readKey);
 
-  const string readsKey[]={COMMONKEYWORDSFORSTRINGFORMATTING,KLISTEND}; // no PROMPT
+  const string readsKey[]={COMMONKEYWORDSFORSTRINGFORMATTING,	   KLISTEND}; // no PROMPT
   new DLibPro(lib::reads,string("READS"),-1,readsKey);
 
   const string stringKey[]={COMMONKEYWORDSFORSTRINGFORMATTING,"PRINT",KLISTEND};
@@ -370,10 +378,10 @@ void LibInit()
   new DLibPro(lib::writeu,string("WRITEU"),-1,writeuKey);
   new DLibPro(lib::readu,string("READU"),-1,writeuKey);
 
-  const string resolve_routineWarnKey[]={"EITHER","IS_FUNCTION","NO_RECOMPILE","COMPILE_FULL_FILE",KLISTEND};
-  const string resolve_routineKey[]={KLISTEND};
+  const string resolve_routineWarnKey[]={"COMPILE_FULL_FILE",KLISTEND};
+  const string resolve_routineKey[]={"NO_RECOMPILE","IS_FUNCTION","EITHER",KLISTEND};
   new DLibPro(lib::resolve_routine,string("RESOLVE_ROUTINE"),1,
-	      NULL, resolve_routineWarnKey);
+	      resolve_routineKey,resolve_routineWarnKey);
 
   const string assocKey[]={"PACKED",KLISTEND};
   new DLibFunRetNew(lib::assoc,string("ASSOC"),3,assocKey);
@@ -550,12 +558,12 @@ void LibInit()
       "COLOR","GET_PAGE_SIZE","GET_SCREEN_SIZE","INCHES","WINDOW_STATE","SCALE_FACTOR", 
       "XOFFSET", "YOFFSET", "ENCAPSULATED", "GET_GRAPHICS_FUNCTION", 
       "SET_GRAPHICS_FUNCTION", "CURSOR_STANDARD", "CURSOR_ORIGINAL",
-      "CURSOR_CROSSHAIR","RETAIN",
+      "CURSOR_CROSSHAIR","RETAIN", "BITS_PER_PIXEL", 
       "GET_WINDOW_POSITION","GET_PIXEL_DEPTH","GET_VISUAL_DEPTH","GET_VISUAL_NAME","GET_WRITE_MASK", "COPY", KLISTEND
     };
   const string deviceWarnKey[] = {"FONT","GET_CURRENT_FONT","GET_FONTNAMES","GET_FONTNUM","SET_FONT", "HELVETICA", 
     "AVANTGARDE", "BKMAN", "COURIER", "PALATINO", 
-    "SCHOOLBOOK", "TIMES", "ZAPFCHANCERY", "ZAPFDINGBATS", "BITS_PER_PIXEL", 
+    "SCHOOLBOOK", "TIMES", "ZAPFCHANCERY", "ZAPFDINGBATS",
     "ITALIC", "BOLD", "TRUE_COLOR", "CURSOR_IMAGE","CURSOR_MASK","CURSOR_XY","TT_FONT","USER_FONT","FONT_INDEX","FONT_SIZE", KLISTEND};
   new DLibPro(lib::device,string("DEVICE"),0, deviceKey, deviceWarnKey);
 
@@ -575,7 +583,7 @@ void LibInit()
      "SYMSIZE",   "THICK",    "TICKLEN", "TITLE",
      "MAX_VALUE", "MIN_VALUE",
      "XLOG",      "YLOG",
-     "YNOZERO",   "XTYPE",    "YTYPE",   "POLAR", "NSUM",
+     "YNOZERO",   "XTYPE",    "YTYPE",   "POLAR", "NSUM", //XTYPE and YTYPE are oldies, equivalent to XLOG when value is odd.
       "XCHARSIZE", "YCHARSIZE",
       "XGRIDSTYLE", "YGRIDSTYLE",
       "XMARGIN", "YMARGIN",
@@ -596,14 +604,14 @@ void LibInit()
       "ZCHARSIZE", "ZGRIDSTYLE", "ZMARGIN", "ZMINOR",
       "ZRANGE", "ZSTYLE", "ZTHICK", "ZTICK_GET", "ZTICKFORMAT", "ZTICKINTERVAL",
       "ZTICKLAYOUT", "ZTICKLEN", "ZTICKNAME", "ZTICKS", "ZTICKUNITS", "ZTICKV",
-      "ZTITLE", "T3D", "ZVALUE", KLISTEND
+      "ZTITLE", "T3D", "ZVALUE", "FONT", "CHANNEL", KLISTEND
     };
   //
-  const string plotWarnKey[]= { "FONT","CHANNEL", KLISTEND };
-  new DLibPro(lib::plot,string("PLOT"),2,plotKey,plotWarnKey);
-  new DLibPro(lib::plot_io,string("PLOT_IO"),2,plotKey,plotWarnKey);
-  new DLibPro(lib::plot_oo,string("PLOT_OO"),2,plotKey,plotWarnKey);
-  new DLibPro(lib::plot_oi,string("PLOT_OI"),2,plotKey,plotWarnKey);
+//  const string plotWarnKey[]= { "FONT","CHANNEL", KLISTEND };
+  new DLibPro(lib::plot,string("PLOT"),2,plotKey);//,plotWarnKey);
+  new DLibPro(lib::plot_io,string("PLOT_IO"),2,plotKey);//,plotWarnKey);
+  new DLibPro(lib::plot_oo,string("PLOT_OO"),2,plotKey);//,plotWarnKey);
+  new DLibPro(lib::plot_oi,string("PLOT_OI"),2,plotKey);//,plotWarnKey);
 
   const string axisKey[]=
   {
@@ -633,11 +641,10 @@ void LibInit()
     "ZAXIS", "ZLOG", "ZVALUE", "ZCHARSIZE", "ZGRIDSTYLE", "ZMARGIN", "ZMINOR",
     "ZRANGE", "ZSTYLE", "ZTHICK", "ZTICK_GET", "ZTICKFORMAT", "ZTICKINTERVAL",
     "ZTICKLAYOUT", "ZTICKLEN", "ZTICKNAME", "ZTICKS", "ZTICKUNITS", "ZTICKV",
-    "ZTITLE",
+    "ZTITLE", "CHANNEL",
     KLISTEND
   };
-  const string axisWarnKey[]={"CHANNEL",KLISTEND};
-  new DLibPro(lib::axis,string("AXIS"),3,axisKey,axisWarnKey);
+  new DLibPro(lib::axis,string("AXIS"),3,axisKey);
 
   const string oplotKey[]=
     {
@@ -648,10 +655,9 @@ void LibInit()
       "PSYM", "SYMSIZE",  "T3D",  "ZVALUE", "THICK",
       // 8
       "MAX_VALUE", "MIN_VALUE", "NSUM", "POLAR",
-      KLISTEND
+      "CHANNEL", KLISTEND
     };
-  const string oplotWarnKey[]={"CHANNEL",KLISTEND};
-  new DLibPro(lib::oplot, string("OPLOT"),2,oplotKey,oplotWarnKey);
+  new DLibPro(lib::oplot, string("OPLOT"),2,oplotKey);
 
   const string plotsKey[]=
     {
@@ -677,6 +683,7 @@ void LibInit()
   const string shade_surfKey[]=
     {
       "AX", "AZ",  "MAX_VALUE", "MIN_VALUE", "SHADES", 
+      "HORIZONTAL", "LOWER_ONLY", "UPPER_ONLY", "BOTTOM", 
       // ([xyz]type undocumented but still existing in SHADE_SURF ...)
       "XLOG", "YLOG", "ZLOG", "XTYPE", "YTYPE", "ZTYPE", 
       //General Graphics KW
@@ -702,11 +709,11 @@ void LibInit()
       "ZTICK_GET", "YTICK_GET", "XTICK_GET",
       "ZTITLE", "YTITLE", "XTITLE",
       //3D KW
-      "ZVALUE","T3D", "SAVE", "SKIRT", "ZAXIS", KLISTEND
+      "ZVALUE","T3D", "SAVE", "SKIRT", "ZAXIS", "CHANNEL", KLISTEND
     };
   const string shade_surfWarnKey[]=
   {
-      "IMAGE", "PIXELS", "CHANNEL", KLISTEND
+      "IMAGE", "PIXELS", KLISTEND
   };
   new DLibPro(lib::shade_surf,string("SHADE_SURF"),3,shade_surfKey, shade_surfWarnKey);
 
@@ -735,18 +742,18 @@ void LibInit()
      // ([xyz]type undocumented but still existing in SURFACE ...)
      "XLOG", "YLOG", "ZLOG", "XTYPE", "YTYPE", "ZTYPE", 
      "HORIZONTAL", "LOWER_ONLY", "UPPER_ONLY", "SHADES", "ZAXIS",  "BOTTOM", 
-     "SKIRT", "SAVE", "T3D",  "ZVALUE", KLISTEND
+     "SKIRT", "SAVE", "T3D",  "ZVALUE", "CHANNEL", KLISTEND
     };
   const string surfaceWarnKey[]=
   {
-      "LEGO", "CHANNEL",KLISTEND
+      "LEGO", KLISTEND
   };
   new DLibPro(lib::surface,string("SURFACE"),3,surfaceKey, surfaceWarnKey);
 
   const string contourKey[]=
     {
       "BACKGROUND","CHARSIZE","CHARTHICK","CLIP",
-      "COLOR",     "DATA",    "DEVICE",   "FONT",
+      "COLOR",     "DATA",    "DEVICE",
       "NOCLIP",  "NODATA",   "NOERASE",
       "NORMAL",    "POSITION", "SUBTITLE",
       "T3D",     "THICK",    "TICKLEN",
@@ -777,7 +784,7 @@ void LibInit()
       "C_CHARSIZE","OVERPLOT","C_COLORS","C_LINESTYLE",
       "C_LABELS", "C_CHARTHICK", "C_ORIENTATION", "C_SPACING", "C_THICK",
       "PATH_INFO","PATH_XY",
-      "ZLOG","IRREGULAR", //ZLOG is an addition for GDL only
+      "ZLOG","IRREGULAR", "CHANNEL", "FONT", //ZLOG is an addition for GDL only & FONT is not permitted apparently
       KLISTEND
     };
    // NO SUPPORT AT ALL for:,"CLOSED","DOWNHILL","IRREGULAR","PATH_DATA_COORDS","PATH_FILENAME",
@@ -785,10 +792,9 @@ void LibInit()
   // "CHANNEL" is supposed to be passed from CONTOUR, PLOT, OPLOT, SHADE_SURF etc to ERASE
    const string contourWarnKey[]=
     {
-      
       "CELL_FILL","C_ANNOTATIONS","CLOSED","DOWNHILL",
       "PATH_DATA_COORDS","PATH_FILENAME",
-      "PATH_INFO","PATH_XY","TRIANGULATION","PATH_DOUBLE","CHANNEL",KLISTEND
+      "PATH_INFO","PATH_XY","TRIANGULATION","PATH_DOUBLE",KLISTEND
     };
    new DLibPro(lib::contour,string("CONTOUR"),3,contourKey,contourWarnKey);
 

@@ -4,11 +4,11 @@
 ; PURPOSE:
 ;
 ; This function try to reproduce the IDL's DIALOG_PICKFILE
-; behavior using "zenity".
+; behavior using "zenity" or "wxwidgets".
 ;
 ; zenity, under GNU GPL, is available on most Linux distributions 
-; and also on OSX (tested) and MSwin (not tested ?) It is better to
-; have zenity version >= 2.23.1.
+; and also on OSX (tested) It is better to
+; have zenity version >= 2.23.1 for smarter capabilities.
 ;
 ; CATEGORY:
 ;
@@ -94,8 +94,12 @@
 ; SIDE EFFECTS:
 ;
 ; RESTRICTIONS: 
-;               - need Zenity v2.23.1 or higher to use filters.
-;               - interface is not exactly the same ...
+;   * Zenity version:
+;          - need Zenity v2.23.1 or higher to use filters.
+;          - interface is not exactly the same depending Zenity
+;            versions ...
+;   * wxWidgets version:
+;          - need wx 2.8 or higher
 ;
 ; PROCEDURE:  straithforward
 ;
@@ -119,6 +123,8 @@
 ; 14-May-2013: - correcting "bug" 3612324: must start in current directory when
 ;              no path given. This problem appears due to change in
 ;              Zenity in Gnome3 (e.g. : http://www.kirsle.net/blog/kirsle/zenity-and-gnome-3)
+;
+; 03-Apr-2015: - JP: Code for Windows platform is added.
 ;
 ;-
 ;
@@ -153,41 +159,30 @@
 ; (at your option) any later version.
 ; 
 ;-
-function DIALOG_PICKFILE, DEFAULT_EXTENSION=default_extension, $
-                          DIRECTORY=directory, DIALOG_PARENT=dialog_parent, $
-                          DISPLAY_NAME=display_name, FILE=file, FILTER=filter, $
-                          FIX_FILTER=fix_filter, GET_PATH=get_path, GROUP=group, $
-                          MULTIPLE_FILES=multiple_files, MUST_EXIST=must_exist, $
-                          OVERWRITE_PROMPT=overwrite_prompt, PATH=path, $
-                          READ=read, WRITE=write, RESOURCE_NAME=resource_name, $
-                          TITLE=title, $
-                          ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path, $
-                          ZENITY_SEP=ZENITY_SEP, $
-                          HELP=help, test=test, debug=debug, verbose=verbose
 ;
-if KEYWORD_SET(help) then begin
-    print, 'function DIALOG_PICKFILE, DEFAULT_EXTENSION=default_extension, $'
-    print, '           DIRECTORY=directory, DIALOG_PARENT=dialog_parent, $'
-    print, '           DISPLAY_NAME=display_name, FILE=file, FILTER=filter, $'
-    print, '           FIX_FILTER=fix_filter, GET_PATH=get_path, GROUP=group, $'
-    print, '           MULTIPLE_FILES=multiple_files, MUST_EXIST=must_exist, $'
-    print, '           OVERWRITE_PROMPT=overwrite_prompt, PATH=path, '
-    print, '           READ=read, WRITE=write, RESOURCE_NAME=resource_name, $'
-    print, '           TITLE=title, '
-    print, '           ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path, $'
-    print, '           ZENITY_SEP=ZENITY_SEP, $'
-    print, '           HELP=help, test=test, debug=debug, verbose=verbose'
-    return, ''
-endif
+;
+function DIALOG_PICKFILE_ZENITY, DEFAULT_EXTENSION=default_extension, $
+                                 DIRECTORY=directory, DIALOG_PARENT=dialog_parent, $
+                                 DISPLAY_NAME=display_name, FILE=file, FILTER=filter, $
+                                 FIX_FILTER=fix_filter, GET_PATH=get_path, GROUP=group, $
+                                 MULTIPLE_FILES=multiple_files, MUST_EXIST=must_exist, $
+                                 OVERWRITE_PROMPT=overwrite_prompt, PATH=path, $
+                                 READ=read, WRITE=write, RESOURCE_NAME=resource_name, $
+                                 TITLE=title, $
+                                 ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path, $
+                                 ZENITY_SEP=ZENITY_SEP, $
+                                 HELP=help, test=test, debug=debug, verbose=verbose
+;
+;
 ;
 zenity=ZENITY_CHECK( zenity_name=zenity_name,  zenity_path=zenity_path, $
                      zenity_version=zenity_version, $
                      help=help, test=test, debug=debug, verbose=verbose)
-;
+                                ;
 if (!zenity.version LT 0) then begin
    return, ''
 endif
-;
+                                ;
 ; Check default_extension
 if KEYWORD_SET(default_extension) then default_extension=STRING(default_extension[0])
 ;
@@ -197,10 +192,9 @@ get_path=''
 ;
 ; Only display directories
 if KEYWORD_SET(directory) then begin
-    cmd+='--directory '
-    type='Directory'
+   cmd+='--directory '
+   type='Directory'
 endif else type='File'
-
 ; Dialog_parent can't be used w/ Zenity
 
 ; Set the X Window display
@@ -292,14 +286,14 @@ endif
 ;
 ; Write KW
 if KEYWORD_SET(write) && ~KEYWORD_SET(title) && ~KEYWORD_SET(read) then begin
-    readtitle='"Please Select a '+type+' for Writing" '
-    cmd+='--title='+readtitle
+   readtitle='"Please Select a '+type+' for Writing" '
+   cmd+='--title='+readtitle
 endif
 
 ; R/W KW
 if KEYWORD_SET(read) && KEYWORD_SET(write) && ~KEYWORD_SET(title) then begin
-    readtitle='"Please Select a '+type+' for Reading for Writing" '
-    cmd+='--title='+readtitle
+   readtitle='"Please Select a '+type+' for Reading for Writing" '
+   cmd+='--title='+readtitle
 endif
 
 ; Set window title
@@ -340,40 +334,98 @@ endelse
 
 ; Must exist filter
 if KEYWORD_SET(must_exist) then begin
-    ix=WHERE(FILE_TEST(results), c)
-    if c eq 0 then return, ''   ; No file exist
-    results=results[ix]
-    rsize=SIZE(results, /n_elements)
-    if rsize eq 0 then return, ''
+   ix=WHERE(FILE_TEST(results), c)
+   if c eq 0 then return, ''    ; No file exist
+   results=results[ix]
+   rsize=SIZE(results, /n_elements)
+   if rsize eq 0 then return, ''
 endif
 
 ; Overwrite prompt
 if KEYWORD_SET(overwrite_prompt) && KEYWORD_SET(write) then begin
-    ;; Zenity can't be in save and multiselection mode at the same time
-    ;; That's why save mode is disable and overwrite prompt is done when Zenity returns
-    MESSAGE, 'For each cancelation, associated file will be deleted from the file list at return', /cont 
-    over=BYTARR(rsize)
-    for i=0, rsize-1 do begin   ; for each selected files
-        if FILE_TEST(results[i]) then begin ; check if it already exists
-            SPAWN, zenity+' --question --title='+readtitle+'--text="'+results[i]+' already exists.\nDo you want to replace it ?"', exit_status=ex
-            over[i]=~ex ; As Zenity can't pop-up question dialog, if user don't want to overwrite the file, just pop it from the list
-        endif
-    endfor
-    ix=WHERE(over, c)         ; indexes of files which must be deleted
-    if c eq 0 then return, '' ; if every files have to be deleted, return
-    results=results[ix]    ; Delete file that shouldn't be overwritten
-    rsize=SIZE(results, /n_elements)
-    if rsize eq 0 then return, ''
+   ;; Zenity can't be in save and multiselection mode at the same time
+   ;; That's why save mode is disable and overwrite prompt is done when Zenity returns
+   MESSAGE, 'For each cancelation, associated file will be deleted from the file list at return', /cont 
+   over=BYTARR(rsize)
+   for i=0, rsize-1 do begin                 ; for each selected files
+      if FILE_TEST(results[i]) then begin    ; check if it already exists
+         SPAWN, zenity+' --question --title='+readtitle+'--text="'+results[i]+' already exists.\nDo you want to replace it ?"', exit_status=ex
+         over[i]=~ex ; As Zenity can't pop-up question dialog, if user don't want to overwrite the file, just pop it from the list
+      endif
+   endfor
+   ix=WHERE(over, c)            ; indexes of files which must be deleted
+   if c eq 0 then return, ''    ; if every files have to be deleted, return
+   results=results[ix]          ; Delete file that shouldn't be overwritten
+   rsize=SIZE(results, /n_elements)
+   if rsize eq 0 then return, ''
 endif
 
 ; default extension (simple behaviour, unlike IDL [no filter taken into account])
 if KEYWORD_SET(default_extension) then begin
-	w=WHERE(STRPOS(FILE_BASENAME(results),'.') eq -1)
-	if w ne [-1] then results[w]+='.'+default_extension
+   w=WHERE(STRPOS(FILE_BASENAME(results),'.') eq -1)
+   if w ne [-1] then results[w]+='.'+default_extension
 endif
 
 ;
 if KEYWORD_SET(debug) OR KEYWORD_SET(debug) then STOP
 ;
 return, results
+;
+end
+;
+; --------------------------------------------------------------
+;
+function DIALOG_PICKFILE, DEFAULT_EXTENSION=default_extension, $
+                          DIRECTORY=directory, DIALOG_PARENT=dialog_parent, $
+                          DISPLAY_NAME=display_name, FILE=file, FILTER=filter, $
+                          FIX_FILTER=fix_filter, GET_PATH=get_path, GROUP=group, $
+                          MULTIPLE_FILES=multiple_files, MUST_EXIST=must_exist, $
+                          OVERWRITE_PROMPT=overwrite_prompt, PATH=path, $
+                          READ=read, WRITE=write, RESOURCE_NAME=resource_name, $
+                          TITLE=title, $
+                          ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path, $
+                          ZENITY_SEP=ZENITY_SEP, FORCE_ZENITY=force_zenity, $
+                          HELP=help, test=test, debug=debug, verbose=verbose
+ON_ERROR, 2
+;
+if KEYWORD_SET(help) then begin
+   print, 'function DIALOG_PICKFILE, DEFAULT_EXTENSION=default_extension, $'
+    print, '           DIRECTORY=directory, DIALOG_PARENT=dialog_parent, $'
+    print, '           DISPLAY_NAME=display_name, FILE=file, FILTER=filter, $'
+    print, '           FIX_FILTER=fix_filter, GET_PATH=get_path, GROUP=group, $'
+    print, '           MULTIPLE_FILES=multiple_files, MUST_EXIST=must_exist, $'
+    print, '           OVERWRITE_PROMPT=overwrite_prompt, PATH=path, '
+    print, '           READ=read, WRITE=write, RESOURCE_NAME=resource_name, $'
+    print, '           TITLE=title, '
+    print, '           ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path, $'
+    print, '           ZENITY_SEP=ZENITY_SEP, FORCE_ZENITY=force_zenity, $'
+    print, '           HELP=help, test=test, debug=debug, verbose=verbose'
+    return, ''
+endif
+;
+wxwidget_available = WXWIDGETS_EXISTS()
+;
+if (wxwidget_available) and not(KEYWORD_SET(FORCE_ZENITY)) then begin
+   return, DIALOG_PICKFILE_WXWIDGETS(DEFAULT_EXTENSION=default_extension, $
+                                     DIRECTORY=directory, DIALOG_PARENT=dialog_parent, $
+                                     DISPLAY_NAME=display_name, FILE=file, FILTER=filter, $
+                                     FIX_FILTER=fix_filter, GET_PATH=get_path, GROUP=group, $
+                                     MULTIPLE_FILES=multiple_files, MUST_EXIST=must_exist, $
+                                     OVERWRITE_PROMPT=overwrite_prompt, PATH=path, $
+                                     READ=read, WRITE=write, RESOURCE_NAME=resource_name, $
+                                     TITLE=title)
+endif else begin
+   return, DIALOG_PICKFILE_ZENITY(DEFAULT_EXTENSION=default_extension, $
+                                  DIRECTORY=directory, DIALOG_PARENT=dialog_parent, $
+                                  DISPLAY_NAME=display_name, FILE=file, FILTER=filter, $
+                                  FIX_FILTER=fix_filter, GET_PATH=get_path, GROUP=group, $
+                                  MULTIPLE_FILES=multiple_files, MUST_EXIST=must_exist, $
+                                  OVERWRITE_PROMPT=overwrite_prompt, PATH=path, $
+                                  READ=read, WRITE=write, RESOURCE_NAME=resource_name, $
+                                  TITLE=title, $
+                                  ZENITY_NAME=zenity_name, ZENITY_PATH=zenity_path, $
+                                  ZENITY_SEP=ZENITY_SEP, $
+                                  HELP=help, test=test, debug=debug, verbose=verbose)
+endelse
+;
 end
