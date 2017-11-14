@@ -51,6 +51,11 @@ SVG - a SVG compliant file.
 #include "dstructgdl.hpp"
 #include "gdlgstream.hpp"
 
+#define MAX_WIN 32  //IDL free and widgets start at 32 ...
+#define MAX_WIN_RESERVE 256
+
+const UInt max_win = MAX_WIN;
+const UInt max_win_reserve = MAX_WIN_RESERVE;
 const UInt ctSize = 256;
 
 class GDLCT
@@ -107,7 +112,6 @@ class GDLGStream;
 class   GraphicsDevice;
 typedef std::vector< GraphicsDevice*> DeviceListT;
 
-// class wxDC;
 class GraphicsDevice
 {
   static void InitCT();         // preset CT and actCT
@@ -165,9 +169,10 @@ public:
   static GDLCT*      GetCT() { return &actCT;}
   static GDLCT*      GetCT( SizeT ix) { return &CT[ix];}
   static SizeT       N_CT() { return CT.size();}
-  static void        ListDevice();
+  static void        ListDevice(std::ostream& oss=cout);
   static bool        ExistDevice( const std::string& device, int &index);
   static bool        SetDevice( const std::string& devName);
+  DStructGDL*        GetDeviceStruct( const std::string& device);
   static GraphicsDevice*   GetDevice() { return actDevice;}
   static GraphicsDevice*   GetGUIDevice() { return actGUIDevice;}
   static DStructGDL* DStruct()   { return actDevice->dStruct;} 
@@ -186,6 +191,7 @@ public:
 
   
   virtual GDLGStream* GetStreamAt( int wIx) const     { return NULL;}
+  virtual void ChangeStreamAt(int wIx, GDLGStream* newStream){};
   virtual GDLGStream* GetStream( bool open=true)      { return NULL;}
   virtual bool WSet( int ix)                          { return false;}
   virtual int  WAddFree()                                 { return false;}
@@ -196,24 +202,32 @@ public:
   // for plot windows
   virtual bool WOpen( int ix, const std::string& title,
 		      int xsize, int ysize, 
-		      int xpos, int ypos)             { return false;}
+		      int xpos, int ypos, bool hide)  { return false;}
   virtual bool WSize( int ix,
-		      int* xsize, int* ysize, 
-		      int* xpos, int* ypos)           { return false;}
+		      int* xsize, int* ysize)           { return false;}
   virtual bool WShow( int ix, bool show, bool iconic) { return false;}
   virtual bool WState( int ix)                        { return false;}
   virtual bool WDelete( int ix)                       { return false;}
   virtual int  MaxWin()                               { return 0;}
+  virtual void TidyWindowsList()                      {}
+  virtual int  MaxNonFreeWin()                        { return MaxWin();}
   virtual int  ActWin()                               { return -1;}
+  virtual int  GetNonManagedWidgetActWin(bool doTidy=true)            {return -1;}
+  virtual void SetActWin(int wIx) {}
   virtual void EventHandler() {}
   virtual void DefaultXYSize(DLong *xsize, DLong *ysize) {
 							*xsize=640, *ysize=480; return;}
   virtual void MaxXYSize(DLong *xsize, DLong *ysize) {
 							*xsize=1200, *ysize=800; return;}
   virtual DLong GetDecomposed()                       { return -1;}
+  virtual BaseGDL* GetFontnames()                     { return NULL;}
+  virtual DLong GetFontnum()                     { return -1;}
+  virtual bool SetFont(DString f)                 {static int warning_sent=1; if (warning_sent) {Warning("SET_FONT not active for this device (FIXME)."); warning_sent=0;} return true;}
+  virtual DString GetCurrentFont()                 {return NULL;}
   virtual DLong GetGraphicsFunction()                 { return -1;}
   virtual DIntGDL* GetPageSize()                      { return NULL;}
   virtual DLong GetPixelDepth()                       { return -1;}
+  virtual bool SetPixelDepth(DInt depth)               { return false;}
   virtual DDoubleGDL* GetScreenResolution(char* disp=NULL)  //fake a basic screen if not implemented:
   {
     DDoubleGDL* res;
@@ -244,7 +258,6 @@ public:
   virtual bool CursorCrosshair()                      { return false;}
   virtual int  getCursorId()                             { return -1;}
   virtual bool UnsetFocus()                           { return false;}
-  virtual bool SetFocus()                             { return false;}
   virtual bool SetBackingStore(int value)             { return false;}
   virtual int  getBackingStore()                      { return -1;}
   virtual bool SetXPageSize( const float xs)          { return false;}
@@ -268,6 +281,73 @@ public:
   {
     throw GDLException( "Device "+Name()+" does not support ClearStream.");
   }
+};
+
+
+typedef std::vector< GDLGStream*> WindowListT;
+
+class GraphicsMultiDevice : public GraphicsDevice {
+private:
+public:
+    int decomposed; // false -> use color table
+    int cursorId; //should be 3 by default.
+    long gcFunction;
+    int backingStoreMode;
+    DString fontname;
+
+  int getCursorId(){return cursorId;}
+  long getGCFunction(){return gcFunction;}
+  int GetBackingStore(){return backingStoreMode;}
+
+  static int actWin;
+  static WindowListT winList;
+  static std::vector<long> oList;
+  static int oIx;
+  static void Init();
+  GraphicsMultiDevice( int _decomposed, int _cursorId, long _gcFunction, int _backingStoreMode) : GraphicsDevice(),
+  decomposed(_decomposed),
+  cursorId(_cursorId),
+  gcFunction(_gcFunction),
+  backingStoreMode(_backingStoreMode),
+  fontname("")
+  {
+      //pretty much nothing to do...
+  }
+  ~GraphicsMultiDevice() {
+        WindowListT::iterator i;
+        for (i = winList.begin(); i != winList.end(); ++i) if ((*i) != NULL) {delete *i; *i = NULL;  } 
+  }
+  DByteGDL* WindowState();
+  bool WState( int ix);
+  int  MaxWin();
+  void SetActWin(int wIx);
+  void TidyWindowsList();
+  void RaiseWin(int wIx);
+  void LowerWin(int wIx);
+  void IconicWin(int wIx);
+  void DeIconicWin(int wIx);
+  void EventHandler();
+  bool WDelete(int wIx);
+  bool WSize(int wIx, int *xSize, int *ySize);
+  bool WSet(int wIx);
+  bool WShow(int ix, bool show, bool iconic);
+  int WAddFree();
+  GDLGStream* GetStreamAt(int wIx) const;
+  void ChangeStreamAt(int wIx, GDLGStream* newStream);
+  bool UnsetFocus();
+  bool Decomposed(bool value);
+  DLong GetDecomposed();
+  BaseGDL* GetFontnames(){return NULL;}
+  DLong GetFontnum(){return -1;}
+  bool SetFont(DString f) {fontname=f; return true;}
+  DString GetCurrentFont() {return fontname;}
+  bool SetBackingStore(int value);
+  bool Hide(); 
+  int MaxNonFreeWin();
+  int ActWin();
+  int GetNonManagedWidgetActWin(bool doTidyWindowList=true);
+  bool CopyRegion(DLongGDL* me);
+  
 };
 
 #endif

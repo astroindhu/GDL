@@ -98,6 +98,9 @@ int strncasecmp(const char *s1, const char *s2, size_t n)
 #endif
 
 namespace lib {
+  
+  // for use in COMMAND_LINE_ARGS()
+  std::vector<char*> command_line_args;
 
   //  using namespace std;
   using std::isnan;
@@ -444,7 +447,8 @@ namespace lib {
 	    DPtr heapID= e->NewHeap();
 	    return new DPtrGDL( heapID);
 	  }	
-	if (e->KeywordSet("NO_COPY")) // NO_COPY
+    static int no_copyIx=e->KeywordIx("NO_COPY");
+	if (e->KeywordSet(no_copyIx)) // NO_COPY
 	  {
 	    BaseGDL** p= &e->GetPar( 0);
 	    // 	    if( *p == NULL)
@@ -1141,7 +1145,8 @@ namespace lib {
     SizeT nParam=e->NParam( 1);
     if( nParam == 2)
       {
-	if (e->KeywordSet("DOUBLE")) {
+      static int doubleIx=e->KeywordIx("DOUBLE");
+	if (e->KeywordSet(doubleIx)) {
 	  return complex_fun_template_twopar< DComplexDblGDL, DComplexDbl, DDoubleGDL>( e);
 	} else {
 	  return complex_fun_template_twopar< DComplexGDL, DComplex, DFloatGDL>( e);
@@ -1169,11 +1174,18 @@ namespace lib {
   BaseGDL* string_fun( EnvT* e)
   {
     SizeT nParam=e->NParam();
-
+    
     if( nParam == 0)
       e->Throw( "Incorrect number of arguments.");
-
-    bool printKey =  e->KeywordSet( 4);
+    
+    // AC 2016/02/12 we check now here if params are defined to avoid future problems
+    // print, string(kk, 12, ee) said "ee" undefined because of VMS hack (should say kk undefined before !)
+    // print, string(kk, 12, ee, format='()') did not complains
+    //
+    for (SizeT i=0; i<nParam; ++i)
+      BaseGDL* p = e->GetParDefined( i);
+    static int printKeyIx=e->KeywordIx("PRINT");
+    bool printKey =  e->KeywordSet(printKeyIx);
     int parOffset = 0; 
 
     // SA: handling special VMS-compatibility syntax, e.g.: string(1,'$(F)')
@@ -1194,9 +1206,10 @@ namespace lib {
 						       ));
 	      }
 	  }    
-      }    
-
-    BaseGDL* format_kw = e->GetKW( 0);
+      }
+    
+    static int formatIx=e->KeywordIx ("FORMAT"); 
+    BaseGDL* format_kw = e->GetKW(formatIx);
     bool formatKey = format_kw != NULL;
 
     if (formatKey && format_kw->Type() == GDL_STRING && (*static_cast<DStringGDL*>(format_kw))[0] == "") formatKey = false;
@@ -1377,9 +1390,11 @@ namespace lib {
 	
 	// make the call
 	// 	EnvUDT* newEnv = static_cast<EnvUDT*>(e->Interpreter()->CallStack().back());
-	newEnv->SetCallContext( EnvUDT::LRFUNCTION);
+    //GD: changed LRFUNCTION to RFUNCTION and removed e->SetPtrToReturnValue() below.
+    //this solved bug #706
+	newEnv->SetCallContext( EnvUDT::RFUNCTION);
 	BaseGDL* res = e->Interpreter()->call_fun(static_cast<DSubUD*>(newEnv->GetPro())->GetTree());
-	e->SetPtrToReturnValue( newEnv->GetPtrToReturnValue());
+//GD: removed	e->SetPtrToReturnValue( newEnv->GetPtrToReturnValue());
 	// 	BaseGDL* ppp = res->Dup();
 	// 	cout << " res = " << res << "  p to res = " << newEnv->GetPtrToReturnValue() << endl;
 	return res;
@@ -1419,12 +1434,12 @@ namespace lib {
 
 
 
-  BaseGDL* execute( EnvT* e)
+  BaseGDL* execute_fun( EnvT* e)
   {
     int nParam=e->NParam( 1);
 
-    bool quietCompile = false;
-    if( nParam == 2)
+    bool compileFlags = false;
+    if( nParam >= 2)
       {
 	BaseGDL* p1 = e->GetParDefined( 1);
 
@@ -1432,7 +1447,21 @@ namespace lib {
 	  e->Throw( "Expression must be scalar in this context: "+
 		    e->GetParString(1));
 
-	quietCompile = p1->True();
+	// we do not enforce the case of Implied Print, then only 2 states
+	compileFlags = p1->LogTrue();
+      }
+
+    bool quietExecution = false;
+    if( nParam == 3)
+      {
+	BaseGDL* p2 = e->GetParDefined( 2);
+
+	if( !p2->Scalar())
+	  e->Throw( "Expression must be scalar in this context: "+
+		    e->GetParString(2));
+
+	quietExecution = p2->LogTrue();
+	Warning("This third argument is not enforce now !");
       }
 
     if (e->GetParDefined(0)->Rank() != 0)
@@ -1462,12 +1491,12 @@ namespace lib {
     }
     catch( GDLException& ex)
       {
-	if( !quietCompile) GDLInterpreter::ReportCompileError( ex);
+	if( !compileFlags) GDLInterpreter::ReportCompileError( ex);
 	return new DIntGDL( 0);
       }
     catch( ANTLRException ex)
       {
-	if( !quietCompile) cerr << "EXECUTE: Lexer/Parser exception: " <<  
+	if( !compileFlags) cerr << "EXECUTE: Lexer/Parser exception: " <<  
 			     ex.getMessage() << endl;
 	return new DIntGDL( 0);
       }
@@ -1485,13 +1514,13 @@ namespace lib {
       }
     catch( GDLException& ex)
       {
-	if( !quietCompile) GDLInterpreter::ReportCompileError( ex);
+	if( !compileFlags) GDLInterpreter::ReportCompileError( ex);
 	return new DIntGDL( 0);
       }
 
     catch( ANTLRException ex)
       {
-	if( !quietCompile) cerr << "EXECUTE: Compiler exception: " <<  
+	if( !compileFlags) cerr << "EXECUTE: Compiler exception: " <<  
 			     ex.getMessage() << endl;
 	return new DIntGDL( 0);
       }
@@ -1509,6 +1538,9 @@ namespace lib {
 
 	progAST->setLine( e->GetLineNumber());
 
+	// AC 2016-02-26 : bug report #692 always verbose in EXECUTE()
+	// Do we have a way not to *always* issue a message here 
+	// in case of problem ???
 	RetCode retCode = caller->Interpreter()->execute( progAST);
 
 	caller->ResizeForLoops( nForLoopsIn);
@@ -1523,7 +1555,7 @@ namespace lib {
 	caller->ResizeForLoops( nForLoopsIn);
 	// are we throwing to target environment?
 	// 		if( ex.GetTargetEnv() == NULL)
-	if( !quietCompile) cerr << "EXECUTE: " <<
+	if( !compileFlags) cerr << "EXECUTE: " <<
 			     ex.getMessage() << endl;
 	return new DIntGDL( 0);
       }
@@ -1531,7 +1563,7 @@ namespace lib {
       {
 	caller->ResizeForLoops( nForLoopsIn);
 		
-	if( !quietCompile) cerr << "EXECUTE: Interpreter exception: " <<
+	if( !compileFlags) cerr << "EXECUTE: Interpreter exception: " <<
 			     ex.getMessage() << endl;
 	return new DIntGDL( 0);
       }
@@ -3404,8 +3436,9 @@ namespace lib {
   {
     SizeT nParam = e->NParam( 1);
     BaseGDL* searchArr = e->GetParDefined( 0);
-
-    bool omitNaN = e->KeywordSet( "NAN");
+    
+    static int omitNaNIx = e->KeywordIx( "NAN");
+    bool omitNaN = e->KeywordSet(omitNaNIx);
 
     static int subIx = e->KeywordIx("SUBSCRIPT_MAX");
     bool subMax = e->KeywordPresent(subIx);  
@@ -3513,8 +3546,9 @@ namespace lib {
     SizeT nParam = e->NParam( 1);
     BaseGDL* searchArr = e->GetParDefined( 0);
 
-    bool omitNaN = e->KeywordSet( "NAN");
-
+    static int omitNaNIx = e->KeywordIx( "NAN");
+    bool omitNaN = e->KeywordSet(omitNaNIx);
+    
     static int subIx = e->KeywordIx("SUBSCRIPT_MIN");
     bool subMin = e->KeywordPresent(subIx);  
 
@@ -3904,7 +3938,7 @@ namespace lib {
     SizeT nEl = p0->N_Elements();
     
     // "f_nan" and "d_nan" used by both parts ...
-    static DStructGDL *Values = SysVar::Values();
+    DStructGDL *Values = SysVar::Values();   //MUST NOT BE STATIC, due to .reset 
     DFloat f_nan=(*static_cast<DFloatGDL*>(Values->GetTag(Values->Desc()->TagIndex("F_NAN"), 0)))[0];
     DDouble d_nan=(*static_cast<DDoubleGDL*>(Values->GetTag(Values->Desc()->TagIndex("D_NAN"), 0)))[0];
     
@@ -3913,12 +3947,13 @@ namespace lib {
     if( nParam == 1) {
       
       static int evenIx = e->KeywordIx( "EVEN");
-	
-      // TYPE
+
+            // TYPE
+      static int doubleIx=e->KeywordIx("DOUBLE");
       bool dbl = 
 	p0->Type() == GDL_DOUBLE || 
 	p0->Type() == GDL_COMPLEXDBL || 
-	e->KeywordSet(e->KeywordIx("DOUBLE"));
+	e->KeywordSet(doubleIx);
       DType type = dbl ? GDL_DOUBLE : GDL_FLOAT;
       bool noconv = (dbl && p0->Type() == GDL_DOUBLE) ||
 	(!dbl && p0->Type() == GDL_FLOAT);
@@ -3927,7 +3962,9 @@ namespace lib {
       DLong dim = 0;
       DLong nmed = 1;
       BaseGDL *res;
-      e->AssureLongScalarKWIfPresent( "DIMENSION", dim);
+      
+      static int dimensionIx=e->KeywordIx("DIMENSION");
+      e->AssureLongScalarKWIfPresent( dimensionIx , dim);
 
       //	cout << "dim : "<< dim << endl;
 	
@@ -4184,7 +4221,7 @@ namespace lib {
 	
       static int evenIx = e->KeywordIx( "EVEN");
       static int doubleIx = e->KeywordIx( "DOUBLE");
-      static DStructGDL *Values =  SysVar::Values();                                                
+      DStructGDL *Values =  SysVar::Values();   //MUST NOT BE STATIC, due to .reset                                             
       DDouble d_nan=(*static_cast<DDoubleGDL*>(Values->GetTag(Values->Desc()->TagIndex("D_NAN"), 0)))[0];
       DDouble d_infinity= (*static_cast<DDoubleGDL*>(Values->GetTag(Values->Desc()->TagIndex("D_INFINITY"), 0)))[0]; 
  
@@ -4651,6 +4688,147 @@ namespace lib {
 
   }// end of median
 
+  BaseGDL* ishft_fun(EnvT* e) {
+    Guard<BaseGDL>ga;
+    Guard<BaseGDL>gb;
+    
+    DType typ = (e->GetParDefined(0))->Type();
+    //types are norally correct, so do not loose time looking for wrong types
+    if ((typ == GDL_BYTE) || (typ == GDL_UINT) || (typ == GDL_INT) || (typ == GDL_LONG) ||
+      (typ == GDL_ULONG) || (typ == GDL_LONG64) || (typ == GDL_ULONG64)) {
+      dimension finalDim;
+      //behaviour: minimum set of dimensions of arrays. singletons expanded to dimension,
+      //keep array trace.
+      SizeT nEl, maxEl = 1, minEl, finalN = 1;
+      for (int i = 0; i < 2; ++i) {
+        nEl = e->GetPar(i)->N_Elements();
+        if ((nEl > 1) && (nEl > maxEl)) {
+          maxEl = nEl;
+          finalN = maxEl;
+          finalDim = e->GetPar(i)->Dim();
+        }
+      } //first max - but we need first min:
+      minEl = maxEl;
+      for (int i = 0; i < 2; ++i) {
+        nEl = e->GetPar(i)->N_Elements();
+        if ((nEl > 1) && (nEl < minEl)) {
+          minEl = nEl;
+          finalN = minEl;
+          finalDim = e->GetPar(i)->Dim();
+        }
+      } 
+      //now get pointers to a and b, and increment (0 if b is singleton)
+      switch (typ) {
+        case GDL_BYTE:
+        {
+          DByteGDL* ret = new     DByteGDL(finalDim, BaseGDL::NOZERO);
+          DByteGDL* a=e->GetParAs<DByteGDL>(0);
+          DByteGDL* b=e->GetParAs<DByteGDL>(1);
+          if (a->Scalar()) {a=a->New( finalN, BaseGDL::INIT); ga.Reset(a);} //expand to return element size, for parallel processing
+          if (b->Scalar()) {b=b->New( finalN, BaseGDL::INIT); gb.Reset(b);}//expand to return element size, for parallel processing
+#pragma omp parallel if (finalN >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= finalN))
+          {
+#pragma omp for
+            for (SizeT i=0 ; i < finalN; ++i) (*ret)[i] = ((*b)[i]>=0)? (*a)[i] << (*b)[i]: (*a)[i] >> -(*b)[i];
+          }
+          return ret;
+        }
+        break;
+        case GDL_UINT:
+        {
+          DUIntGDL* ret = new     DUIntGDL(finalDim, BaseGDL::NOZERO);
+          DUIntGDL* a=e->GetParAs<DUIntGDL>(0);
+          DIntGDL* b=e->GetParAs<DIntGDL>(1);
+          if (a->Scalar()) {a=a->New( finalN, BaseGDL::INIT); ga.Reset(a);} //expand to return element size, for parallel processing
+          if (b->Scalar()) {b=b->New( finalN, BaseGDL::INIT); gb.Reset(b);}//expand to return element size, for parallel processing
+#pragma omp parallel if (finalN >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= finalN))
+          {
+#pragma omp for
+            for (SizeT i=0 ; i < finalN; ++i) (*ret)[i] = ((*b)[i]>=0)? (*a)[i] << (*b)[i]: (*a)[i] >> -(*b)[i];
+          }
+          return ret;
+        }
+        break;
+        case GDL_INT:
+        {
+          DIntGDL* ret = new     DIntGDL(finalDim, BaseGDL::NOZERO);
+          DIntGDL* a=e->GetParAs<DIntGDL>(0);
+          DIntGDL* b=e->GetParAs<DIntGDL>(1);
+          if (a->Scalar()) {a=a->New( finalN, BaseGDL::INIT); ga.Reset(a);} //expand to return element size, for parallel processing
+          if (b->Scalar()) {b=b->New( finalN, BaseGDL::INIT); gb.Reset(b);}//expand to return element size, for parallel processing
+#pragma omp parallel if (finalN >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= finalN))
+          {
+#pragma omp for
+            for (SizeT i=0 ; i < finalN; ++i) (*ret)[i] = ((*b)[i]>=0)? (*a)[i] << (*b)[i]: (*a)[i] >> -(*b)[i];
+          }
+          return ret;
+        }
+        break;
+        case GDL_LONG:
+        {
+          DLongGDL* ret = new     DLongGDL(finalDim, BaseGDL::NOZERO);
+          DLongGDL* a=e->GetParAs<DLongGDL>(0);
+          DLongGDL* b=e->GetParAs<DLongGDL>(1);
+          if (a->Scalar()) {a=a->New( finalN, BaseGDL::INIT); ga.Reset(a);} //expand to return element size, for parallel processing
+          if (b->Scalar()) {b=b->New( finalN, BaseGDL::INIT); gb.Reset(b);}//expand to return element size, for parallel processing
+#pragma omp parallel if (finalN >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= finalN))
+          {
+#pragma omp for
+            for (SizeT i=0 ; i < finalN; ++i) (*ret)[i] = ((*b)[i]>=0)? (*a)[i] << (*b)[i]: (*a)[i] >> -(*b)[i];
+          }
+          return ret;
+        }
+        break;
+        case GDL_ULONG:
+        {
+          DULongGDL* ret = new     DULongGDL(finalDim, BaseGDL::NOZERO);
+          DULongGDL* a=e->GetParAs<DULongGDL>(0);
+          DLongGDL* b=e->GetParAs<DLongGDL>(1);
+          if (a->Scalar()) {a=a->New( finalN, BaseGDL::INIT); ga.Reset(a);} //expand to return element size, for parallel processing
+          if (b->Scalar()) {b=b->New( finalN, BaseGDL::INIT); gb.Reset(b);}//expand to return element size, for parallel processing
+#pragma omp parallel if (finalN >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= finalN))
+          {
+#pragma omp for
+            for (SizeT i=0 ; i < finalN; ++i) (*ret)[i] = ((*b)[i]>=0)? (*a)[i] << (*b)[i]: (*a)[i] >> -(*b)[i];
+          }
+          return ret;
+        }
+        break;
+        case GDL_LONG64:
+        {
+          DLong64GDL* ret = new     DLong64GDL(finalDim, BaseGDL::NOZERO);
+          DLong64GDL* a=e->GetParAs<DLong64GDL>(0);
+          DLong64GDL* b=e->GetParAs<DLong64GDL>(1);
+          if (a->Scalar()) {a=a->New( finalN, BaseGDL::INIT); ga.Reset(a);} //expand to return element size, for parallel processing
+          if (b->Scalar()) {b=b->New( finalN, BaseGDL::INIT); gb.Reset(b);}//expand to return element size, for parallel processing
+#pragma omp parallel if (finalN >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= finalN))
+          {
+#pragma omp for
+            for (SizeT i=0 ; i < finalN; ++i) (*ret)[i] = ((*b)[i]>=0)? (*a)[i] << (*b)[i]: (*a)[i] >> -(*b)[i];
+          }
+          return ret;
+        }
+        break;
+        case GDL_ULONG64:
+        {
+          DULong64GDL* ret = new     DULong64GDL(finalDim, BaseGDL::NOZERO);
+          DULong64GDL* a=e->GetParAs<DULong64GDL>(0);
+          DLong64GDL* b=e->GetParAs<DLong64GDL>(1);
+          if (a->Scalar()) {a=a->New( finalN, BaseGDL::INIT); ga.Reset(a);} //expand to return element size, for parallel processing
+          if (b->Scalar()) {b=b->New( finalN, BaseGDL::INIT); gb.Reset(b);}//expand to return element size, for parallel processing
+#pragma omp parallel if (finalN >= CpuTPOOL_MIN_ELTS && (CpuTPOOL_MAX_ELTS == 0 || CpuTPOOL_MAX_ELTS <= finalN))
+          {
+#pragma omp for
+            for (SizeT i=0 ; i < finalN; ++i) (*ret)[i] = ((*b)[i]>=0)? (*a)[i] << (*b)[i]: (*a)[i] >> -(*b)[i];
+          }
+          return ret;
+        }
+        break;
+      }
+
+    } else e->Throw("Operand must be integer:" + e->GetParString(0));
+  }
+  
   BaseGDL* shift_fun( EnvT* e)
   {
     SizeT nParam = e->NParam( 2);
@@ -5024,37 +5202,36 @@ namespace lib {
     return res;
   }
 
-  BaseGDL* obj_isa( EnvT* e)
-  {
-    SizeT nParam = e->NParam( 2);
-
-    BaseGDL* p0 = e->GetPar( 0);
-    if( p0 == NULL || p0->Type() != GDL_OBJ)
-      e->Throw( "Object reference type required in this context: "+
-		e->GetParString(0));
-
+  BaseGDL* obj_isa(EnvT* e) {
     DString className;
-    e->AssureScalarPar<DStringGDL>( 1, className);
-    className = StrUpCase( className);
+    e->AssureScalarPar<DStringGDL>(1, className);
+    className = StrUpCase(className);
 
-    DObjGDL* pObj = static_cast<DObjGDL*>( p0);
+    BaseGDL* p0 = e->GetPar(0);
+    //nObjects is the number of objects or strings passed in array format.
+    SizeT nElem = p0->N_Elements();
 
-    DByteGDL* res = new DByteGDL( pObj->Dim()); // zero 
+    DByteGDL* res = new DByteGDL(p0->Dim()); // zero 
 
-    GDLInterpreter* interpreter = e->Interpreter();
-
-    SizeT nElem = pObj->N_Elements();
-    for( SizeT i=0; i<nElem; ++i)
-      {
-	if( interpreter->ObjValid( (*pObj)[ i])) 
-	  {
-	    DStructGDL* oStruct = e->GetObjHeap( (*pObj)[i]);
-	    if( oStruct->Desc()->IsParent( className))
-	      (*res)[i] = 1;
-	  }
+    if (p0->Type() == GDL_OBJ) {
+      DObjGDL* pObj = static_cast<DObjGDL*> (p0);
+      if (pObj) { //pObj protection probably overkill.
+        for (SizeT i = 0; i < nElem; ++i) { 
+          if (e->Interpreter()->ObjValid((*pObj)[ i])) {
+            DStructGDL* oStruct = e->GetObjHeap((*pObj)[i]);
+            if (oStruct->Desc()->IsParent(className))
+              (*res)[i] = 1;
+          }
+        }
+        return res;
       }
-    
-    return res;
+    } else if (p0->Type() == GDL_STRING) {
+      std::cerr << "OBJ_ISA: not implemented for strings, only objects (FIXME)." << endl;
+      for (SizeT i = 0; i < nElem; ++i) {
+        (*res)[i] = 0;
+      }
+      return res;
+    } else e->Throw("Object reference type required in this context: " + e->GetParString(0));
   }
 
   BaseGDL* n_tags( EnvT* e)
@@ -5073,11 +5250,14 @@ namespace lib {
     //static int lengthIx = e->KeywordIx( "DATA_LENGTH");
     //bool length = e->KeywordSet( lengthIx);
     
-    // we don't know now how to distinghuis the 2 following cases
-    if(e->KeywordSet("DATA_LENGTH"))
+    // we don't know now how to distinguish the 2 following cases
+    static int datalengthIx=e->KeywordIx("DATA_LENGTH");
+    static int lengthIx=e->KeywordIx("LENGTH");
+    
+    if(e->KeywordSet(datalengthIx))
       return new DLongGDL( s->Sizeof());
     
-    if(e->KeywordSet("LENGTH"))
+    if(e->KeywordSet(lengthIx))
       return new DLongGDL( s->Sizeof());
 
     return new DLongGDL( s->Desc()->NTags());
@@ -5195,7 +5375,8 @@ namespace lib {
     int strLen = stringIn.length();
 
     DString escape = "";
-    e->AssureStringScalarKWIfPresent("ESCAPE", escape);
+    static int ESCAPEIx=e->KeywordIx("ESCAPE");
+    e->AssureStringScalarKWIfPresent(ESCAPEIx, escape);
     vector<long> escList;
     long pos = 0;
     while (pos != string::npos) {
@@ -5806,6 +5987,11 @@ namespace lib {
 #include <readline/readline.h>
     rl_prep_terminal (0);
 #endif
+#if defined(HAVE_EDITLINE)
+#include <editline/readline.h>
+    rl_prep_terminal (0);
+#endif
+      
       
     SizeT nParam=e->NParam();
 
@@ -5867,7 +6053,7 @@ namespace lib {
 #if !defined(_WIN32) || defined(__CYGWIN__)
     (void)tcsetattr(fd, TCSANOW, &orig); 
 #endif
-#if defined(HAVE_LIBREADLINE)
+#if defined(HAVE_LIBREADLINE) || defined(HAVE_LIBEDITLINE)
     rl_deprep_terminal ();
 #endif
 
@@ -5895,10 +6081,12 @@ namespace lib {
     SizeT nParam=e->NParam( 0); 
 
     BaseGDL* ret;
-    bool kw_l64 = e->KeywordSet(e->KeywordIx("L64"));
+    static int kw_l64_Ix = e->KeywordIx("L64");
+    bool kw_l64 = e->KeywordSet(kw_l64_Ix);
     // TODO: IDL-doc mentions about automatically switching to L64 if needed
 
-    if (e->KeywordSet(e->KeywordIx("STRUCTURE")))
+    static int structureIx=e->KeywordIx("STRUCTURE");
+    if (e->KeywordSet(structureIx))
       {
 	// returning structure
 	if (kw_l64) 
@@ -5922,10 +6110,15 @@ namespace lib {
       }
     else 
       {
-	bool kw_current = e->KeywordSet(e->KeywordIx("CURRENT"));
-	bool kw_num_alloc = e->KeywordSet(e->KeywordIx("NUM_ALLOC"));
-	bool kw_num_free = e->KeywordSet(e->KeywordIx("NUM_FREE"));
-	bool kw_highwater = e->KeywordSet(e->KeywordIx("HIGHWATER"));
+	static int Ix_kw_current   = e->KeywordIx("CURRENT");
+	static int Ix_kw_num_alloc = e->KeywordIx("NUM_ALLOC");
+	static int Ix_kw_num_free  = e->KeywordIx("NUM_FREE");
+	static int Ix_kw_highwater = e->KeywordIx("HIGHWATER");
+
+	bool kw_current =   e->KeywordSet( Ix_kw_current  );
+	bool kw_num_alloc = e->KeywordSet( Ix_kw_num_alloc);
+	bool kw_num_free =  e->KeywordSet( Ix_kw_num_free );
+	bool kw_highwater = e->KeywordSet( Ix_kw_highwater);
 
 	// Following the IDL documentation: mutually exclusive keywords
 	// IDL behaves different, incl. segfaults with selected kw combinations
@@ -6690,11 +6883,7 @@ namespace lib {
   //     defined and filled with data (pointers) in gdl.cpp
   BaseGDL* command_line_args_fun(EnvT* e)
   {
-#ifdef PYTHON_MODULE
-    e->Throw("no command line arguments available (GDL built as a Python module)");
-#else
     static int countIx = e->KeywordIx("COUNT");
-    extern std::vector<char*> command_line_args; 
 
     // setting the COUNT keyword value
     if (e->KeywordPresent(countIx))
@@ -6712,7 +6901,6 @@ namespace lib {
 	  (*static_cast<DStringGDL*>(ret))[i] = command_line_args[i];
 	return ret;
       }
-#endif
   }
 
   // SA: relies in the uname() from libc (must be there if POSIX)
@@ -6811,10 +6999,6 @@ namespace lib {
     static int structureIx = e->KeywordIx("STRUCTURE");
     bool structureKW = e->KeywordSet(structureIx);
  
-    if (structureKW) {
-      Warning("keyword STRUCTURE is not finished (IS_FUNCTION not OK), please contribute !");
-    }
-
     static int systemIx = e->KeywordIx("SYSTEM");
     bool systemKW = e->KeywordSet(systemIx);
     if (systemKW) {
@@ -6890,8 +7074,15 @@ namespace lib {
 	// I don't know how to know if we use Pro or Func
 	// we do have a long way in "dinterpreter.cpp" with 
 	// if( firstChar == "#")
-	*(res->GetTag(tFunction, i)) = DByteGDL(0);
-
+    bool isFunc = false;
+      for (FunListT::iterator ifunc = funList.begin(); ifunc != funList.end(); ++ifunc) {
+        if (StrUpCase(tmp).find((*ifunc)->ObjectName()) != std::string::npos) {
+          isFunc = true;
+          break;
+        }
+      }
+	*(res->GetTag(tFunction, i)) = (isFunc)?DByteGDL(1):DByteGDL(0);
+//all others 0 for the time being
 	*(res->GetTag(tMethod, i)) = DByteGDL(0);
 	*(res->GetTag(tRestored, i)) = DByteGDL(0);
 	*(res->GetTag(tSystem, i)) = DByteGDL(0);

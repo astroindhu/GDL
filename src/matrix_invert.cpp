@@ -12,7 +12,7 @@ At the beginning, this code was only available using the GSL library.
 At that time, it was included in the "gsl_fun.hpp/cpp" code
 
 In 2013 we start to use Eigen3 in conjonction with the GSL.
-The GSL is mandatory. Eigen3 is not mandatory.
+The GSL is mandatory. Eigen3 is not mandatory. */
 
 /***************************************************************************
  *                                                                         *
@@ -104,29 +104,35 @@ namespace lib {
 
   BaseGDL* AC_invert_fun( EnvT* e)
   {
-    if (e->KeywordSet("GSL") && e->KeywordSet("EIGEN"))
+    static int GSLIx=e->KeywordIx("GSL");
+    static int EIGENIx=e->KeywordIx("EIGEN");
+    if (e->KeywordSet(GSLIx) && e->KeywordSet(EIGENIx))
       e->Throw("Conflicting keywords");
-
+    
+    static int DOUBLEIx=e->KeywordIx("DOUBLE");
+    bool hasDouble=e->KeywordSet(DOUBLEIx);
+    
     matrix_input_check_dims(e);
 
-    bool Eigen_flag=FALSE;
 #if defined(USE_EIGEN)
-    Eigen_flag=TRUE;
+    bool Eigen_flag=TRUE;
+#else
+    bool Eigen_flag=FALSE;
 #endif
 
-    if (e->KeywordSet("EIGEN") && (!Eigen_flag))
+    if (e->KeywordSet(EIGENIx) && (!Eigen_flag))
       Warning("Eigen Invert not available, GSL used");
     
-    if (e->KeywordSet("GSL") || (!Eigen_flag))
+    if (e->KeywordSet(GSLIx) || (!Eigen_flag))
       {
-	return invert_gsl_fun(e);
+	return invert_gsl_fun(e, hasDouble);
       }
     else
       {
 	// if /Eigen, we want to use Eigen,
 	// then we don't check the status and return ...
 
-	if (e->KeywordSet("EIGEN")) return invert_eigen_fun(e);
+	if (e->KeywordSet(EIGENIx)) return invert_eigen_fun(e, hasDouble);
 
 	// AC 2014-08-10 : during tests of Chianti Code,
 	// we discovered that the GSL code was less sensitive
@@ -134,7 +140,7 @@ namespace lib {
 	// If status used, if Eigen fails, we try GSL
 
 	BaseGDL* tmp;
-	tmp=invert_eigen_fun(e);	
+	tmp=invert_eigen_fun(e, hasDouble);	
 	SizeT nParam=e->NParam(1);
 	if (nParam == 2) 
 	  {
@@ -143,13 +149,13 @@ namespace lib {
 	      (p1->Convert2(GDL_LONG, BaseGDL::COPY));
 	    DLong status;
 	    status=(*res)[0];
-	    if (status > 0) tmp=invert_gsl_fun(e);
+	    if (status > 0) tmp=invert_gsl_fun(e, hasDouble);
 	  }
 	return tmp;
       }
   }
 
-  BaseGDL* invert_gsl_fun( EnvT* e)
+  BaseGDL* invert_gsl_fun( EnvT* e, bool hasDouble)
   {
 
     BaseGDL* p0 = e->GetParDefined( 0);
@@ -203,7 +209,7 @@ namespace lib {
 	if (nParam == 2) e->SetPar(1,new DLongGDL( singular)); 
 	return res;
       }
-      if(( p0->Type() == GDL_DOUBLE) || e->KeywordSet("DOUBLE")) {
+      if(( p0->Type() == GDL_DOUBLE) || hasDouble) {
 	DDoubleGDL* res = static_cast<DDoubleGDL*>
 	  (p0->Convert2(GDL_DOUBLE, BaseGDL::COPY));
 	if ((*res)[0] == 0.0) {
@@ -320,7 +326,7 @@ namespace lib {
 	resGuard.release();
 	return res;
       }
-    else if (( p0->Type() == GDL_DOUBLE) ||  e->KeywordSet("DOUBLE"))
+    else if (( p0->Type() == GDL_DOUBLE) ||  hasDouble)
       {
 
 	DDoubleGDL* p0D = static_cast<DDoubleGDL*>
@@ -437,7 +443,7 @@ namespace lib {
 
 
 #if defined(USE_EIGEN)
-  BaseGDL* invert_eigen_fun( EnvT* e)
+  BaseGDL* invert_eigen_fun( EnvT* e, bool hasDouble)
   {
     
     BaseGDL* p0 = e->GetParDefined( 0);
@@ -486,7 +492,7 @@ namespace lib {
       }
 
 
-      if(( p0->Type() == GDL_DOUBLE) || e->KeywordSet("DOUBLE")) {
+      if(( p0->Type() == GDL_DOUBLE) || hasDouble) {
 	DDoubleGDL* res = static_cast<DDoubleGDL*>
 	  (p0->Convert2(GDL_DOUBLE, BaseGDL::COPY));
 	if ((*res)[0] == 0.0) {
@@ -563,7 +569,7 @@ namespace lib {
       return res;
     }
 
-    else if(( p0->Type() == GDL_DOUBLE) || e->KeywordSet("DOUBLE")) {
+    else if(( p0->Type() == GDL_DOUBLE) || hasDouble) {
       DDoubleGDL* p0D = static_cast<DDoubleGDL*>
 	(p0->Convert2( GDL_DOUBLE, BaseGDL::COPY));
       NbCol=p0->Dim(0);
@@ -634,7 +640,7 @@ namespace lib {
       }
   }
 #else
-  BaseGDL* invert_eigen_fun( EnvT* e){
+  BaseGDL* invert_eigen_fun( EnvT* e, bool hasDouble){
     e->Throw( "sorry, INVERT with Eigen not available. GDL must be compiled with Eigen lib.");
      return NULL;
   }

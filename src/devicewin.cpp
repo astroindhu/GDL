@@ -198,7 +198,7 @@ bool DeviceWIN::GUIOpen(int wIx, int xSize, int ySize)
 
 	PLINT r[ctSize], g[ctSize], b[ctSize];
 	actCT.Get(r, g, b);
-	winList[wIx]->scmap0(r, g, b, ctSize); //set colormap 0 to 256 values
+	winList[wIx]->SetColorMap0(r, g, b, ctSize); //set colormap 0 to 256 values
 
 	// need to be called initially. permit to fix things
 	winList[wIx]->ssub(1, 1);
@@ -223,7 +223,7 @@ bool DeviceWIN::GUIOpen(int wIx, int xSize, int ySize)
 
 
 bool DeviceWIN::WOpen(int wIx, const std::string& title,
-	int xSize, int ySize, int xPos, int yPos)
+	int xSize, int ySize, int xPos, int yPos, bool hide)
 {
 
 	int debug = 0;
@@ -329,7 +329,7 @@ bool DeviceWIN::WOpen(int wIx, const std::string& title,
 	PLINT r[256], g[256], b[256];
 	actCT.Get(r, g, b);
 	// winList[ wIx]->scmap0( r, g, b, actCT.size());
-	winList[wIx]->scmap1(r, g, b, ctSize);
+	winList[wIx]->SetColorMap1(r, g, b, ctSize);
 
 	if (debug) cout << "; WOpen:winList[ wIx]->Init(";
 
@@ -375,7 +375,7 @@ bool DeviceWIN::WState(int wIx)
 	return wIx >= 0 && wIx < oList.size() && oList[wIx] != 0;
 }
 
-bool DeviceWIN::WSize(int wIx, int *xSize, int *ySize, int *xPos, int *yPos)
+bool DeviceWIN::WSize(int wIx, int *xSize, int *ySize)
 {
 	TidyWindowsList();
 
@@ -384,13 +384,10 @@ bool DeviceWIN::WSize(int wIx, int *xSize, int *ySize, int *xPos, int *yPos)
 		return false;
 
 	long xleng, yleng;
-	long xoff, yoff;
-	winList[wIx]->GetGeometry(xleng, yleng, xoff, yoff);
+	winList[wIx]->GetGeometry(xleng, yleng);
 
 	*xSize = xleng;
 	*ySize = yleng;
-	*xPos = xoff;
-	*yPos = yoff;
 
 	return true;
 }
@@ -501,14 +498,14 @@ DString DeviceWIN::GetVisualName()
 	this->GetStream(); //to open a window if none opened.
 	return winList[actWin]->GetVisualName();
 }
-
-DLong DeviceWIN::GetPixelDepth()
-{
-	HDC hscreenDC = GetWindowDC(GetDesktopWindow());
-	int bitsperpixel = GetDeviceCaps(hscreenDC, BITSPIXEL);
-	ReleaseDC(NULL, hscreenDC);
-	return bitsperpixel;
-}
+//This function is reserved to device Z, should not exist for WIN!
+//DLong DeviceWIN::GetPixelDepth()
+//{
+//	HDC hscreenDC = GetWindowDC(GetDesktopWindow());
+//	int bitsperpixel = GetDeviceCaps(hscreenDC, BITSPIXEL);
+//	ReleaseDC(NULL, hscreenDC);
+//	return bitsperpixel;
+//}
 
 DByteGDL* DeviceWIN::WindowState()
 {

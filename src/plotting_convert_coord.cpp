@@ -22,8 +22,8 @@
 #define TODATACOORDX( in, out, log) out = (log) ? pow(10.0, (in -sx[0])/sx[1]) : (in -sx[0])/sx[1];
 #define TONORMCOORDY( in, out, log) out = (log) ? sy[0] + sy[1] * log10(in) : sy[0] + sy[1] * in;
 #define TODATACOORDY( in, out, log) out = (log) ? pow(10.0, (in -sy[0])/sy[1]) : (in -sy[0])/sy[1];
-#define TONORMCOORDZ( in, out, log) out = (log) ? sz[0] + sz[1] * log10(in) : sz[0] + sz[1] * in;
-#define TODATACOORDZ( in, out, log) out = (log) ? pow(10.0, (in -sz[0])/sz[1]) : (in -sz[0])/sz[1];
+#define TONORMCOORDZ( in, out, log, doT3d) out = (doT3d)? (log) ? sz[0] + sz[1] * log10(in) : sz[0] + sz[1] * in   : (log) ? log10(in)    : in;
+#define TODATACOORDZ( in, out, log, doT3d) out = (doT3d)? (log) ? pow(10.0, (in -sz[0])/sz[1]) : (in -sz[0])/sz[1] : (log) ? pow(10.0,in) : in;
 namespace lib {
 
   using namespace std;
@@ -44,13 +44,21 @@ namespace lib {
     
     COORDSYS icoordinateSystem=DATA, ocoordinateSystem=DATA ;
     //check presence of DATA,DEVICE and NORMAL options
-    if ( e->KeywordSet("DATA") ) icoordinateSystem=DATA;
-    if ( e->KeywordSet("DEVICE") ) icoordinateSystem=DEVICE;
-    if ( e->KeywordSet("NORMAL") ) icoordinateSystem=NORMAL;
-    if ( e->KeywordSet("TO_DATA") ) ocoordinateSystem=DATA;
-    if ( e->KeywordSet("TO_DEVICE") ) ocoordinateSystem=DEVICE;
-    if ( e->KeywordSet("TO_NORMAL") ) ocoordinateSystem=NORMAL;
+    static int DATAIx=e->KeywordIx("DATA");
+    static int DEVICEIx=e->KeywordIx("DEVICE");
+    static int NORMALIx=e->KeywordIx("NORMAL");
+    static int TO_DATAIx=e->KeywordIx("TO_DATA");
+    static int TO_DEVICEIx=e->KeywordIx("TO_DEVICE");
+    static int TO_NORMALIx=e->KeywordIx("TO_NORMAL");
     
+    if ( e->KeywordSet(DATAIx) ) icoordinateSystem=DATA;
+    if ( e->KeywordSet(DEVICEIx) ) icoordinateSystem=DEVICE;
+    if ( e->KeywordSet(NORMALIx) ) icoordinateSystem=NORMAL;
+    if ( e->KeywordSet(TO_DATAIx) ) ocoordinateSystem=DATA;
+    if ( e->KeywordSet(TO_DEVICEIx) ) ocoordinateSystem=DEVICE;
+    if ( e->KeywordSet(TO_NORMALIx) ) ocoordinateSystem=NORMAL;
+    static int t3dIx = e->KeywordIx( "T3D");
+    bool doT3d=(e->KeywordSet(t3dIx) || T3Denabled());   
     DLong dims[2] = {3, 0};
 
     DDoubleGDL* res;
@@ -84,20 +92,17 @@ namespace lib {
     gdlGetAxisType("Y", yLog);
     gdlGetAxisType("Z", zLog);
         
-    int xSize, ySize, xPos, yPos;
+    int xSize, ySize;
+    //give default values
+    DStructGDL* dStruct = SysVar::D();
+    static unsigned xsizeTag = dStruct->Desc()->TagIndex( "X_SIZE");
+    static unsigned ysizeTag = dStruct->Desc()->TagIndex( "Y_SIZE");
+    xSize = (*static_cast<DLongGDL*>( dStruct->GetTag( xsizeTag, 0)))[0];
+    ySize = (*static_cast<DLongGDL*>( dStruct->GetTag( ysizeTag, 0)))[0];
     // Use Size in lieu of VSize
     GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
     DLong wIx = actDevice->ActWin();
-    if( wIx == -1) {
-      Message(e->GetProName()+": Window is closed and unavailable.");
-      DStructGDL* dStruct = SysVar::D();
-      static unsigned xsizeTag = dStruct->Desc()->TagIndex( "X_SIZE");
-      static unsigned ysizeTag = dStruct->Desc()->TagIndex( "Y_SIZE");
-      xSize = (*static_cast<DLongGDL*>( dStruct->GetTag( xsizeTag, 0)))[0];
-      ySize = (*static_cast<DLongGDL*>( dStruct->GetTag( ysizeTag, 0)))[0];
-    } else {
-      bool success = actDevice->WSize(wIx, &xSize, &ySize, &xPos, &yPos);
-    }
+    if( wIx != -1) bool success = actDevice->WSize(wIx, &xSize, &ySize); //on failure, sizes are ot changed by WSize.
     
     //projection?
       bool mapSet=false;
@@ -140,7 +145,7 @@ namespace lib {
         for (OMPInt i = 0; i < nrows; ++i) {
           TONORMCOORDX((*xVal)[i], (*xVal)[i], xLog);
           TONORMCOORDY((*yVal)[i], (*yVal)[i], yLog);
-          TONORMCOORDZ((*zVal)[i], (*zVal)[i], zLog);
+          TONORMCOORDZ((*zVal)[i], (*zVal)[i], zLog, doT3d);
         }
       }
         break;
@@ -167,7 +172,7 @@ namespace lib {
         for (OMPInt i = 0; i < nrows; ++i) {
           TODATACOORDX((*xVal)[i], (*xVal)[i], xLog);
           TODATACOORDY((*yVal)[i], (*yVal)[i], yLog);
-          TODATACOORDZ((*zVal)[i], (*zVal)[i], zLog);
+          TODATACOORDZ((*zVal)[i], (*zVal)[i], zLog, doT3d);
         }
       }
       
@@ -225,9 +230,8 @@ namespace lib {
     //minimum set of dimensions of arrays. singletons expanded to dimension,
 
     //T3D
-    bool doT3d;
     static int t3dIx = e->KeywordIx( "T3D");
-    doT3d=(e->KeywordSet(t3dIx) || T3Denabled(e));
+    bool doT3d=(e->KeywordSet(t3dIx) || T3Denabled());
     DDoubleGDL *xValou;
     DDoubleGDL *yValou;
     Guard<BaseGDL> xvalou_guard, yvalou_guard;
@@ -241,7 +245,8 @@ namespace lib {
     BaseGDL* p2;
     
     DType type=GDL_FLOAT;
-    if (e->KeywordSet("DOUBLE")) type=GDL_DOUBLE;
+    static int doubleIx = e->KeywordIx( "DOUBLE");
+    if (e->KeywordSet(doubleIx)) type=GDL_DOUBLE;
 
     p0 = e->GetParDefined( 0);
     if (p0->Type() == GDL_DOUBLE) type=GDL_DOUBLE;
@@ -376,7 +381,6 @@ namespace lib {
     DDoubleGDL* mat=(new DDoubleGDL(dimension(dim1,dim0),BaseGDL::NOZERO));
     for (int j=0; j < dim0; ++j) for (int i=0; i < dim1; ++i)(*mat)[i*dim1+j]=(*me)[j*dim0 + i];
     memcpy(me->DataAddr(),mat->DataAddr(),dim0*dim1*sizeof(double));
-//    for (int i=0; i < dim0; ++i) for (int j=0; j < dim1; ++j)(*me)[i*dim0+j]=(*mat)[i*dim0 + j];
     GDLDelete(mat);
   }
   void SelfReset3d(DDoubleGDL* me)
@@ -408,7 +412,9 @@ namespace lib {
     DDoubleGDL* mat=(new DDoubleGDL(dimension(dim0,dim1)));
     SelfReset3d(mat); //identity Matrix
     for(SizeT i=0; i<3; ++i) {(*mat)[3*dim1+i]=trans[i];}
-    memcpy(me->DataAddr(),(mat->MatrixOp(me,false,false))->DataAddr(),dim0*dim1*sizeof(double));
+    DDoubleGDL* intermediary=mat->MatrixOp(me,false,false);
+    memcpy(me->DataAddr(),intermediary->DataAddr(),dim0*dim1*sizeof(double));
+    GDLDelete(intermediary);
     GDLDelete(mat);
   }
   DDoubleGDL* Scale3d(DDoubleGDL* me, DDouble *scale)
@@ -430,7 +436,9 @@ namespace lib {
     DDoubleGDL* mat=(new DDoubleGDL(dimension(dim0,dim1)));
     SelfReset3d(mat); //identity Matrix
     for(SizeT i=0; i<3; ++i) {(*mat)[i*dim1+i]=scale[i];}
-    memcpy(me->DataAddr(),(mat->MatrixOp(me,false,false))->DataAddr(),dim0*dim1*sizeof(double));
+    DDoubleGDL* intermediary=mat->MatrixOp(me,false,false);
+    memcpy(me->DataAddr(),intermediary->DataAddr(),dim0*dim1*sizeof(double));
+    GDLDelete(intermediary);
     GDLDelete(mat);
 }
 #define DPI (double)(4*atan(1.0))
@@ -469,7 +477,9 @@ namespace lib {
             (*maty)[0 * ncols + 2] = -s;
             (*maty)[2 * ncols + 0] = s;
             (*maty)[2 * ncols + 2] = c;
-            memcpy(mat->DataAddr(),(maty->MatrixOp(mat,false,false))->DataAddr(),dim0*dim1*sizeof(double));
+            DDoubleGDL* intermediary=maty->MatrixOp(mat,false,false);
+            memcpy(mat->DataAddr(),intermediary->DataAddr(),dim0*dim1*sizeof(double));
+            GDLDelete(intermediary);
             break;
           }
           case 2:
@@ -478,12 +488,16 @@ namespace lib {
             (*matz)[0 * ncols + 1] = s;
             (*matz)[1 * ncols + 0] = -s;
             (*matz)[1 * ncols + 1] = c;
-            memcpy(mat->DataAddr(),(matz->MatrixOp(mat,false,false))->DataAddr(),dim0*dim1*sizeof(double));
+            DDoubleGDL* intermediary=matz->MatrixOp(mat,false,false);
+            memcpy(mat->DataAddr(),intermediary->DataAddr(),dim0*dim1*sizeof(double));
+            GDLDelete(intermediary);
           }
         }
       }
 
-    memcpy(me->DataAddr(),(mat->MatrixOp(me,false,false))->DataAddr(),dim0*dim1*sizeof(double));
+    DDoubleGDL* intermediary=mat->MatrixOp(me,false,false);
+    memcpy(me->DataAddr(),intermediary->DataAddr(),dim0*dim1*sizeof(double));
+    GDLDelete(intermediary);
     GDLDelete(matz);
     GDLDelete(maty);
     GDLDelete(mat);
@@ -498,7 +512,9 @@ namespace lib {
     DDoubleGDL* mat=(new DDoubleGDL(dimension(dim0,dim1)));
     SelfReset3d(mat); //identity Matrix
     (*mat)[2*dim1+3]=-1.0/zdist;
-    memcpy(me->DataAddr(),(mat->MatrixOp(me,false,false))->DataAddr(),dim0*dim1*sizeof(double));
+    DDoubleGDL* intermediary=mat->MatrixOp(me,false,false);
+    memcpy(me->DataAddr(),intermediary->DataAddr(),dim0*dim1*sizeof(double));
+    GDLDelete(intermediary);
     GDLDelete(mat);
  }
   void SelfOblique3d(DDoubleGDL* me, DDouble dist, DDouble angle)
@@ -511,7 +527,9 @@ namespace lib {
     (*mat)[2*dim1+2]=0.0;
     (*mat)[2*dim1+0]=dist*cos(angle*DEGTORAD);
     (*mat)[2*dim1+1]=dist*sin(angle*DEGTORAD);
-    memcpy(me->DataAddr(),(mat->MatrixOp(me,false,false))->DataAddr(),dim0*dim1*sizeof(double));
+    DDoubleGDL* intermediary=mat->MatrixOp(me,false,false);
+    memcpy(me->DataAddr(),intermediary->DataAddr(),dim0*dim1*sizeof(double));
+    GDLDelete(intermediary);
     GDLDelete(mat);
   }
   void SelfExch3d(DDoubleGDL* me, DLong code)
@@ -597,7 +615,7 @@ namespace lib {
  DDoubleGDL* gdlGetT3DMatrix()
  {
     DDoubleGDL* t3dMatrix=(new DDoubleGDL(dimension(4,4),BaseGDL::NOZERO));
-    static DStructGDL* pStruct=SysVar::P();
+    DStructGDL* pStruct=SysVar::P();   //MUST NOT BE STATIC, due to .reset 
     static unsigned tTag=pStruct->Desc()->TagIndex("T");
     for (int i=0; i<t3dMatrix->N_Elements(); ++i )(*t3dMatrix)[i]=(*static_cast<DDoubleGDL*>(pStruct->GetTag(tTag, 0)))[i];
     SelfTranspose3d(t3dMatrix);
@@ -735,14 +753,14 @@ namespace lib {
     //returns NULL if error!
     DDoubleGDL* t3dMatrix=(new DDoubleGDL(dimension(4,4)));
     //retrieve !P.T and find az, alt, inversions, and (possibly) scale and roty
-    static DStructGDL* pStruct=SysVar::P();
+    DStructGDL* pStruct=SysVar::P();   //MUST NOT BE STATIC, due to .reset 
     static unsigned tTag=pStruct->Desc()->TagIndex("T");
     for (int i=0; i<t3dMatrix->N_Elements(); ++i )(*t3dMatrix)[i]=(*static_cast<DDoubleGDL*>(pStruct->GetTag(tTag, 0)))[i];
     SelfTranspose3d(t3dMatrix);
     //check repeatedly rotations & translations
     if (isMatrixRotation(t3dMatrix,alt,az,ay,scale))
     {
-      code=NORMAL;   goto done; // 0
+      code=NORMAL3D;   goto done; // 0
     }
     SelfExch3d(t3dMatrix,01); //XY, 1
     if (isMatrixRotation(t3dMatrix,alt,az,ay,scale))
@@ -823,10 +841,12 @@ done:
     const double invsqrt3=1.0/sqrt(3.0);
     //AX
     DDouble ax=30.0;
-    e->AssureDoubleScalarKWIfPresent("AX", ax);
+    static int AX=e->KeywordIx("AX");
+    e->AssureDoubleScalarKWIfPresent(AX, ax);
     //AZ
     DDouble az=30.0;
-    e->AssureDoubleScalarKWIfPresent("AZ", az);
+    static int AZ=e->KeywordIx("AZ");
+    e->AssureDoubleScalarKWIfPresent(AZ, az);
     DDoubleGDL* mat=(new DDoubleGDL(dimension(4,4),BaseGDL::NOZERO));
     SelfReset3d(mat);
     static DDouble mytrans[3]={-0.5, -0.5, -0.5};

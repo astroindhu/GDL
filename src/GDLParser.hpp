@@ -2,7 +2,7 @@
 #define INC_GDLParser_hpp_
 
 #include <antlr/config.hpp>
-/* $ANTLR 2.7.7 (20130428): "gdlc.g" -> "GDLParser.hpp"$ */
+/* $ANTLR 2.7.7 (2006-11-01): "gdlc.g" -> "GDLParser.hpp"$ */
 #include <antlr/TokenStream.hpp>
 #include <antlr/TokenBuffer.hpp>
 #include "GDLTokenTypes.hpp"
@@ -18,12 +18,12 @@
 #include "objects.hpp"
 #include "initsysvar.hpp"
 
-#include "antlr/TokenStreamSelector.hpp"
+#include <antlr/TokenStreamSelector.hpp>
 
-#include "antlr/SemanticException.hpp"
-#include "antlr/NoViableAltForCharException.hpp"
-#include "antlr/TokenStreamIOException.hpp"
-#include "antlr/CharInputBuffer.hpp"
+#include <antlr/SemanticException.hpp>
+#include <antlr/NoViableAltForCharException.hpp>
+#include <antlr/TokenStreamIOException.hpp>
+#include <antlr/CharInputBuffer.hpp>
 
 //#include "dinterpreter.hpp"
 

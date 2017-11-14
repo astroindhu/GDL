@@ -57,7 +57,7 @@ namespace SysVar
     dIx, pIx, xIx, yIx, zIx, vIx, gdlWarningIx, gdlIx, cIx, MouseIx,
     errorStateIx, errorIx, errIx, err_stringIx, valuesIx,
     journalIx, exceptIx, mapIx, cpuIx, dirIx, GshhsDirIx, stimeIx,
-    warnIx, usersymIx, orderIx, MakeDllIx;
+    warnIx, usersymIx, orderIx, MakeDllIx, colorIx;
 
   // !D structs
   const int nDevices = 5;
@@ -161,10 +161,10 @@ namespace SysVar
     GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
     GDLGStream* actStream = actDevice->GetStream();
 
-    long xSizeGG,ySizeGG,xOff,yOff;
-    actStream->GetGeometry(xSizeGG,ySizeGG,xOff,yOff);
+    long xSizeGG,ySizeGG;
+    actStream->GetGeometry(xSizeGG,ySizeGG);
     int debug=0;
-    if (debug) cout << "GetX11Geo in SysVar::UpdateD : " << xSizeGG <<" "<< ySizeGG <<" "<< xOff <<" "<< yOff << endl;
+    if (debug) cout << "GetX11Geo in SysVar::UpdateD : " << xSizeGG <<" "<< ySizeGG << endl;
     
     (*static_cast<DLongGDL*>(dD->GetTag(dD->Desc()->TagIndex("X_SIZE"), 0)))[0] = xSizeGG;
     (*static_cast<DLongGDL*>(dD->GetTag(dD->Desc()->TagIndex("Y_SIZE"), 0)))[0] = ySizeGG;
@@ -262,14 +262,14 @@ namespace SysVar
 
   DLongGDL* GetPMulti()
   {
-    static DStructGDL* pStruct = SysVar::P();
+    DStructGDL* pStruct = SysVar::P();   //MUST NOT BE STATIC, due to .reset 
     static int tag = pStruct->Desc()->TagIndex( "MULTI");
     return static_cast<DLongGDL*>( pStruct->GetTag( tag, 0));
   }
 
   DLong GetPFont()
   {
-    static DStructGDL* pStruct = SysVar::P();
+    DStructGDL* pStruct = SysVar::P();   //MUST NOT BE STATIC, due to .reset 
     static int tag = pStruct->Desc()->TagIndex( "FONT");
     return (*static_cast<DLongGDL*>( pStruct->GetTag( tag)))[0];
   }
@@ -366,12 +366,6 @@ namespace SysVar
     static_cast<DLongGDL&>(*jSysVar.Data())[0] = jLUN;
   }
   
-  DStructGDL* USYM()
-  {
-    DVar& pSysVar = *sysVarList[ usersymIx];
-    return static_cast<DStructGDL*>(pSysVar.Data());
-  }
-
   DLong TV_ORDER()
   {
     DVar& orderVar=*sysVarList[orderIx];
@@ -442,7 +436,8 @@ namespace SysVar
     // plotting
     // !P
     SizeT clipDim = 6;
-    DLong p_clipInit[] = { 0, 0, 1024, 1024, 0, 1000};
+//    DLong p_clipInit[] = { 0, 0, 1024, 1024, 0, 1000};
+    DLong p_clipInit[] = { 0, 0, 639, 511, 0, 0};
     DLongGDL* p_clip = new DLongGDL( dimension( &clipDim, one));
     for( UInt i=0; i<clipDim; i++) (*p_clip)[ i] = p_clipInit[ i];
     SizeT multiDim = 5;
@@ -454,7 +449,7 @@ namespace SysVar
     plt->NewTag("CHARSIZE", new DFloatGDL( 0.0)); 
     plt->NewTag("CHARTHICK", new DFloatGDL( 0.0)); 
     plt->NewTag("CLIP", p_clip); 
-    plt->NewTag("COLOR", new DLongGDL( -1)); 
+    plt->NewTag("COLOR", new DLongGDL( 255)); 
     plt->NewTag("FONT", new DLongGDL( -1)); 
     plt->NewTag("LINESTYLE", new DLongGDL( 0)); 
     plt->NewTag("MULTI", new DLongGDL( dimension( &multiDim, one))); 
@@ -956,7 +951,10 @@ namespace SysVar
 #ifdef _MSC_VER
 	#define PATH_MAX MAX_PATH
 #endif
-
+//patch #90
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
     char actualpath [PATH_MAX+1];
     char *ptr;
     ptr = realpath(symlinkpath, actualpath);
@@ -983,23 +981,48 @@ namespace SysVar
     warnIx     = sysVarList.size();
     sysVarList.push_back(warn);
 
-    // !USERSYM (sorry if this is not how to do the job!
-    DStructGDL* usersymData = new DStructGDL( "!USERSYM");
-    usersymData->NewTag("DIM", new DLongGDL(0));
-    usersymData->NewTag("FILL", new DIntGDL(0));
-    SizeT usersymDim = 1024;
-    {
-      DFloatGDL* tmp = new DFloatGDL( dimension( &usersymDim, one));
-      usersymData->NewTag("X", tmp); 
+    //!COLOR
+    static const int col[]={240,248,255,250,235,215,0,255,255,127,255,212,240,255,255,245,245,220,255,228,196,0,0,0,255,235,205,0,0,255,138,43,
+226,165,42,42,222,184,135,95,158,160,127,255,0,210,105,30,255,127,80,100,149,237,255,248,220,220,20,60,0,255,255,0,
+0,139,0,139,139,184,134,11,169,169,169,0,100,0,169,169,169,189,183,107,139,0,139,85,107,47,255,140,0,153,50,204,
+139,0,0,233,150,122,143,188,143,72,61,139,47,79,79,47,79,79,0,206,209,148,0,211,255,20,147,0,191,255,105,105,
+105,105,105,105,30,144,255,178,34,34,255,250,240,34,139,34,255,0,255,220,220,220,248,248,255,255,215,0,218,165,32,127,
+127,127,0,127,0,173,255,47,127,127,127,240,255,240,255,105,180,205,92,92,75,0,130,255,255,240,240,230,140,230,230,250,
+255,240,245,124,252,0,255,250,205,173,216,230,240,128,128,224,255,255,250,250,210,144,238,144,211,211,211,211,211,211,255,182,
+193,255,160,122,32,178,170,135,206,250,119,136,153,119,136,153,176,196,222,255,255,224,0,255,0,50,205,50,250,240,230,255,
+0,255,127,0,0,102,205,170,0,0,205,186,85,211,147,112,219,60,179,113,123,104,238,0,250,154,72,209,204,199,21,133,
+025,25,112,245,255,250,255,228,225,255,228,181,255,222,173,0,0,128,253,245,230,128,128,0,107,142,35,255,165,0,255,69,
+0,218,112,214,238,232,170,152,251,152,175,238,238,219,112,147,255,239,213,255,218,185,205,133,63,255,192,203,221,160,221,176,
+224,230,127,0,127,255,0,0,188,143,143,65,105,225,139,69,19,250,128,114,244,164,96,46,139,87,255,245,238,160,82,45,
+192,192,192,135,206,235,106,90,205,112,128,144,112,128,144,255,250,250,0,255,127,70,130,180,210,180,140,0,128,128,216,191,
+216,255,99,71,64,224,208,238,130,238,245,222,179,255,255,255,245,245,245,255,255,0,154,205,50};
+    static const string coln[]={"ALICE_BLUE","ANTIQUE_WHITE","AQUA","AQUAMARINE","AZURE","BEIGE","BISQUE","BLACK","BLANCHED_ALMOND",
+    "BLUE","BLUE_VIOLET","BROWN","BURLYWOOD","CADET_BLUE","CHARTREUSE","CHOCOLATE","CORAL","CORNFLOWER","CORNSILK",
+    "CRIMSON","CYAN","DARK_BLUE","DARK_CYAN","DARK_GOLDENROD","DARK_GRAY","DARK_GREEN","DARK_GREY","DARK_KHAKI",
+    "DARK_MAGENTA","DARK_OLIVE_GREEN","DARK_ORANGE","DARK_ORCHID","DARK_RED","DARK_SALMON","DARK_SEA_GREEN",
+    "DARK_SLATE_BLUE","DARK_SLATE_GRAY","DARK_SLATE_GREY","DARK_TURQUOISE","DARK_VIOLET","DEEP_PINK","DEEP_SKY_BLUE",
+    "DIM_GRAY","DIM_GREY","DODGER_BLUE","FIREBRICK","FLORAL_WHITE","FOREST_GREEN","FUCHSIA","GAINSBORO","GHOST_WHITE",
+    "GOLD","GOLDENROD","GRAY","GREEN","GREEN_YELLOW","GREY","HONEYDEW","HOT_PINK","INDIAN_RED","INDIGO","IVORY","KHAKI",
+    "LAVENDER","LAVENDER_BLUSH","LAWN_GREEN","LEMON_CHIFFON","LIGHT_BLUE","LIGHT_CORAL","LIGHT_CYAN","LIGHT_GOLDENROD",
+    "LIGHT_GREEN","LIGHT_GRAY","LIGHT_GREY","LIGHT_PINK","LIGHT_SALMON","LIGHT_SEA_GREEN","LIGHT_SKY_BLUE","LIGHT_SLATE_GRAY",
+    "LIGHT_SLATE_GREY","LIGHT_STEEL_BLUE","LIGHT_YELLOW","LIME","LIME_GREEN","LINEN","MAGENTA","MAROON","MEDIUM_AQUAMARINE",
+    "MEDIUM_BLUE","MEDIUM_ORCHID","MEDIUM_PURPLE","MEDIUM_SEA_GREEN","MEDIUM_SLATE_BLUE","MEDIUM_SPRING_GREEN","MEDIUM_TURQUOISE",
+    "MEDIUM_VIOLET_RED","MIDNIGHT_BLUE","MINT_CREAM","MISTY_ROSE","MOCCASIN","NAVAJO_WHITE","NAVY","OLD_LACE","OLIVE",
+    "OLIVE_DRAB","ORANGE","ORANGE_RED","ORCHID","PALE_GOLDENROD","PALE_GREEN","PALE_TURQUOISE","PALE_VIOLET_RED","PAPAYA_WHIP",
+    "PEACH_PUFF","PERU","PINK","PLUM","POWDER_BLUE","PURPLE","RED","ROSY_BROWN","ROYAL_BLUE","SADDLE_BROWN","SALMON",
+    "SANDY_BROWN","SEA_GREEN","SEASHELL","SIENNA","SILVER","SKY_BLUE","SLATE_BLUE","SLATE_GRAY","SLATE_GREY","SNOW","SPRING_GREEN",
+    "STEEL_BLUE","TAN","TEAL","THISTLE","TOMATO","TURQUOISE","VIOLET","WHEAT","WHITE","WHITE_SMOKE","YELLOW","YELLOW_GREEN"};
+    int ncol=147;
+    int i,k;
+    DStructGDL*  colorData = new DStructGDL( "!COLOR");
+    for (i=0, k=0; i<ncol; ++i){
+     colorData->NewTag(coln[i], new DByteGDL( dimension(3)));
+     for (int j=0; j<3; ++j) (*static_cast<DByteGDL*>( colorData->GetTag( i, 0)))[j] = col[k++];
     }
-    {
-      DFloatGDL* tmp = new DFloatGDL( dimension( &usersymDim, one));
-      usersymData->NewTag("Y", tmp); 
-    }
-    DVar *usym = new DVar ("USERSYM", usersymData);
-    usersymIx  = sysVarList.size();
-    sysVarList.push_back( usym);
- 
+    DVar *color = new DVar( "COLOR", colorData);
+    colorIx     = sysVarList.size();
+    sysVarList.push_back(color);
+    sysVarRdOnlyList.push_back( color); //Is Readonly.  
   }
 
 }

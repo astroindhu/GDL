@@ -28,7 +28,6 @@ namespace lib {
 
     GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
     //GET functions are examined BEFORE setting functions.
-    //GET_CURRENT_FONT ? //TODO
     
     // GET_DECOMPOSED ?
     {
@@ -42,8 +41,52 @@ namespace lib {
           e->SetKW( get_decomposedIx, new DLongGDL( value ) );
       }
     }
-    
-    //GET_FONTNAMES? //TODO
+
+//The font-related commands will not really work in graphic widgets unitil the plplot-related part is taken into account (PLESC font).
+//But all the elements are there.    
+    //SET_FONT?  //must be before GET_FONTNAME if in same commandline.
+    {
+    static int set_fontIx = e->KeywordIx( "SET_FONT" );
+    if ( e->KeywordPresent( set_fontIx ) )
+      {
+	    DStringGDL* pattern = e->GetKWAs<DStringGDL>( set_fontIx);
+        if (!actDevice->SetFont((*pattern)[0])) e->Throw( "Keyword SET_FONT not allowed for call to: DEVICE" ) ;
+      }
+    }
+
+    //GET_FONTNAMES? 
+    {
+    static int get_fontnamesIx = e->KeywordIx( "GET_FONTNAMES" );
+    if ( e->KeywordPresent( get_fontnamesIx ) )
+      {
+        BaseGDL* value = actDevice->GetFontnames( );
+        if ( value == NULL )
+          e->Throw( "Keyword GET_FONTNAMES not allowed for call to: DEVICE" );
+        else
+          e->SetKW( get_fontnamesIx, value->Dup() );
+      }
+    }
+    //GET_FONTNUM? 
+    {
+    static int get_fontnumIx = e->KeywordIx( "GET_FONTNUM" );
+    if ( e->KeywordPresent( get_fontnumIx ) )
+      {
+        DLong value = actDevice->GetFontnum( );
+        if ( value < 0 )
+          e->Throw( "Keyword GET_FONTNUM not allowed for call to: DEVICE" );
+        else
+          e->SetKW( get_fontnumIx, new DLongGDL( value) );
+      }
+    }
+    //GET_CURRENT_FONT? 
+    {
+    static int get_current_fontIx = e->KeywordIx( "GET_CURRENT_FONT" );
+    if ( e->KeywordPresent( get_current_fontIx ) )
+      {
+        DString value = actDevice->GetCurrentFont( ); //should NOT open graphic window
+        e->SetKW( get_current_fontIx, new DStringGDL( value) );
+      }
+    }
     //GET_FONTNUM? //TODO
     
     // GET_GRAPHICS_FUNCTION
@@ -51,7 +94,7 @@ namespace lib {
     static int get_graphics_FunctionIx = e->KeywordIx( "GET_GRAPHICS_FUNCTION");
     if( e->KeywordPresent( get_graphics_FunctionIx)) 
       {
-        DLong value = actDevice->GetGraphicsFunction();
+        DLong value = actDevice->GetGraphicsFunction(); //OPENS A WINDOW IF NONE EXIST
         if(value == -1)
           e->Throw( "Keyword GET_GRAPHICS_FUNCTION not allowed for call to: DEVICE");
         else 
@@ -132,7 +175,7 @@ namespace lib {
      static int get_window_positionIx = e->KeywordIx("GET_WINDOW_POSITION");
       if( e->KeywordPresent( get_window_positionIx)) 
       {
-       DIntGDL* value = actDevice->GetWindowPosition();
+       DIntGDL* value = actDevice->GetWindowPosition(); //OPENS A WINDOW IF NONE EXISTS
        if (value == NULL) 
           e->Throw( "Keyword GET_WINDOW_POSITION not allowed for call to: DEVICE");
        else 
@@ -479,7 +522,19 @@ namespace lib {
        if (!doesTheCopy) e->Throw( "Keyword COPY not allowed for call to: DEVICE");
        }
     }
- 
+     // SET_PIXEL_DEPTH ?
+    {
+      static int set_pixel_depthIx = e->KeywordIx( "SET_PIXEL_DEPTH");
+      if( e->KeywordPresent( set_pixel_depthIx)) 
+      {
+        BaseGDL* depthKW = e->GetKW(set_pixel_depthIx);
+        if( depthKW != NULL)
+        {
+          bool success = actDevice->SetPixelDepth((*e->GetKWAs<DIntGDL>(set_pixel_depthIx))[0]);
+          if(!success) e->Throw( "Keyword SET_PIXEL_DEPTH not allowed for call to: DEVICE");
+        }
+      }
+    }
   }
 
 } // namespace

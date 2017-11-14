@@ -24,7 +24,7 @@
 ;
 ;
 ; MODIFICATION HISTORY:
-;  - 05/11/2013: inital verison 
+;  - 05/11/2013: inital version 
 ;
 ;-
 ; LICENCE:

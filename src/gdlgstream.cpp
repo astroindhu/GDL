@@ -49,6 +49,8 @@ using namespace std;
 
 void GDLGStream::Thick(DFloat thick)
 {
+  //note that 'cmake' may not able to find correct value of HAVE_PLPLOT_WIDTH. Please report.
+  // in the meantime, you may edit "config.h" by hand.
 #ifdef HAVE_PLPLOT_WIDTH
     plstream::width(static_cast<PLFLT>(thick*thickFactor));
 #else
@@ -83,7 +85,7 @@ void GDLGStream::SetColorMap1SingleColor( ULong color)
     red[0] =red[1] = color & 0xFF;
     green[0] = green[1] =(color >> 8)  & 0xFF;
     blue[0]= blue[1]=(color >> 16) & 0xFF;
-    plstream::scmap1(red, green, blue, 2); 
+    SetColorMap1(red, green, blue, 2); 
 }
 
 void GDLGStream::SetColorMap1DefaultColors(PLINT ncolors, DLong decomposed)
@@ -91,15 +93,15 @@ void GDLGStream::SetColorMap1DefaultColors(PLINT ncolors, DLong decomposed)
   if (decomposed == 0) { //just copy Table0 to Table1 so that scale from 0 to 1 in table 1 goes through the whole table
     PLINT r[ctSize], g[ctSize], b[ctSize];
     GraphicsDevice::GetCT()->Get( r, g, b); 
-    plstream::scmap1(r, g, b, ctSize); 
+    SetColorMap1(r, g, b, ctSize); 
   } else {
     PLFLT r[2], g[2], b[2], pos[2];
     r[0] = pos[0] = 0.0;
     r[1] = pos[1] = 1.0;
     g[0] = g[1] = 0.0;
     b[0] = b[1] = 0.0;
-    plstream::scmap1n(ncolors);
-    plstream::scmap1l(TRUE,2,pos,r, g, b, NULL); 
+    SetColorMap1n(ncolors);
+    SetColorMap1l(TRUE,2,pos,r, g, b, NULL); 
   }
 }
 
@@ -132,7 +134,7 @@ void GDLGStream::SetColorMap1Table( PLINT tableSize, BaseGDL *passed_colors,  DL
       b[i] = (col >> 16) & 0xFF;   
      }
   }
-  plstream::scmap1(r, g, b, tableSize); 
+  SetColorMap1(r, g, b, tableSize); 
 }
 
 void GDLGStream::SetColorMap1Ramp(DLong decomposed, PLFLT minlight)
@@ -141,8 +143,8 @@ void GDLGStream::SetColorMap1Ramp(DLong decomposed, PLFLT minlight)
     h[0] = h[1] = s[0] = s[1] = pos[0] = 0.0;
     l[0] = minlight;
     l[1] = pos[1] = 1.0;
-    plstream::scmap1n(256);
-    plstream::scmap1l(FALSE,2,pos,h, l, s, NULL); 
+    SetColorMap1n(256);
+    SetColorMap1l(FALSE,2,pos,h, l, s, NULL); 
 }
 #define WHITEB 255
 void GDLGStream::Background( ULong color, DLong decomposed)
@@ -169,7 +171,7 @@ void GDLGStream::DefaultBackground()
     GraphicsDevice::GetDevice()->SetDeviceBckColor(WHITEB, WHITEB, WHITEB );
     return;
   }
-  static DStructGDL* pStruct=SysVar::P();
+  DStructGDL* pStruct=SysVar::P();   //MUST NOT BE STATIC, due to .reset 
   DLong background=(*static_cast<DLongGDL*>(pStruct->GetTag(pStruct->Desc()->TagIndex("BACKGROUND"), 0)))[0];
   DByte r,g,b;
   PLINT red,green,blue;
@@ -285,7 +287,7 @@ void GDLGStream::NoSub()
 
 
 // default is a wrapper for gpage(). Is overriden by, e.g., X driver.
-void GDLGStream::GetGeometry( long& xSize, long& ySize, long& xoff, long& yoff)
+void GDLGStream::GetGeometry( long& xSize, long& ySize)
 {
   if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"GDLGStream::GetGeometry()\n");
   PLFLT xp; PLFLT yp; 
@@ -302,13 +304,9 @@ void GDLGStream::GetGeometry( long& xSize, long& ySize, long& xoff, long& yoff)
   if (name == "PS") { 
     xSize = (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("X_SIZE"), 0)))[0];
     ySize = (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("Y_SIZE"), 0)))[0];
-    xoff = 0;
-    yoff = 0;
   } else {
     xSize = xleng;
     ySize = yleng;
-    xoff = plxoff;
-    yoff = plyoff;
   }
   if (xSize<1.0||ySize<1) //plplot gives back crazy values! z-buffer for example!
   {
@@ -316,10 +314,8 @@ void GDLGStream::GetGeometry( long& xSize, long& ySize, long& xoff, long& yoff)
     plstream::gspa(xmin,xmax,ymin,ymax); //subpage in mm
     xSize=min(1.0,xmax-xmin);
     ySize=min(1.0,ymax-ymin);
-    xoff=0.0;
-    yoff=0.0;
   }
-  if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"    found (%ld %ld %ld %ld)\n", xSize, ySize, xoff, yoff);
+  if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"    found (%ld %ld)\n", xSize, ySize);
 
 }
 
@@ -477,7 +473,7 @@ bool GDLGStream::TranslateFormatCodes(const char *in, std::string & out)
           curr_lev--;
           out += "#d";
           // continues!
-        case 'D' : case 'd' : // subscript
+        case 'B' : case 'b' : case 'D' : case 'd' : // subscript
         case 'I' : case 'i' : // index
           curr_lev--;
           out += "#d";
@@ -485,10 +481,10 @@ bool GDLGStream::TranslateFormatCodes(const char *in, std::string & out)
         case 'R' : case 'r' : // restore position
           for (; save_pos < curr_pos; curr_pos--) out += "#b";
           // continues!
-        case 'A' : case 'a' : // shift above the division line
-          //TODO: plplot seems not to support it 
-        case 'B' : case 'b' : // shift below the division line
-          //TODO: plplot seems not to support it
+        //case 'A' : case 'a' : // shift above the division line
+          //TODO: plplot seems not to support it ----> treated as upperscript for the moment
+       // case 'B' : case 'b' : // shift below the division line
+          //TODO: plplot seems not to support it ----> treated as subscript for the moment
         case 'N' : case 'n' : // back to normal size
           while (curr_lev != 0) 
           {
@@ -498,7 +494,7 @@ bool GDLGStream::TranslateFormatCodes(const char *in, std::string & out)
           // assumed from examples in documentation
           if (in[i + 1] == 'N' || in[i + 1] == 'n') out += fonts[curr_fnt = next_fnt = default_fnt];
           break;
-        case 'U' : case 'u' : // superscript
+        case 'A' : case 'a' : case 'U' : case 'u' : // superscript
         case 'E' : case 'e' : // exponent
           curr_lev++;
           out += "#u";
@@ -891,6 +887,14 @@ retrn:
   return true; 
 }
 
+void GDLGStream::setSymbolSize( PLFLT scale )
+{
+  if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"setSymbolScale(%f)\n",scale);
+  plstream::ssym(0.0, scale);
+  theCurrentSymSize=scale;
+}
+PLFLT GDLGStream::getSymbolSize(){return theCurrentSymSize;}
+
 void GDLGStream::mtex( const char *side, PLFLT disp, PLFLT pos, PLFLT just,
                        const char *text)
 {
@@ -923,6 +927,8 @@ void GDLGStream::sizeChar( PLFLT scale )
 void GDLGStream::vpor(PLFLT xmin, PLFLT xmax, PLFLT ymin, PLFLT ymax )
 {
   if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"vpor(): requesting x[%f:%f],y[%f:%f] (normalized, subpage)\n",xmin,xmax,ymin,ymax);
+  //note that plplot apparently does not write the y=0 line of pixels (in device coords). IDL page is on the contrary limited to
+  // [0..1[ in both axes (normalized coordinates)
   plstream::vpor(xmin, xmax, ymin, ymax);
   theBox.nx1=xmin;
   theBox.nx2=xmax;

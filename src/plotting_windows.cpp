@@ -33,7 +33,15 @@ namespace lib {
     SizeT nParam=e->NParam();
 
     DLong wIx = 0;
-    if( e->KeywordSet("FREE"))
+    static int FREEIx = e->KeywordIx("FREE");
+    static int TITLEIx = e->KeywordIx("TITLE");
+    static int XPOSIx = e->KeywordIx("XPOS");
+    static int YPOSIx = e->KeywordIx("YPOS");
+    static int XSIZEIx = e->KeywordIx("XSIZE");
+    static int YSIZEIx = e->KeywordIx("YSIZE");
+    static int RETAINIx = e->KeywordIx("RETAIN");
+    static int PIXMAPIx = e->KeywordIx("PIXMAP");
+    if( e->KeywordSet(FREEIx))
       {
 	wIx = actDevice->WAddFree();
 	if( wIx == -1)
@@ -44,16 +52,16 @@ namespace lib {
 	if( nParam == 1)
 	  {
 	    e->AssureLongScalarPar( 0, wIx);
-	    if( wIx < 0 || wIx >= maxWin)
+	    if( wIx < 0 || wIx >= actDevice->MaxNonFreeWin()) //to comply with IDL
 	      e->Throw( "Window number "+i2s(wIx)+
-			" out of range.");
+			" out of range or no more windows.");
 	  }
       }
 
     DString title;
-    if( e->KeywordPresent( "TITLE"))
+    if( e->KeywordPresent(TITLEIx))
       {
-	e->AssureStringScalarKWIfPresent( "TITLE", title);
+	e->AssureStringScalarKWIfPresent( TITLEIx, title);
       }
     else
       {
@@ -61,15 +69,15 @@ namespace lib {
       }
 
     DLong xPos=-1, yPos=-1; //NOTE: xPos=-1 and yPos=-1 are when XPOS and YPOS options were not used!
-    e->AssureLongScalarKWIfPresent( "XPOS", xPos);
-    e->AssureLongScalarKWIfPresent( "YPOS", yPos);
+    e->AssureLongScalarKWIfPresent( XPOSIx, xPos);
+    e->AssureLongScalarKWIfPresent( YPOSIx, yPos);
 
     DLong xSize, ySize;
 
     actDevice->DefaultXYSize(&xSize, &ySize);
 
-    e->AssureLongScalarKWIfPresent( "XSIZE", xSize);
-    e->AssureLongScalarKWIfPresent( "YSIZE", ySize);
+    e->AssureLongScalarKWIfPresent( XSIZEIx, xSize);
+    e->AssureLongScalarKWIfPresent( YSIZEIx, ySize);
 
     int debug=0;
     if (debug) {
@@ -92,15 +100,16 @@ namespace lib {
 //		 "(BadValue (integer parameter out of range for operation)).");
     
     DLong retainType = 0; 
-    if( e->KeywordPresent( "RETAIN"))
+    if( e->KeywordPresent( RETAINIx))
     {
-      e->AssureLongScalarKWIfPresent( "RETAIN", retainType);
+      e->AssureLongScalarKWIfPresent( RETAINIx, retainType);
     }
-    bool success = actDevice->SetBackingStore(retainType);  
-    success = actDevice->WOpen( wIx, title, xSize, ySize, xPos, yPos);
+    bool success = actDevice->SetBackingStore(retainType);
+    bool hide=e->KeywordSet( PIXMAPIx);
+    success = actDevice->WOpen( wIx, title, xSize, ySize, xPos, yPos, hide);
     if( !success)
       e->Throw(  "Unable to create window.");
-    if ( e->KeywordSet( "PIXMAP"))
+    if ( e->KeywordSet( PIXMAPIx))
     {
       success = actDevice->Hide();
     }
@@ -108,45 +117,45 @@ namespace lib {
     actDevice->GetStream()->DefaultBackground();
     actDevice->GetStream()->Clear();
 
- }
+  }
 
-  void wset( EnvT* e)
-  {
+  void wset(EnvT* e) {
     GraphicsDevice* actDevice = GraphicsDevice::GetDevice();
     int maxWin = actDevice->MaxWin();
-    if( maxWin == 0)
-      e->Throw( "Routine is not defined for current graphics device.");
+    if (maxWin == 0)
+      e->Throw("Routine is not defined for current graphics device.");
 
-    SizeT nParam=e->NParam();
+    SizeT nParam = e->NParam();
     DLong wIx = 0;
-    if( nParam != 0)
-      {
-	e->AssureLongScalarPar( 0, wIx);
+    if (nParam != 0) {
+      e->AssureLongScalarPar(0, wIx);
+    }
+    //special case for "WSET,-1"
+    if (wIx == -1) {
+      wIx = actDevice->GetNonManagedWidgetActWin();
+      if (wIx == -1) {//set !D.WINDOW to -1: no windows available, only *managed* widgets are eventually present.
+        actDevice->SetActWin(wIx); //this simply sets !D.WINDOW to -1.
+        return;
       }
-    if( wIx == -1) wIx = actDevice->ActWin();
-    if( wIx == -1) 
-      e->Throw( "Window is closed and unavailable.");
-
-    if( wIx == 0)
-      {
-	if( actDevice->ActWin() == -1)
-	  {
-            DLong xSize, ySize;
-            actDevice->DefaultXYSize(&xSize, &ySize);
-	    bool success = actDevice->WOpen( 0, "GDL 0", xSize, ySize, -1, -1);
-	    if( !success)
-	      e->Throw( "Unable to create window.");
-//        success = actDevice->UnsetFocus();  // following a deviceXXX->WOpen
+    }
+    if (wIx == 0) {
+      if (actDevice->ActWin() == -1) {
+        DLong xSize, ySize;
+        actDevice->DefaultXYSize(&xSize, &ySize);
+        bool success = actDevice->WOpen(0, "GDL 0", xSize, ySize, -1, -1, false);
+        if (!success)
+          e->Throw("Unable to create window.");
+        //        success = actDevice->UnsetFocus();  // following a deviceXXX->WOpen
         //FIXME: ADD support for RETAIN (BackingSTORE))
         actDevice->GetStream()->DefaultBackground();
         actDevice->GetStream()->Clear();
         return;
-	  }
       }
+    }
 
-    bool success = actDevice->WSet( wIx);
-    if( !success)
-      e->Throw( "Window is closed and unavailable.");
+    bool success = actDevice->WSet(wIx);
+    if (!success)
+      e->Throw("Window is closed and unavailable.");
   }
 
   void wshow( EnvT* e)
@@ -179,7 +188,8 @@ namespace lib {
     //GD: it is not a sub-window, but a screen number: xwd->screen, but that does not make window iconic any better!
 
     bool iconic = false;
-    if( e->KeywordSet("ICONIC")) iconic=true;
+    static int ICONICIx = e->KeywordIx("ICONIC");
+    if( e->KeywordSet(ICONICIx)) iconic=true;
 
     if (!actDevice->WShow( wIx, show, iconic)) 
       e->Throw( "Window number "+i2s(wIx)+" out of range or no more windows.");

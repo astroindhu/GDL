@@ -30,7 +30,7 @@
 #include "prognode.hpp"
 #include "str.hpp"
 
-#include "antlr/Token.hpp"
+#include <antlr/Token.hpp>
 
 template<typename T>  class Is_eq: public std::unary_function<T,bool>
 {
@@ -161,7 +161,7 @@ public:
     String_abbref_eq searchKey(s);
     int ix=0;
     for(KeyVarListT::iterator i=key.begin();
-	i != key.end(); i++, ix++) if( searchKey(*i)) {
+	i != key.end(); ++i, ++ix) if( searchKey(*i)) {
 	  return ix;
 	}
     return -1;
@@ -201,6 +201,14 @@ public:
   
   bool GetHideHelp() const { return hideHelp;}
   void SetHideHelp( bool v) { hideHelp = v;}
+
+  // for sorting lists by name. Not used (lists too short to make a time gain. Long lists would, if existing,
+  // benefit from sorting by hash number in a std::map instead of a std::list.
+  struct CompLibFunName: public std::binary_function< DLib*, DLib*, bool>
+  {
+    bool operator() ( DLib* f1, DLib* f2) const
+    { return f1->ObjectName() < f2->ObjectName();}
+  };
 };
 
 // library procedure
@@ -344,8 +352,14 @@ public:
 
   void     DelVar(const int ix) {var.erase(var.begin() + ix);}
 
-  SizeT Size() { return var.size();}
-
+  SizeT Size() {return var.size();}
+  SizeT CommonsSize() {
+   SizeT commonsize=0;
+   CommonBaseListT::iterator c = common.begin();
+   for(; c != common.end(); ++c) commonsize+=(*c)->NVar();
+   return commonsize;
+   }
+  
   int NForLoops() const { return nForLoops;}
   
   // search for variable returns true if its found in var or common blocks
@@ -389,13 +403,14 @@ public:
     return key[ix];
   }
 
+  BaseGDL* GetCommonVarNameList();
   bool GetCommonVarName(const BaseGDL* p, std::string& varName);
   bool GetCommonVarName4Help(const BaseGDL* p, std::string& varName);
 
   BaseGDL** GetCommonVarPtr(const BaseGDL* p)
   {
     for( CommonBaseListT::iterator c=common.begin();
-	 c != common.end(); c++)
+	 c != common.end(); ++c)
       {
 	int vIx = (*c)->Find( p);
 	if( vIx >= 0) 
@@ -406,7 +421,32 @@ public:
       }
     return NULL;
   }
-
+  
+  BaseGDL** GetCommonVarPtr(std::string& s)
+  {
+    for(CommonBaseListT::iterator c=common.begin();
+   	c != common.end(); ++c)
+      {
+       	DVar* v=(*c)->Find(s);
+       	if (v) return &(v->Data());
+      }
+    return NULL;
+  }
+  
+  bool ReplaceExistingCommonVar(std::string& s, BaseGDL* val)
+  {
+    for(CommonBaseListT::iterator c=common.begin();
+   	c != common.end(); ++c)
+      {
+       	DVar* v=(*c)->Find(s);
+       	if (v) { 
+         delete (v)->Data();
+         (v)->SetData(val);
+         return true;
+        }
+      }
+    return false;
+  }  
   // returns the variable index (-1 if not found)
   int FindVar(const std::string& s)
   {
@@ -417,7 +457,7 @@ public:
   DVar* FindCommonVar(const std::string& s) 
   { 
     for(CommonBaseListT::iterator c=common.begin();
-   	c != common.end(); c++)
+   	c != common.end(); ++c)
       {
        	DVar* v=(*c)->Find(s);
        	if( v) return v;

@@ -27,7 +27,6 @@
 
 #include "objects.hpp"
 #include "graphicsdevice.hpp"
-#include "preferences.hpp"
 #include "overload.hpp"
 
 //#include "dinterpreter.hpp"
@@ -67,6 +66,7 @@ GDLFileListT  fileUnits;
 // flag for control-c
 volatile bool sigControlC;
 int           debugMode;
+bool  strictInterpreter;
 
 namespace structDesc {
   // set in InitStructs()
@@ -90,7 +90,7 @@ void ResetObjects()
 {
 #ifdef HAVE_LIBWXWIDGETS
 
-  // initialize widget system
+  // un-initialize widget system
   GDLWidget::UnInit();
 #endif
   
@@ -102,11 +102,17 @@ void ResetObjects()
   PurgeContainer(sysVarList);
   PurgeContainer(funList);
   PurgeContainer(proList);
-  PurgeContainer(structList); // now deletes member subroutines (and they in turn common block references
+
+  // delete common block data (which might be of type STRUCT)
+  CommonListT::iterator i;
+  for(i = commonList.begin(); i != commonList.end(); ++i) 
+    { (*i)->DeleteData();}
+
+  PurgeContainer(structList); // now deletes member subroutines (and they in turn common block references)
   // hence delete common blocks after structList
-  
-  //avoid purging commonlist-->crash (probably some COMMON structures already destroyed)
-//  PurgeContainer(commonList);
+ 
+  // should be ok now as data is already deleted //avoid purging commonlist-->crash (probably some COMMON structures already destroyed)
+  PurgeContainer(commonList);
   
   // don't purge library here
 //   PurgeContainer(libFunList);
@@ -351,7 +357,7 @@ void InitStructs()
   // insert into structList
   structList.push_back( dmachar);
 
-  // for internal usage
+  // for internal usage. make event handler destroy the TLB widget
   // attention: $WIDGET_DESTROY would identify this as an unnamed struct
   // see DStructDesc constructor
   DStructDesc* widgdestroy = new DStructDesc( "*WIDGET_DESTROY*");
@@ -361,7 +367,16 @@ void InitStructs()
   widgdestroy->AddTag("MESSAGE", &aLong);
   // insert into structList
   structList.push_back( widgdestroy);
-
+  
+  // for internal usage. make event handler exit form event loop on TLB destruction without destroying (again) the TLB widget
+  DStructDesc* toplevelISdestroyed = new DStructDesc( "*TOPLEVEL_DESTROYED*");
+  toplevelISdestroyed->AddTag("ID", &aLong);
+  toplevelISdestroyed->AddTag("TOP", &aLong);
+  toplevelISdestroyed->AddTag("HANDLER", &aLong);
+  toplevelISdestroyed->AddTag("MESSAGE", &aLong);
+  // insert into structList
+  structList.push_back( toplevelISdestroyed);
+  
   DStructDesc* widgbut = new DStructDesc( "WIDGET_BUTTON");
   widgbut->AddTag("ID", &aLong);
   widgbut->AddTag("TOP", &aLong);
@@ -735,6 +750,18 @@ void InitStructs()
   treeexpandstruct->AddTag("EXPAND", &aLong);
   // insert into structList
   structList.push_back( treeexpandstruct); 
+  
+ DStructDesc* idltracebackstruct = new DStructDesc( "IDL_TRACEBACK");
+  idltracebackstruct->AddTag("ROUTINE", &aString);
+  idltracebackstruct->AddTag("FILENAME", &aString);
+  idltracebackstruct->AddTag("LINE", &aLong);
+  idltracebackstruct->AddTag("LEVEL", &aLong);
+  idltracebackstruct->AddTag("IS_FUNCTION", &aByte);
+  idltracebackstruct->AddTag("METHOD", &aByte);
+  idltracebackstruct->AddTag("RESTORED", &aByte);
+  idltracebackstruct->AddTag("SYSTEM", &aByte);
+  // insert into structList
+  structList.push_back( idltracebackstruct); 
 
 //template for future uses:
 // DStructDesc* struct = new DStructDesc( "WIDGET_DROP");
@@ -761,19 +788,15 @@ void InitObjects()
   // add internal memeber subroutines
   SetupOverloadSubroutines();
   
-  // graphic devices must be initialized after system variables
+  // graphic devices must be initialized after system variables.
   // !D must already exist
-  GraphicsDevice::Init();
+  // We need to initialize the multi-device object that inherits from the single-device object.
+  GraphicsMultiDevice::Init();
 
-  // AC 150414 :
-  // this line must be after the previous on Debian/Ubuntu systems.
-#ifdef HAVE_LIBWXWIDGETS
-  // initialize widget system
-  GDLWidget::Init();
-#endif
-
-  // preferences
-  //  Preferences::Init();
+  string gdlPath=GetEnvString("GDL_PATH");
+  if( gdlPath == "") gdlPath=GetEnvString("IDL_PATH");
+  if( gdlPath == "") gdlPath = "+" GDLDATADIR "/lib";
+  SysVar::SetGDLPath( gdlPath);
 }
 
 // returns GDL lun, 0 on failure
@@ -788,6 +811,8 @@ DLong GetLUN()
   
   return 0;
 }
+bool IsRelaxed(){return !strictInterpreter;}
+void SetStrict(bool value){strictInterpreter=value;}
 
 // for semantic predicate
 bool IsFun(antlr::RefToken rT1)
@@ -797,14 +822,13 @@ bool IsFun(antlr::RefToken rT1)
   // search for T1.getText() in function table and path
   string searchName=StrUpCase(T1.getText());
 
-  //  cout << "IsFun: Searching for: " << searchName << endl;
+//  cout << "IsFun: Searching for: " << searchName << endl;
 
-// Looking here for the internal functions is not the good place,
-// although it speeds up the process of finding (in gdlc.g) if a syntax like foo(bar) is a call to the function 'foo'
+// Speeds up the process of finding (in gdlc.g) if a syntax like foo(bar) is a call to the function 'foo'
 // or the 'bar' element of array 'foo'.
-//  LibFunListT::iterator p=find_if(libFunList.begin(),libFunList.end(),
-//			       Is_eq<DLibFun>(searchName));
-//  if( p != libFunList.end()) if( *p != NULL) return true;
+  LibFunListT::iterator p=find_if(libFunList.begin(),libFunList.end(),
+			       Is_eq<DLibFun>(searchName));
+  if( p != libFunList.end()) if( *p != NULL) return true;
 
   FunListT::iterator q=find_if(funList.begin(),funList.end(),
 			       Is_eq<DFun>(searchName));

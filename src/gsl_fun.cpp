@@ -821,18 +821,21 @@ namespace lib {
   template< typename T1, typename T2>
   int random_template( EnvT* e, T1* res, gsl_rng *r, 
 		       dimension dim, 
-		       DDoubleGDL* binomialKey, DDoubleGDL* poissonKey)
+		       DDoubleGDL* binomialKey, DDoubleGDL* poissonKey) 
   {
-    int debug=0;
+    int debug = 0;
 
     if (debug) cout << "inside random_template" << endl;
-
+    //used in RANDOMU and RANDOMN, which share the SAME KEYLIST. It is safe to speed up by using static ints KeywordIx.
+    static int GAMMAIx = e->KeywordIx("GAMMA");
+    static int NORMALIx = e->KeywordIx("NORMAL");
+    static int POISSONIx = e->KeywordIx("POISSON");
+    static int UNIFORMIx = e->KeywordIx("UNIFORM");
     // testing Exclusive Keywords ...
-    int exclusiveKW= e->KeywordPresent(e->KeywordIx("GAMMA"));
-    exclusiveKW=exclusiveKW+ e->KeywordPresent(e->KeywordIx("NORMAL"));
-    exclusiveKW=exclusiveKW+ e->KeywordPresent(e->KeywordIx("BINOMIAL"));
-    exclusiveKW=exclusiveKW+ e->KeywordPresent(e->KeywordIx("POISSON"));
-    exclusiveKW=exclusiveKW+ e->KeywordPresent(e->KeywordIx("UNIFORM"));
+    int exclusiveKW = e->KeywordPresent(GAMMAIx);
+    exclusiveKW = exclusiveKW + e->KeywordPresent(NORMALIx);
+    exclusiveKW = exclusiveKW + e->KeywordPresent(POISSONIx);
+    exclusiveKW = exclusiveKW + e->KeywordPresent(UNIFORMIx);
 
     if (exclusiveKW > 1) e->Throw("Conflicting keywords.");
 
@@ -841,63 +844,63 @@ namespace lib {
     if (debug) cout << "dim : " << dim << endl;
     if (debug) cout << "nEl : " << nEl << endl;
 
-    if (e->KeywordPresent(e->KeywordIx("GAMMA"))) {
-      DLong n;
-      e->AssureLongScalarKWIfPresent( "GAMMA", n);
-      if (debug) cout << "(Int) Gamma Value: "<< n << endl;
+    if (e->KeywordPresent(GAMMAIx)) {
+      DLong n=-1; //please initialize everything!
+      e->AssureLongScalarKW(GAMMAIx, n);
+      if (debug) cout << "(Int) Gamma Value: " << n << endl;
       if (n == 0) {
-	DDouble test_n;
-	e->AssureDoubleScalarKWIfPresent( "GAMMA", test_n);
-	if (debug) cout << "(Double) Gamma Value: "<< test_n << endl;
-	if (test_n > 0.0) n=1;
+        DDouble test_n;
+        e->AssureDoubleScalarKW(GAMMAIx, test_n);
+        if (debug) cout << "(Double) Gamma Value: " << test_n << endl;
+        if (test_n > 0.0) n = 1;
       }
-      if (n <= 0)
-	e->Throw("Value of (Int/Long) GAMMA is out of allowed range: Gamma = 1, 2, 3, ...");    
-      if (debug) cout << "(Effective) Gamma Value: "<< n << endl;
+      if (n <= 0) e->Throw("Value of (Int/Long) GAMMA is out of allowed range: Gamma = 1, 2, 3, ...");
+      if (debug) cout << "(Effective) Gamma Value: " << n << endl;
 
-      for( SizeT i=0; i<nEl; ++i) (*res)[ i] = 
-	(T2) gsl_ran_gamma_int (r,n);
+      for (SizeT i = 0; i < nEl; ++i) (*res)[ i] =
+        (T2) gsl_ran_gamma_int(r, n);
       return 0;
     }
 
-    if (e->KeywordPresent(e->KeywordIx("BINOMIAL"))) {
+    static int BINOMIALIx=e->KeywordIx("BINOMIAL");
+    if (e->KeywordPresent(BINOMIALIx)) {
       if (binomialKey != NULL) {
-	DULong  n = (DULong)  (*binomialKey)[0];
-	DDouble p = (DDouble) (*binomialKey)[1];
-	if (debug) cout << "Binomial Values (n,p): "<< n << " " << p << endl;
-	for( SizeT i=0; i<nEl; ++i) (*res)[ i] =
-	  (T2) gsl_ran_binomial (r, p, n);
-      }
+        DULong n = (DULong) (*binomialKey)[0];
+          DDouble p = (DDouble) (*binomialKey)[1];
+        if (debug) cout << "Binomial Values (n,p): " << n << " " << p << endl;
+          for (SizeT i = 0; i < nEl; ++i) (*res)[ i] =
+            (T2) gsl_ran_binomial(r, p, n);
+          }
       return 0;
-    } 
+    }
 
-    if( e->KeywordSet("POISSON")) { // POISSON
+    if (e->KeywordSet(POISSONIx)) { // POISSON
       if (poissonKey != NULL) {
-	DDouble mu = (DDouble) (*poissonKey)[0];
-	if (mu < 100000) {
-	  for( SizeT i=0; i<nEl; ++i) (*res)[ i] =
-	    (T2) gsl_ran_poisson (r, mu);
-	} else {
-	  for( SizeT i=0; i<nEl; ++i) (*res)[ i] =
-	    (T2) gsl_ran_ugaussian (r);
-	  for( SizeT i=0; i<nEl; ++i) (*res)[ i] *= sqrt(mu);
-	  for( SizeT i=0; i<nEl; ++i) (*res)[ i] += mu;
-	}
+        DDouble mu = (DDouble) (*poissonKey)[0];
+        if (mu < 100000) {
+          for (SizeT i = 0; i < nEl; ++i) (*res)[ i] =
+            (T2) gsl_ran_poisson(r, mu);
+          } else {
+          for (SizeT i = 0; i < nEl; ++i) (*res)[ i] =
+            (T2) gsl_ran_ugaussian(r);
+            for (SizeT i = 0; i < nEl; ++i) (*res)[ i] *= sqrt(mu);
+              for (SizeT i = 0; i < nEl; ++i) (*res)[ i] += mu;
+              }
       }
       return 0;
     }
 
-    if (e->KeywordSet("UNIFORM") || ((e->GetProName() == "RANDOMU") && !e->KeywordSet("NORMAL"))) {
-      for( SizeT i=0; i<nEl; ++i) (*res)[ i] =
-	(T2) gsl_rng_uniform (r);
-      return 0;
-    } 
+    if (e->KeywordSet(UNIFORMIx) || ((e->GetProName() == "RANDOMU") && !e->KeywordSet(NORMALIx))) {
+      for (SizeT i = 0; i < nEl; ++i) (*res)[ i] =
+        (T2) gsl_rng_uniform(r);
+        return 0;
+      }
 
-    if (e->KeywordSet("NORMAL") || ((e->GetProName() == "RANDOMN") && !e->KeywordSet("UNIFORM"))) {
-      for( SizeT i=0; i<nEl; ++i) (*res)[ i] = 
-	(T2) gsl_ran_ugaussian (r);
-      return 0;
-    }
+    if (e->KeywordSet(NORMALIx) || ((e->GetProName() == "RANDOMN") && !e->KeywordSet(UNIFORMIx))) {
+      for (SizeT i = 0; i < nEl; ++i) (*res)[ i] =
+        (T2) gsl_ran_ugaussian(r);
+        return 0;
+      }
     assert(false);
     return 0;
   }
@@ -1091,7 +1094,7 @@ namespace lib {
     double b;
     DULong nri;
 
-    SizeT nParam=e->NParam();
+    SizeT nParam=e->NParam(1);
 
     BaseGDL* p0 = e->GetNumericParDefined( 0);
 
@@ -1103,8 +1106,8 @@ namespace lib {
     if( p0->Type() == GDL_COMPLEX || p0->Type() == GDL_COMPLEXDBL)
       e->Throw( "Complex expression not allowed in this context: "
 		+e->GetParString(0));
-    
-    BaseGDL* binsizeKW = e->GetKW(e->KeywordIx("BINSIZE"));
+    static int binsizeIx=e->KeywordIx("BINSIZE");
+    BaseGDL* binsizeKW = e->GetKW(binsizeIx);
     DDouble bsize = 1.0;
     if( binsizeKW != NULL)
       {
@@ -1113,14 +1116,16 @@ namespace lib {
 	  e->Throw( "Illegal BINSIZE.");
       }
 
-    BaseGDL* maxKW = e->GetKW(e->KeywordIx("MAX"));
-    BaseGDL* minKW = e->GetKW(e->KeywordIx("MIN"));
-
-    BaseGDL* nbinsKW = e->GetKW(e->KeywordIx("NBINS"));
+    static int maxIx=e->KeywordIx("MAX");
+    BaseGDL* maxKW = e->GetKW(maxIx);
+    static int minIx=e->KeywordIx("MIN");
+    BaseGDL* minKW = e->GetKW(minIx);
+    static int nbinsIx=e->KeywordIx("NBINS");
+    BaseGDL* nbinsKW = e->GetKW(nbinsIx);
     DLong nbins;
     if( nbinsKW != NULL)
       {
-	e->AssureLongScalarKW(e->KeywordIx("NBINS"), nbins);
+	e->AssureLongScalarKW(nbinsIx, nbins);
 	if( nbins < 0)
 	  e->Throw( "Illegal NBINS (<0).");
 	if( nbins == 0) // NBINS=0 is ignored
@@ -1146,7 +1151,8 @@ namespace lib {
 
     DDouble minVal, maxVal;
 
-    if( e->KeywordSet( "NAN")) {
+    static int nanIx=e->KeywordIx("NAN");
+    if( e->KeywordSet(nanIx)) {
       DLong minEl, maxEl;
       p0D->MinMax( &minEl, &maxEl, NULL, NULL, true);
       minVal=(*p0D)[minEl];
@@ -1179,7 +1185,7 @@ namespace lib {
 	  a = minVal;
       } 
     else 
-      e->AssureDoubleScalarKW(e->KeywordIx("MIN"), a);
+      e->AssureDoubleScalarKW(minIx, a);
     // max
     if (maxKW == NULL) 
       {	
@@ -1199,7 +1205,7 @@ namespace lib {
       } 
     else
       {
-	e->AssureDoubleScalarKW(e->KeywordIx("MAX"), b);
+	e->AssureDoubleScalarKW(maxIx, b);
 
 	// MAX && !BINSIZE && NBINS -> determine BINSIZE
 	if( binsizeKW == NULL && nbinsKW != NULL)
@@ -1247,7 +1253,7 @@ namespace lib {
     gdl_make_uniform (hh, hh->n, a, b);
 
     // Set maxVal from keyword if present
-    if (maxKW != NULL) e->AssureDoubleScalarKW(e->KeywordIx("MAX"), maxVal);
+    if (maxKW != NULL) e->AssureDoubleScalarKW(maxIx, maxVal);
 
     // Generate histogram
     for( SizeT i=0; i<nEl; ++i) {
@@ -1269,18 +1275,21 @@ namespace lib {
     // SA: using aOri/bOri instead of gsl_histogram_min(hh) (as in calculation of LOCATIONS) 
     //     otherwise, when converting e.g. to GDL_INT the conversion might give bad results
     // OMAX
-    if( e->KeywordPresent(e->KeywordIx("OMAX"))) {
+      static int omaxIx=e->KeywordIx("OMAX");
+    if( e->KeywordPresent(omaxIx)) {
       // e->SetKW( 5, (new DDoubleGDL( gsl_histogram_max(hh)))->Convert2(p0->Type(), BaseGDL::CONVERT));
-      e->SetKW(e->KeywordIx("OMAX"), (new DDoubleGDL( bOri))->Convert2(p0->Type(), BaseGDL::CONVERT));
+      e->SetKW(omaxIx, (new DDoubleGDL( bOri))->Convert2(p0->Type(), BaseGDL::CONVERT));
     }
     // OMIN
-    if( e->KeywordPresent(e->KeywordIx("OMIN"))) {
+      static int ominIx=e->KeywordIx("OMIN");
+      if( e->KeywordPresent(ominIx)) {
       // e->SetKW( 6, (new DDoubleGDL( gsl_histogram_min(hh)))->Convert2(p0->Type(), BaseGDL::CONVERT));
-      e->SetKW(e->KeywordIx("OMIN"), (new DDoubleGDL( aOri))->Convert2(p0->Type(), BaseGDL::CONVERT));
+      e->SetKW(ominIx, (new DDoubleGDL( aOri))->Convert2(p0->Type(), BaseGDL::CONVERT));
     }
 
     // REVERSE_INDICES
-    if( e->KeywordPresent(e->KeywordIx("REVERSE_INDICES"))) {
+      static int reverse_indicesIx=e->KeywordIx("REVERSE_INDICES");
+    if( e->KeywordPresent(reverse_indicesIx)) {
 
       if (input != NULL)
 	e->Throw("Conflicting keywords.");
@@ -1350,12 +1359,13 @@ namespace lib {
 	(*revindKW)[i] = k + nbins + 1;
       }
 
-      e->SetKW(e->KeywordIx("REVERSE_INDICES"), revindKW);
+      e->SetKW(reverse_indicesIx, revindKW);
     }
     
     // LOCATIONS
-    if( e->KeywordPresent(e->KeywordIx("LOCATIONS"))) {
-      BaseGDL** locationsKW = &e->GetKW(e->KeywordIx("LOCATIONS"));
+      static int locationsIx=e->KeywordIx("LOCATIONS");
+    if( e->KeywordPresent(locationsIx)) {
+      BaseGDL** locationsKW = &e->GetKW(locationsIx);
       GDLDelete((*locationsKW));
 
       dimension dim( nbins);
@@ -2471,9 +2481,10 @@ namespace lib {
     gsl_multiroot_fsolver* solver;
     {
       const gsl_multiroot_fsolver_type* T; 
-      if (e->KeywordSet("HYBRID"))           T = gsl_multiroot_fsolver_hybrid;     
-      else if (e->GetProName() == "NEWTON")  T = gsl_multiroot_fsolver_dnewton;
-      else if (e->GetProName() == "BROYDEN") T = gsl_multiroot_fsolver_broyden;
+      static int HYBRIDIx=e->KeywordIx("HYBRID"); //same place in both functions.
+      if (e->KeywordSet(HYBRIDIx))           T = gsl_multiroot_fsolver_hybrid;  //Not using static int KwIx since lists are different.
+      else if (e->GetProName() == "NEWTON")  T = gsl_multiroot_fsolver_dnewton; //id
+      else if (e->GetProName() == "BROYDEN") T = gsl_multiroot_fsolver_broyden; //ibid
       else assert(false);
       solver = gsl_multiroot_fsolver_alloc(T, F.n);
     }
@@ -2483,10 +2494,14 @@ namespace lib {
     // GDL handling fine-tuning keywords
     // (intentionally not making keyword indices static here (NEWTON vs. BROYDEN))
     DLong iter_max = 200;
-    e->AssureLongScalarKWIfPresent(e->KeywordIx("ITMAX"), iter_max);
+    
+    static int ITMAXIx=e->KeywordIx("ITMAX"); //same place in both functions.
+    e->AssureLongScalarKWIfPresent(ITMAXIx, iter_max); //ibid
     DDouble tolx = 1e-7, tolf = 1e-4;
-    e->AssureDoubleScalarKWIfPresent(e->KeywordIx("TOLX"), tolx);
-    e->AssureDoubleScalarKWIfPresent(e->KeywordIx("TOLF"), tolf);
+    static int TOLXIx=e->KeywordIx("TOLX"); //same place in both functions.
+    e->AssureDoubleScalarKWIfPresent(TOLXIx, tolx); //ibid
+    static int TOLFIx=e->KeywordIx("TOLF"); //same place in both functions.
+    e->AssureDoubleScalarKWIfPresent(TOLFIx, tolf); //ibid
 
     // GSL root-finding loop
     size_t iter = 0;
@@ -2523,9 +2538,10 @@ namespace lib {
     if (iter > iter_max) e->Throw("maximum number of iterations reached");
 
     // returning the result 
+    static int doubleIx=e->KeywordIx("DOUBLE"); //same place in both functions.
     par_guard.release();    // reusing par for the return value
     return par->Convert2(   // converting to float if neccesarry
-			 e->KeywordSet("DOUBLE") || p0->Type() == GDL_DOUBLE ? GDL_DOUBLE : GDL_FLOAT, 
+			 e->KeywordSet(doubleIx) || p0->Type() == GDL_DOUBLE ? GDL_DOUBLE : GDL_FLOAT, 
 			 BaseGDL::CONVERT
 			 );
   }
@@ -2567,7 +2583,7 @@ namespace lib {
     int debug=0;
 
     // sanity check (for number of parameters)
-    SizeT nParam = e->NParam();
+    SizeT nParam = e->NParam(3);
 
     // 2-nd argument : initial bound
     BaseGDL* p1 = e->GetParDefined(1);
@@ -2632,21 +2648,24 @@ namespace lib {
     // Definition of JMAX
     int pos;
     DLong wsize =static_cast<DLong>(pow(2.0, (20-1)));
-    if(e->KeywordSet("JMAX"))
+        
+    static int JMAXIx=e->KeywordIx("JMAX"); //same place in both functions.
+    if(e->KeywordSet(JMAXIx))  //ibid
       {
-	pos = e->KeywordIx("JMAX");
-	e->AssureLongScalarKWIfPresent(pos, wsize);
-	wsize=static_cast<DLong>(pow(2.0, (wsize-1)));
+        e->AssureLongScalarKWIfPresent(JMAXIx, wsize);
+        wsize=static_cast<DLong>(pow(2.0, (wsize-1)));
       }
     
      // eps value:
     double eps, eps_default;
-    bool isDouble = e->KeywordSet("DOUBLE") || p1->Type() == GDL_DOUBLE || p2->Type() == GDL_DOUBLE;
+    
+    static int doubleIx=e->KeywordIx("DOUBLE"); //same place in both functions.
+    bool isDouble = e->KeywordSet(doubleIx) || p1->Type() == GDL_DOUBLE || p2->Type() == GDL_DOUBLE;
     if (isDouble) {eps_default=1.e-12;} else {eps_default=1.e-6;}
     
-    if (e->KeywordSet("EPS")) {
-      pos = e->KeywordIx("EPS");
-      e->AssureDoubleScalarKWIfPresent(pos, eps);
+    static int EPSIx=e->KeywordIx("EPS"); //same place in both functions
+    if (e->KeywordSet(EPSIx)) {
+      e->AssureDoubleScalarKWIfPresent(EPSIx, eps);
       if (eps < 0.0) {
 	Message(e->GetProName() + ": EPS must be positive ! Value set to Default.");
 	eps=eps_default;
@@ -2680,7 +2699,7 @@ namespace lib {
 
     //     gsl_integration_workspace_free (w);
  
-    if (e->KeywordSet("DOUBLE") || p1->Type() == GDL_DOUBLE || p2->Type() == GDL_DOUBLE)
+    if (isDouble)
       {
 	return res;
       }
@@ -2697,6 +2716,7 @@ namespace lib {
     int debug=0;
 
     // sanity check (for number of parameters)
+    // AC 2016/10/13 : we cannot test here 2 or 3 since both are possible
     SizeT nParam = e->NParam();
 
     static int midexpIx=e->KeywordIx("MIDEXP");
@@ -2730,7 +2750,8 @@ namespace lib {
       }
 
     // do we need to compute/return in double ?
-    bool isDouble =  e->KeywordSet("DOUBLE") || p1->Type() == GDL_DOUBLE;
+    static int doubleIx=e->KeywordIx("DOUBLE");
+    bool isDouble =  e->KeywordSet(doubleIx) || p1->Type() == GDL_DOUBLE;
     if (!do_midexp)
       if (p2->Type() == GDL_DOUBLE) isDouble=true;
 
@@ -2806,10 +2827,10 @@ namespace lib {
     double eps, eps_default;
     if (isDouble) {eps_default=1.e-12;} else {eps_default=1.e-6;}
     int pos;
-
-    if (e->KeywordSet("EPS")) {
-      pos = e->KeywordIx("EPS");
-      e->AssureDoubleScalarKWIfPresent(pos, eps);
+    
+    static int epsIx=e->KeywordIx("EPS");
+    if (e->KeywordSet(epsIx)) {
+      e->AssureDoubleScalarKWIfPresent(epsIx, eps);
       if (eps < 0.0) {
 	Message(e->GetProName() + ": EPS must be positive ! Value set to Default.");
 	eps=eps_default;
@@ -2824,10 +2845,10 @@ namespace lib {
 
     // Definition of JMAX
     DLong wsize =static_cast<DLong>(pow(2.0, (20-1)));
-    if(e->KeywordSet("JMAX"))
+    static int jmaxIx=e->KeywordIx("JMAX");
+    if(e->KeywordSet(jmaxIx))
       {
-	pos = e->KeywordIx("JMAX");
-	e->AssureLongScalarKWIfPresent(pos, wsize);
+	e->AssureLongScalarKWIfPresent(jmaxIx, wsize);
 	wsize=static_cast<DLong>(pow(2.0, (wsize-1)));
       }
     gsl_integration_workspace *w = gsl_integration_workspace_alloc (wsize);
@@ -2843,15 +2864,32 @@ namespace lib {
       
       if (debug) cout << "Boundaries : "<< first << " " << last <<endl;
       
+      static int midinfIx=e->KeywordIx("MIDINF");
+      static int midpntIx=e->KeywordIx("MIDPNT");
+      static int midsqlIx=e->KeywordIx("MIDSQL");
+      static int midsquIx=e->KeywordIx("MIDSQU");
+      static int jmaxIx=e->KeywordIx("JMAX");
+      
+      // Mimic IDL behavior for K
+      static int kkkIx=e->KeywordIx("K");
+      if (e->KeywordPresent(kkkIx)) {
+	DLong k=0;
+	DFloat kk;
+	e->AssureFloatScalarKW(kkkIx, kk);
+	k=(long) floor(kk);
+	if (k < 1) e->Throw("K value must be >= 1 (not used).");
+      }
+      
       // intregation on open range [first,+inf[
       if (do_midexp)
 	{	 
 	  gsl_integration_qagiu(&F, first, 0, eps, 
 				wsize, w, &result, &error);
 	} 
-      else if (e->KeywordSet("MIDINF") || e->KeywordSet("MIDPNT") ||
-	       e->KeywordSet("MIDSQL") || e->KeywordSet("MIDSQU") ||
-	       e->KeywordSet("JMAX") || e->KeywordSet("K"))
+
+      else if (e->KeywordSet(midinfIx) || e->KeywordSet(midpntIx) ||
+	       e->KeywordSet(midsqlIx) || e->KeywordSet(midsquIx) ||
+	       e->KeywordSet(jmaxIx) || e->KeywordSet(kkkIx))
 	{
 	  gsl_integration_qag(&F, first, last, 0, eps,
 			      wsize, GSL_INTEG_GAUSS61, w, &result, &error);
@@ -3117,33 +3155,28 @@ namespace lib {
 	     iter < max_iter);
     }
     
-    if ((*res)[0].imag() == 0)
-      {
-	DDoubleGDL* resreal;
-	resreal = new DDoubleGDL(1, BaseGDL::NOZERO);
-	(*resreal)[0] = (*res)[0].real();
-      
-	if (e->KeywordSet("DOUBLE") || 
-	    p0->Type() == GDL_COMPLEXDBL ||
-	    p0->Type() == GDL_DOUBLE)
-	  {
-	    return resreal->Convert2( GDL_DOUBLE, BaseGDL::CONVERT);
-	  }
-	else
-	  {
-	    return resreal->Convert2(GDL_FLOAT, BaseGDL::CONVERT);
-	  }
+
+    static int DOUBLEIx=e->KeywordIx("DOUBLE");
+    bool isdouble=e->KeywordSet(DOUBLEIx);
+
+    if ((*res)[0].imag() == 0) {
+      DDoubleGDL* resreal;
+      resreal = new DDoubleGDL(1, BaseGDL::NOZERO);
+      (*resreal)[0] = (*res)[0].real();
+
+      if (isdouble ||  p0->Type() == GDL_COMPLEXDBL ||
+        p0->Type() == GDL_DOUBLE) {
+          return resreal->Convert2(GDL_DOUBLE, BaseGDL::CONVERT);
+        } else {
+        return resreal->Convert2(GDL_FLOAT, BaseGDL::CONVERT);
       }
-  
-    if (e->KeywordSet("DOUBLE") ||
-	p0->Type() == GDL_COMPLEXDBL)
-      {
-	return res->Convert2(GDL_COMPLEXDBL, BaseGDL::CONVERT);
-      }
-    else
-      {
-	return res->Convert2(GDL_COMPLEX, BaseGDL::CONVERT);
-      }
+    }
+
+    if (isdouble ||  p0->Type() == GDL_COMPLEXDBL) {
+        return res->Convert2(GDL_COMPLEXDBL, BaseGDL::CONVERT);
+      } else {
+      return res->Convert2(GDL_COMPLEX, BaseGDL::CONVERT);
+    }
   }
   
   /*
@@ -3159,7 +3192,7 @@ namespace lib {
     bool twoparams=false;
     if (e->NParam(1) == 2) twoparams=true;
 
-    static DStructGDL *Values = SysVar::Values();
+    DStructGDL *Values = SysVar::Values();   //MUST NOT BE STATIC, due to .reset 
     static double nan = (*static_cast<DDoubleGDL*>(Values->GetTag(Values->Desc()->TagIndex("D_NAN"), 0)))[0];
 #ifdef USE_UDUNITS
     string unit;

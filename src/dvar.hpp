@@ -37,6 +37,8 @@ public:
   DVar(const std::string& n, BaseGDL* = 0); 
   ~DVar();
 
+  void Delete(); // for ResetObjects() to resolve COMMON/STRUCT mutual dependency
+  
   const std::string& Name() const {return name;}
 
   BaseGDL*& Data() 
@@ -47,6 +49,7 @@ public:
   {
     return d;
   }
+  void SetData(BaseGDL* val){d=val;}
 };
 
 typedef std::vector<DVar*>        VarListT;

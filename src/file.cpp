@@ -37,7 +37,10 @@
 #include "objects.hpp"
 
 #include <climits> // PATH_MAX
-
+//patch #90
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif 
 //#ifndef _MSC_VER
 #ifndef _WIN32
 #	include <fnmatch.h>
@@ -241,11 +244,11 @@ extern "C"
 */
 #endif
 #define NTEST_SEARCH 7
-
-#ifdef __CYGWIN__
+#if defined(__CYGWIN__) || defined(__FreeBSD__)
 #define stat64 stat
 #define lstat64 lstat
 // for religious reasons, CYGWIN doesn't do lstat64
+// FreeBSD doesn't do lstat64 because there is no need for it
 #endif
 
 namespace lib {
@@ -257,6 +260,12 @@ namespace lib {
 #   define stat64 stat
 #   define lstat64(x,y) stat(x,y) 
 #else
+      // Patch by Greg Jung: Using _stati64 is acceptable down to winXP version and will
+      // result in a 64-bit st_size for both mingw-org and for mingw-w64.
+      // The times st_atime, st_mtime, etc. will be 32-bit in mingw-org.
+      #ifndef stat64 /* case of mingw-org .vs. mingw-w64 */
+      # define stat64 _stati64
+      #endif
 #    define lstat64(x,y) stat64(x,y)
 #endif
 
@@ -615,8 +624,8 @@ namespace lib {
     static int countIx = e->KeywordIx( "COUNT");
 
     DString pattern;
-    if(e->KeywordPresent( "PATTERN")) {
-      static int typeIx = e->KeywordIx( "PATTERN");
+    static int typeIx = e->KeywordIx( "PATTERN");
+    if(e->KeywordPresent(typeIx)) {
       e->AssureStringScalarKWIfPresent( typeIx, pattern);
     }
     else      pattern = "*.pro";
@@ -1200,17 +1209,29 @@ bool *tests )
 	if( nParam > 1)   e->AssureScalarPar< DStringGDL>( 1, Pattern);
        
       } 
- 
-    const string test_kw[]={
-      "TEST_READ", "TEST_WRITE",  "TEST_EXECUTABLE",
-      "TEST_REGULAR", "TEST_DIRECTORY", "TEST_ZERO_LENGTH",
-      "TEST_SYMLINK"};
+      static int TEST_READIx = e->KeywordIx("TEST_READ");
+      static int TEST_WRITEIx = e->KeywordIx("TEST_WRITE");
+      static int TEST_EXECUTABLEIx = e->KeywordIx("TEST_EXECUTABLE");
+      static int TEST_REGULARIx = e->KeywordIx("TEST_REGULAR");
+      static int TEST_DIRECTORYIx = e->KeywordIx("TEST_DIRECTORY");
+      static int TEST_ZERO_LENGTHIx = e->KeywordIx("TEST_ZERO_LENGTH");
+      static int TEST_SYMLINKIx = e->KeywordIx("TEST_SYMLINK");
+    const int test_kwIx[]={
+      TEST_READIx, TEST_WRITEIx, TEST_EXECUTABLEIx,
+      TEST_REGULARIx, TEST_DIRECTORYIx, TEST_ZERO_LENGTHIx,
+      TEST_SYMLINKIx};
+    
+//    const string test_kw[]={
+//      "TEST_READ", "TEST_WRITE",  "TEST_EXECUTABLE",
+//      "TEST_REGULAR", "TEST_DIRECTORY", "TEST_ZERO_LENGTH",
+//      "TEST_SYMLINK"};
     bool tests[NTEST_SEARCH];
     static int keyindex;
     for( SizeT i=0; i < NTEST_SEARCH; i++) {
       tests[i] = false;
-      keyindex = e->KeywordIx(test_kw[i]);
-      if (e->KeywordPresent(keyindex)) tests[i] = e->KeywordSet(keyindex);
+//      keyindex = e->KeywordIx(test_kw[i]); //TODO: check following (static int vs. multiple choices)
+//      if (e->KeywordPresent(keyindex)) tests[i] = e->KeywordSet(keyindex);
+      if (e->KeywordPresent(test_kwIx[i])) tests[i] = e->KeywordSet(test_kwIx[i]);
     }
     // keywords
     bool tilde = true;
@@ -1518,8 +1539,8 @@ bool *tests )
       (*res)[i] = dname;
 
     }
-    
-    if (e->KeywordSet("MARK_DIRECTORY")) {
+    static int file_dirnameIx=e->KeywordIx("MARK_DIRECTORY");
+    if (e->KeywordSet(file_dirnameIx)) {
       for (SizeT i = 0; i < p0S->N_Elements(); i++) {
 	(*res)[i]=(*res)[i] + PathSeparator();
       }
@@ -1580,7 +1601,8 @@ bool *tests )
 	// expanding if needed (tilde, shell variables, etc)
 	const char *file0, *file1;
 	string tmp0, tmp1;
-	if (!e->KeywordSet(e->KeywordIx("NOEXPAND_PATH"))) 
+    static int noexpoand_pathIx=e->KeywordIx("NOEXPAND_PATH");
+	if (!e->KeywordSet(noexpoand_pathIx)) 
 	  {
 	    tmp0 = (*p0S)[p0idx];
 	    WordExp(tmp0);
@@ -1777,9 +1799,13 @@ bool *tests )
     if( p0S == NULL)
       e->Throw( "String expression required in this context: "+e->GetParString(0));
 	  
-    bool noexpand_path = e->KeywordSet(e->KeywordIx( "NOEXPAND_PATH"));
-    bool allow_nonexist = e->KeywordSet(e->KeywordIx( "ALLOW_NONEXISTENT"));
-    bool allow_nonsymlink = e->KeywordSet(e->KeywordIx( "ALLOW_NONSYMLINK"));
+    static int noexpand_pathIx = e->KeywordIx( "NOEXPAND_PATH");
+    bool noexpand_path = e->KeywordSet(noexpand_pathIx);
+    static int allow_nonexistIx = e->KeywordIx( "ALLOW_NONEXISTENT");
+    bool allow_nonexist = e->KeywordSet(allow_nonexistIx);
+    static int allow_nonsymlinkIx = e->KeywordIx( "ALLOW_NONSYMLINK");
+    bool allow_nonsymlink = e->KeywordSet(allow_nonsymlinkIx);
+    
     SizeT nPath = p0S->N_Elements();
 
     DStringGDL* res = new DStringGDL(p0S->Dim(), BaseGDL::NOZERO);
@@ -1851,7 +1877,8 @@ bool *tests )
 	e->Throw( "String expression required in this context: "+
 		  e->GetParString(0));
 
-      bool noexpand_path = e->KeywordSet(e->KeywordIx( "NOEXPAND_PATH"));
+      static int noexpand_pathIx = e->KeywordIx( "NOEXPAND_PATH");
+      bool noexpand_path = e->KeywordSet(noexpand_pathIx);
 
       DStructGDL* res = new DStructGDL(
 				       FindInStructList(structList, "FILE_INFO"), 

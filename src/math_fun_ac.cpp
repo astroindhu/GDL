@@ -163,7 +163,8 @@
     }
 
 #define AC_HELP()							\
-  if (e->KeywordSet("HELP")) {						\
+  static int HELPIx=e->KeywordIx("HELP"); \
+  if (e->KeywordSet(HELPIx)) {						\
     string inline_help[]={						\
       "Usage: res="+e->GetProName()+"(x, [n,] double=double)",		\
       " -- x is a number or an array",					\
@@ -528,7 +529,8 @@ using namespace Eigen;
 
   BaseGDL* spl_init_fun( EnvT* e)
   {
-    if (e->KeywordSet("HELP")) {
+    static int HELPIx=e->KeywordIx("HELP");
+    if (e->KeywordSet(HELPIx)) {
       string inline_help[]={
 	"Usage: y2a=SPL_INIT(xa, ya, yp0=yp0, ypn_1= ypn_1, double=double)",
 	" -- xa is a N elements *ordered* array",
@@ -561,7 +563,7 @@ using namespace Eigen;
     SizeT count, count1;
 
     // before all, we check wether inputs arrays does contains NaN or Inf
-    static DStructGDL *Values =  SysVar::Values();
+    DStructGDL *Values =  SysVar::Values();   //MUST NOT BE STATIC, due to .reset 
     DDouble d_nan=(*static_cast<DDoubleGDL*>(Values->GetTag(Values->Desc()->TagIndex("D_NAN"), 0)))[0];
 
     for (count = 0; count < nElpXpos; ++count) {
@@ -603,11 +605,11 @@ using namespace Eigen;
     U_guard.Reset(U); // delete upon exit
     
     // may be we will have to check the size of these arrays ?
-
-    BaseGDL* Yderiv0=e->GetKW(e->KeywordIx("YP0"));
+    static int yp0Ix=e->KeywordIx("YP0");
+    BaseGDL* Yderiv0=e->GetKW(yp0Ix);
     DDoubleGDL* YP0;
 
-    if(Yderiv0 !=NULL && !isinf((*(YP0=e->GetKWAs<DDoubleGDL>(e->KeywordIx("YP0"))))[0] )){ 
+    if(Yderiv0 !=NULL && !isinf((*(YP0=e->GetKWAs<DDoubleGDL>(yp0Ix)))[0] )){ 
       // first derivative at the point X0 is defined and different to Inf
       (*res)[0]=-0.5;
       (*U)[0] = ( 3. / ((*Xpos)[1]-(*Xpos)[0])) * (((*Ypos)[1]-(*Ypos)[0]) / 
@@ -636,11 +638,11 @@ using namespace Eigen;
       (*res)[count]=(psig-1.)/p;
       (*U)[count]=(6.00*pu-psig*(*U)[count-1])/p;
     }
-
-    BaseGDL* YderivN=e->GetKW(e->KeywordIx("YPN_1"));
+    static int ypn_1Ix=e->KeywordIx("YPN_1");
+    BaseGDL* YderivN=e->GetKW(ypn_1Ix);
     DDoubleGDL* YPN;
 
-    if(YderivN !=NULL && !isinf((*(YPN=e->GetKWAs<DDoubleGDL>(e->KeywordIx("YPN_1"))))[0] )){ 
+    if(YderivN !=NULL && !isinf((*(YPN=e->GetKWAs<DDoubleGDL>(ypn_1Ix)))[0] )){ 
       // first derivative at the point XN-1 is defined and different to Inf 
       (*res)[nElpXpos-1] =0.;
       qn=0.5;
@@ -666,7 +668,8 @@ using namespace Eigen;
   
   BaseGDL* spl_interp_fun( EnvT* e)
   {
-    if (e->KeywordSet("HELP")) {
+    static int HELPIx=e->KeywordIx("HELP");
+    if (e->KeywordSet(HELPIx)) {
       //  string inline_help[]={};
       // e->Help(inline_help, 0);
       string inline_help[]={

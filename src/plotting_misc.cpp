@@ -45,24 +45,22 @@ namespace lib
       e->Throw("Device not supported/unknown: "+device);
     }
 
+    DStructGDL* pStruct=SysVar::P();   //MUST NOT BE STATIC, due to .reset 
+    unsigned colorTag=pStruct->Desc()->TagIndex("COLOR");
+    unsigned bckTag=pStruct->Desc()->TagIndex("BACKGROUND");
     if ( device=="PS" ||device=="SVG" )
     {
-      static DStructGDL* pStruct=SysVar::P();
-      // SA: this does not comply with IDL behaviour, see testsuite/test_pmulti.pro
-      //static unsigned noEraseTag = pStruct->Desc()->TagIndex( "NOERASE");
-      //(*static_cast<DLongGDL*>( pStruct->GetTag( noEraseTag, 0)))[0] = 1;
-        static unsigned colorTag=pStruct->Desc()->TagIndex("COLOR");
-        (*static_cast<DLongGDL*>(pStruct->GetTag(colorTag, 0)))[0]=0; //PLEASE DO NOT CHANGE values here until a better color
-                                                                        // handling has been found.
-         static unsigned bckTag=pStruct->Desc()->TagIndex("BACKGROUND");
-        (*static_cast<DLongGDL*>(pStruct->GetTag(bckTag, 0)))[0]=255; //PLEASE DO NOT CHANGE values here. This default is OK.
+      (*static_cast<DLongGDL*>(pStruct->GetTag(colorTag, 0)))[0]=0;
+      (*static_cast<DLongGDL*>(pStruct->GetTag(bckTag, 0)))[0]=255;
+    }
+    else if ( device=="X" || device=="MAC" || device=="WIN")
+    {
+      (*static_cast<DLongGDL*>(pStruct->GetTag(colorTag, 0)))[0]=16777215;
+      (*static_cast<DLongGDL*>(pStruct->GetTag(bckTag, 0)))[0]=0;
     }
     else
     {
-      static DStructGDL* pStruct=SysVar::P();
-      static unsigned colorTag=pStruct->Desc()->TagIndex("COLOR");
-      (*static_cast<DLongGDL*>(pStruct->GetTag(colorTag, 0)))[0]=16777215;
-        static unsigned bckTag=pStruct->Desc()->TagIndex("BACKGROUND");
+      (*static_cast<DLongGDL*>(pStruct->GetTag(colorTag, 0)))[0]=255;
       (*static_cast<DLongGDL*>(pStruct->GetTag(bckTag, 0)))[0]=0;
     }
 }
@@ -214,7 +212,7 @@ void tvlct( EnvT* e ) {
     int nbActiveStreams = actDevice->MaxWin( ); //new colormap must be given to *all* streams.
     for ( int i = 0; i < nbActiveStreams; ++i ) {
       GDLGStream* actStream = actDevice->GetStreamAt( i );
-      if ( actStream != NULL ) actStream->scmap0( red, green, blue, ctSize );
+      if ( actStream != NULL ) actStream->SetColorMap0( red, green, blue, ctSize );
     }
   }
 }

@@ -70,7 +70,9 @@ TESTS = \
   test_bug_n000607.pro \
   test_bug_n000608.pro \
   test_call_function.pro \
+  test_call_function_extra.pro \
   test_call_procedure.pro \
+  test_call_procedure_extra.pro \
   test_ce.pro \
   test_clip.pro \
   test_common.pro \
@@ -107,6 +109,7 @@ TESTS = \
   test_get_screen_size.pro \
   test_grib.pro \
   test_hist_2d.pro \
+  test_hdf5.pro \
   test_idl8.pro \
   test_idl_validname.pro \
   test_image_statistics.pro \
@@ -129,6 +132,7 @@ TESTS = \
   test_nestedloop.pro \
   test_netcdf.pro \
   test_null.pro \
+  test_obj_isa.pro \
   test_obj_new.pro \
   test_plot_oo.pro \
   test_plotting_ranges.pro \
@@ -142,6 +146,7 @@ TESTS = \
   test_python_module_0.pro \
   test_python_module_1.pro \
   test_python_module_2.pro \
+  test_qhull.pro \
   test_qromb.pro \
   test_qromo.pro \
   test_random.pro \
@@ -166,6 +171,7 @@ TESTS = \
   test_structures.pro \
   test_suite.pro \
   test_systime.pro \
+  test_tic_toc.pro \
   test_trisol.pro \
   test_tv.pro \
   test_typename.pro \

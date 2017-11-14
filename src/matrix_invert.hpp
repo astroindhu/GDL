@@ -12,7 +12,7 @@ At the beginning, this code was only available using the GSL library.
 At that time, it was included in the "gsl_fun.hpp/cpp" code
 
 In 2013 we start to use Eigen3 in conjonction with the GSL.
-The GSL is mandatory. Eigen3 is not mandatory.
+The GSL is mandatory. Eigen3 is not mandatory. */
 
 /***************************************************************************
  *                                                                         *
@@ -35,8 +35,8 @@ The GSL is mandatory. Eigen3 is not mandatory.
 
 namespace lib {
 
-  BaseGDL* invert_eigen_fun( EnvT* e);
-  BaseGDL* invert_gsl_fun( EnvT* e);
+  BaseGDL* invert_eigen_fun( EnvT* e, bool hasDouble);
+  BaseGDL* invert_gsl_fun( EnvT* e, bool hasDouble);
 
   BaseGDL* AC_invert_fun( EnvT* e);
  

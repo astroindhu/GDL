@@ -48,7 +48,7 @@ namespace lib {
       e->Throw(" no complex : ");
 
     // Use to define NaN which is returned if one parameter of humlik function is Not A Number 
-    static DStructGDL *Values =  SysVar::Values();                                                
+    DStructGDL *Values =  SysVar::Values();   //MUST NOT BE STATIC, due to .reset                                                 
     DDouble d_nan=(*static_cast<DDoubleGDL*>(Values->GetTag(Values->Desc()->TagIndex("D_NAN"), 0)))[0];
     DDouble d_infinity= (*static_cast<DDoubleGDL*>(Values->GetTag(Values->Desc()->TagIndex("D_INFINITY"), 0)))[0];  
     // we don't use Gregory formalism (see macros in "math_fun_gm.cpp")
@@ -358,7 +358,7 @@ namespace lib {
 	for (i=0;i<Yvals->N_Elements();++i)
 	  (*Yout)[i]= (*Yvals)[i] + (*H6)[0] * ( (*dydxvals)[i]+(*dyt)[i]+ 2.00000*(*dym)[i] );
 	  
-	static DInt doubleKWIx = e->KeywordIx("DOUBLE");
+	static int doubleKWIx = e->KeywordIx("DOUBLE");
 
 	//if need, convert things back
 	if( !e->KeywordSet(doubleKWIx))

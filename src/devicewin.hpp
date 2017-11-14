@@ -37,8 +37,9 @@
 #define SETOPT setopt
 #endif
 
-#define maxWin 33  //IDL free and widgets start at 33 ...
-#define maxWinReserve 256 
+//defined in graphicsdevice.hpp
+//#define MAX_WIN 32  //IDL free and widgets start at 33 ...
+//#define MAX_WIN_RESERVE 256 
 
 class DeviceWIN : public GraphicsDevice
 {
@@ -64,17 +65,17 @@ private:
 
 	bool WDelete(int);
 	bool WOpen(int, const std::string&,
-		int, int, int, int);
+		int, int, int, int, bool);
 	bool WState(int);
-	bool WSize(int, int*, int*, int*, int*);
+	bool WSize(int, int*, int*);
 	bool WSet(int);
 	bool WShow(int, bool, bool);
 	int WAdd();
-	//int WAddFree();
 	DIntGDL* GetWindowPosition();
 	DLong GetVisualDepth();
 	DString GetVisualName();
-	DLong GetPixelDepth();
+//This function is reserved to device Z, should not exist for WIN!
+//	DLong GetPixelDepth();
 	DByteGDL* WindowState();
 	bool UnsetFocus();
 	int MaxWin();
@@ -88,8 +89,8 @@ private:
 	{
 		// update !D
 		if (wIx >= 0 && wIx < winList.size()) {	// window size and pos
-			long xsize, ysize, xoff, yoff;
-			winList[wIx]->GetGeometry(xsize, ysize, xoff, yoff);
+			long xsize, ysize;
+			winList[wIx]->GetGeometry(xsize, ysize);
 
 			(*static_cast<DLongGDL*>(dStruct->GetTag(xSTag)))[0] = xsize;
 			(*static_cast<DLongGDL*>(dStruct->GetTag(ySTag)))[0] = ysize;
@@ -136,12 +137,12 @@ public:
 		dStruct->InitTag("ORIGIN", origin);
 		dStruct->InitTag("ZOOM", zoom);
 
-		winList.reserve(maxWinReserve);
-		winList.resize(maxWin);
-		for (int i = 0; i < maxWin; i++) winList[i] = NULL;
-		oList.reserve(maxWinReserve);
-		oList.resize(maxWin);
-		for (int i = 0; i < maxWin; i++) oList[i] = 0;
+		winList.reserve(MAX_WIN_RESERVE);
+		winList.resize(MAX_WIN);
+		for (int i = 0; i < MAX_WIN; i++) winList[i] = NULL;
+		oList.reserve(MAX_WIN_RESERVE);
+		oList.resize(MAX_WIN);
+		for (int i = 0; i < MAX_WIN; i++) oList[i] = 0;
 	}
 
 	~DeviceWIN()
@@ -171,7 +172,7 @@ public:
 			DLong xSize, ySize;
 			DefaultXYSize(&xSize, &ySize);
 
-			bool success = WOpen(0, title, xSize, ySize, -1, -1);
+			bool success = WOpen(0, title, xSize, ySize, -1, -1, false);
 			if (!success)	  return NULL;
 			if (actWin == -1)	  {
 				std::cerr << "Internal error: plstream not set." << std::endl;
@@ -209,7 +210,7 @@ public:
 	}
 
 };
-#undef maxWin
-#undef maxWinReserve
+//#undef MAX_WIN
+//#undef MAX_WIN_RESERVE
 #endif
 #endif

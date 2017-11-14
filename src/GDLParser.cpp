@@ -1,4 +1,4 @@
-/* $ANTLR 2.7.7 (20130428): "gdlc.g" -> "GDLParser.cpp"$ */
+/* $ANTLR 2.7.7 (2006-11-01): "gdlc.g" -> "GDLParser.cpp"$ */
 
 #include "includefirst.hpp"
 
@@ -6776,9 +6776,7 @@ void GDLParser::arrayindex_list() {
 	int rank = 1;
 	
 	
-	switch ( LA(1)) {
-	case LSQUARE:
-	{
+	if ((LA(1) == LSQUARE)) {
 		match(LSQUARE);
 		arrayindex();
 		if (inputState->guessing==0) {
@@ -6786,7 +6784,7 @@ void GDLParser::arrayindex_list() {
 		}
 		{ // ( ... )*
 		for (;;) {
-			if ((LA(1) == COMMA)) {
+			if (((LA(1) == COMMA))&&(++rank <= MAXRANK)) {
 				match(COMMA);
 				arrayindex();
 				if (inputState->guessing==0) {
@@ -6802,10 +6800,8 @@ void GDLParser::arrayindex_list() {
 		} // ( ... )*
 		match(RSQUARE);
 		arrayindex_list_AST = RefDNode(currentAST.root);
-		break;
 	}
-	case LBRACE:
-	{
+	else if (((LA(1) == LBRACE))&&( IsRelaxed())) {
 		match(LBRACE);
 		arrayindex();
 		if (inputState->guessing==0) {
@@ -6829,13 +6825,11 @@ void GDLParser::arrayindex_list() {
 		} // ( ... )*
 		match(RBRACE);
 		arrayindex_list_AST = RefDNode(currentAST.root);
-		break;
 	}
-	default:
-	{
+	else {
 		throw antlr::NoViableAltException(LT(1), getFilename());
 	}
-	}
+	
 	returnAST = arrayindex_list_AST;
 }
 
@@ -6860,18 +6854,16 @@ void GDLParser::arrayindex() {
 				match(COMMA);
 				break;
 			}
-			case RBRACE:
-			{
-				match(RBRACE);
-				break;
-			}
 			case RSQUARE:
 			{
 				match(RSQUARE);
 				break;
 			}
 			default:
-			{
+				if (((LA(1) == RBRACE))&&( IsRelaxed())) {
+					match(RBRACE);
+				}
+			else {
 				throw antlr::NoViableAltException(LT(1), getFilename());
 			}
 			}
@@ -6916,11 +6908,6 @@ void GDLParser::arrayindex() {
 						match(COMMA);
 						break;
 					}
-					case RBRACE:
-					{
-						match(RBRACE);
-						break;
-					}
 					case RSQUARE:
 					{
 						match(RSQUARE);
@@ -6932,7 +6919,10 @@ void GDLParser::arrayindex() {
 						break;
 					}
 					default:
-					{
+						if (((LA(1) == RBRACE))&&( IsRelaxed())) {
+							match(RBRACE);
+						}
+					else {
 						throw antlr::NoViableAltException(LT(1), getFilename());
 					}
 					}
@@ -6983,18 +6973,16 @@ void GDLParser::arrayindex() {
 							match(COMMA);
 							break;
 						}
-						case RBRACE:
-						{
-							match(RBRACE);
-							break;
-						}
 						case RSQUARE:
 						{
 							match(RSQUARE);
 							break;
 						}
 						default:
-						{
+							if (((LA(1) == RBRACE))&&( IsRelaxed())) {
+								match(RBRACE);
+							}
+						else {
 							throw antlr::NoViableAltException(LT(1), getFilename());
 						}
 						}

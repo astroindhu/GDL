@@ -80,6 +80,33 @@ namespace lib {
 #endif
   }
 
+  BaseGDL* hdf_exists(EnvT* e)
+  {
+#ifdef USE_HDF
+    return new DIntGDL(1);
+#else
+    return new DIntGDL(0);
+#endif
+  }
+  
+  BaseGDL* hdf5_exists(EnvT* e)
+  {
+#ifdef USE_HDF5
+    return new DIntGDL(1);
+#else
+    return new DIntGDL(0);
+#endif
+  }
+
+  BaseGDL* eigen_exists(EnvT* e)
+  {
+#ifdef USE_EIGEN
+    return new DIntGDL(1);
+#else
+    return new DIntGDL(0);
+#endif
+  }
+
   BaseGDL* gshhg_exists( EnvT* e )
   {
 #ifdef USE_GSHHS
@@ -175,9 +202,13 @@ namespace lib {
       if ((v <= -1) || (v >= 1)) ret_seconds=true;
 
     }
-
+    static int julianIx=e->KeywordIx("JULIAN");
+    bool isjulian=e->KeywordSet(julianIx);
+    static int secondsIx=e->KeywordIx("SECONDS");
+    static int utcIx=e->KeywordIx("UTC");
+    bool isutc=e->KeywordSet(utcIx);
     if (nParam == 2) {
-      if (e->KeywordSet("JULIAN")) e->Throw("Conflicting keywords.");
+      if (isjulian) e->Throw("Conflicting keywords.");
 
       //2 parameters
       //if the first param is 0, return the date of the second arg
@@ -203,11 +234,11 @@ namespace lib {
     //return the variable in seconds, either JULIAN, JULIAN+UTC,
     //or no other keywords
     struct tm *tstruct;
-    if( ret_seconds || e->KeywordSet("SECONDS") )
+    if( ret_seconds || e->KeywordSet(secondsIx) )
       {
-       if( e->KeywordSet("JULIAN") )
+       if( isjulian )
          {
-           if( e->KeywordSet("UTC") )
+           if( isutc )
              tstruct=gmtime((time_t *)&tval.tv_sec);
            else
              tstruct=localtime((time_t *)&tval.tv_sec);
@@ -223,13 +254,13 @@ namespace lib {
       }
 
     //return a string of the time, either UTC or local (default)
-    if(e->KeywordSet("UTC"))
+    if(isutc)
       tstruct= gmtime((time_t *)&tval.tv_sec);
     else
       tstruct= localtime((time_t *)&tval.tv_sec);
 
     //Convert the time to JULIAN or NOT
-    if(e->KeywordSet("JULIAN"))
+    if(isjulian)
         return new DDoubleGDL(Gregorian2Julian(tstruct));
     else 
       {
@@ -446,7 +477,8 @@ namespace lib {
 	}
 	
       //convert things back
-      if(xvals->Type() != GDL_DOUBLE && !e->KeywordSet("DOUBLE"))
+      static int doubleIx=e->KeywordIx("DOUBLE");
+      if(xvals->Type() != GDL_DOUBLE && !e->KeywordSet(doubleIx))
 	{
 	  return res->Convert2(GDL_FLOAT,BaseGDL::CONVERT);
 	}

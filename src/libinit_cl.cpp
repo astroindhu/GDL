@@ -57,6 +57,9 @@ void LibInit_cl()
   new DLibFunRetNew(lib::gsl_exp, string("GSL_EXP"),1);
 
   new DLibFunRetNew(lib::ncdf_exists,string("NCDF_EXISTS"));
+  new DLibFunRetNew(lib::hdf_exists,string("HDF_EXISTS"));
+  new DLibFunRetNew(lib::hdf5_exists,string("HDF5_EXISTS"));
+  new DLibFunRetNew(lib::eigen_exists,string("EIGEN_EXISTS"));
   new DLibFunRetNew(lib::magick_exists,string("MAGICK_EXISTS"));
 
   new DLibFunRetNew(lib::proj4_exists,string("PROJ4_EXISTS"));
@@ -221,11 +224,10 @@ void LibInit_cl()
   //manipulation
   new DLibPro(lib::magick_flip,string("MAGICK_FLIP"),1);
 
-  const string magick_matteKey[]={"TRUE","FALSE",KLISTEND};
   new DLibPro(lib::magick_matte,string("MAGICK_MATTE"),1);
+  new DLibPro(lib::magick_mattecolor,string("MAGICK_MATTECOLOR"),2);
 
   const string magick_interlaceKey[]={"NOINTERLACE","LINEINTERLACE","PLANEINTERLACE",KLISTEND};
-
   new DLibPro(lib::magick_interlace,string("MAGICK_INTERLACE"),1,magick_interlaceKey);
   
   const string magick_addnoiseKey[]={"UNIFORMNOISE","GAUSSIANNOISE","MULTIPLICATIVEGAUSSIANNOISE","IMPULSENOISE","LAPLACIANNOISE","POISSONNOISE","NOISE",KLISTEND};
@@ -240,6 +242,6 @@ void LibInit_cl()
   new DLibFunRetNew(lib::magick_ping, string("MAGICK_PING"), 2, magick_pingKey);
 
   // see bug no. 3376577
-  Magick::InitializeMagick(NULL); 
+//  Magick::InitializeMagick(NULL); 
 #endif
 }

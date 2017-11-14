@@ -57,13 +57,21 @@ namespace lib {
   using std::isnan;
 #endif
 
+#ifdef PL_HAVE_QHULL
+extern "C" {
+  //prevent qhull using its own memory tricks. Stay on the safe side.
+    #define qh_NOmem 1
+    #include <libqhull/qhull_a.h>
+}
+#endif
+
   BaseGDL* machar_fun( EnvT* e)
   {
     long int ibeta, it, irnd, ngrd, machep, negep, iexp, minexp, maxexp;
     float  eps, epsneg, xmin, xmax;
     double epsD, epsnegD, xminD, xmaxD;
     
-    if( e->KeywordSet( "DOUBLE"))
+    if( e->KeywordSet(0)) //DOUBLE
       {
 	machar_d(&ibeta, &it, &irnd, &ngrd, &machep, 
 		 &negep, &iexp, &minexp, &maxexp, 
@@ -570,17 +578,29 @@ namespace lib {
     DFloat dx=1, dy=1;
     DFloat drho = 0.5 * sqrt(dx*dx + dy*dy);
 
-    if( e->KeywordSet( "DX"))
-      e->AssureFloatScalarKWIfPresent( "DX", dx);	
-    if( e->KeywordSet( "DY"))
-      e->AssureFloatScalarKWIfPresent( "DY", dy);
-    if( e->KeywordSet( "DRHO"))
-      e->AssureFloatScalarKWIfPresent( "DRHO", drho);	
+    static int DXIx=e->KeywordIx("DX");
+    static int DYIx=e->KeywordIx("DY");
+    static int DRHOIx=e->KeywordIx("DRHO");
+    static int NXIx=e->KeywordIx("NX");
+    static int NYIx=e->KeywordIx("NY");
+    static int XMINIx=e->KeywordIx("XMIN");
+    static int YMINIx=e->KeywordIx("YMIN");
+    static int NTHETAIx=e->KeywordIx("NTHETA");
+    static int NRHOIx=e->KeywordIx("NRHO");
+    static int RMINIx=e->KeywordIx("RMIN");
+    static int BACKPROJECTIx=e->KeywordIx("BACKPROJECT");
+
+    if( e->KeywordSet( DXIx))
+      e->AssureFloatScalarKWIfPresent( DXIx, dx);	
+    if( e->KeywordSet( DYIx))
+      e->AssureFloatScalarKWIfPresent( DYIx, dy);
+    if( e->KeywordSet( DRHOIx))
+      e->AssureFloatScalarKWIfPresent( DRHOIx, drho);	
 
     DLong dims[2];
 
 
-    if( e->KeywordSet( "BACKPROJECT")) {
+    if( e->KeywordSet( BACKPROJECTIx)) {
 
       DLong ntheta=p0->Dim(0);
       DLong nrho=p0->Dim(1);
@@ -588,10 +608,10 @@ namespace lib {
 
       DLong nx=(DLong) floor(2*((drho*nrho/2)/sqrt(dx*dx + dy*dy))+1);
       DLong ny=nx;
-      if( e->KeywordSet( "NX"))
-	e->AssureLongScalarKWIfPresent( "NX", nx);
-      if( e->KeywordSet( "NY"))
-	e->AssureLongScalarKWIfPresent( "NY", ny);	
+      if( e->KeywordSet( NXIx))
+	e->AssureLongScalarKWIfPresent( NXIx, nx);
+      if( e->KeywordSet( NYIx))
+	e->AssureLongScalarKWIfPresent( NYIx, ny);	
 
       dims[0] = nx;
       dims[1] = ny;
@@ -603,10 +623,10 @@ namespace lib {
       DFloat xmax = +0.5 * (nx-1);
       DFloat ymax = +0.5 * (ny-1);
 
-      if( e->KeywordSet( "XMIN"))
-	e->AssureFloatScalarKWIfPresent( "XMIN", xmin);	
-      if( e->KeywordSet( "YMIN"))
-	e->AssureFloatScalarKWIfPresent( "YMIN", ymin);	
+      if( e->KeywordSet( YMINIx))
+	e->AssureFloatScalarKWIfPresent( XMINIx, xmin);	
+      if( e->KeywordSet( YMINIx))
+	e->AssureFloatScalarKWIfPresent( YMINIx, ymin);	
 
 
       DFloatGDL* res = new DFloatGDL( dim, BaseGDL::NOZERO);
@@ -643,10 +663,10 @@ namespace lib {
       DFloat xmax = +0.5 * (p0->Dim(0)-1);
       DFloat ymax = +0.5 * (p0->Dim(1)-1);
 
-      if( e->KeywordSet( "XMIN"))
-	e->AssureFloatScalarKWIfPresent( "XMIN", xmin);	
-      if( e->KeywordSet( "YMIN"))
-	e->AssureFloatScalarKWIfPresent( "YMIN", xmin);	
+      if( e->KeywordSet( XMINIx))
+	e->AssureFloatScalarKWIfPresent( XMINIx, xmin);	
+      if( e->KeywordSet( YMINIx))
+	e->AssureFloatScalarKWIfPresent( YMINIx, xmin);	
 
       maxr2[0] = xmin*xmin + ymin*ymin;
       maxr2[1] = xmin*xmin + ymax*ymax;
@@ -661,10 +681,10 @@ namespace lib {
 					     p0->Dim(1)*p0->Dim(1))));
       dims[1] = 2 * (DLong) ceil(sqrt(mrho2)/drho) + 1;
 
-      if( e->KeywordSet( "NTHETA"))
-	e->AssureLongScalarKWIfPresent( "NTHETA", dims[0]);
-      if( e->KeywordSet( "NRHO"))
-	e->AssureLongScalarKWIfPresent( "NRHO", dims[1]);
+      if( e->KeywordSet( NTHETAIx))
+	e->AssureLongScalarKWIfPresent( NTHETAIx, dims[0]);
+      if( e->KeywordSet( NRHOIx))
+	e->AssureLongScalarKWIfPresent( NRHOIx, dims[1]);
 
       static int thetaIx = e->KeywordIx( "THETA"); 
       if( e->KeywordPresent( thetaIx)) {
@@ -682,8 +702,8 @@ namespace lib {
 
       DFloat theta=0, dtheta=fpi/ntheta, cs, sn;
       DFloat rmin=-0.5*(nrho-1)*drho, rho;
-      if( e->KeywordSet( "RMIN"))
-	e->AssureFloatScalarKWIfPresent( "RMIN", rmin);	
+      if( e->KeywordSet( RMINIx))
+	e->AssureFloatScalarKWIfPresent( RMINIx, rmin);	
 
 
       for( SizeT itheta=0; itheta<ntheta; ++itheta) {
@@ -756,22 +776,128 @@ namespace lib {
 
 // see http://www.geom.umn.edu/software/qhull/. Used also with plplot.
 #ifdef PL_HAVE_QHULL
-  void triangulate ( EnvT* e)
+  void    qh_errexit(int exitcode, facetT *facet, ridgeT *ridge)
   {
+      ThrowGDLException("Qhull error.");
+  }
+void triangulate ( EnvT* e)
+  {
+    
+    // Template 2016 by Reto Stockli
+    // Todo: 
+    // 1. Check input for missing values (NAN/FNAN)
+    // 2. Return tr array from vertex loop at the end
+    // 3. Implement keywords: [, B] [, CONNECTIVITY=variable] [, SPHERE=variable 
+    //    [/DEGREES]] [, FVALUE=variable] [, REPEATS=variable] [, TOLERANCE=value]
+
+    char hidden_options[]=" d n v H U Qb QB Qc Qf Qg Qi Qm Qr QR Qv Qx TR E V FC Fi Fo Ft Fp FV Q0 Q1 Q2 Q3 Q4 Q5 Q6 Q7 Q8 Q9 ";
+
+    int DIMENSION = 2;
+    int dimqhull = DIMENSION + 1;
+
+    int i,j;
+
+    coordT *points;
+
+    facetT *facetlist;
+    facetT *facet;
+
+    setT *vertices;
+    vertexT *vertex;
+    vertexT **vertexp;
+
+    char flags[25];
+    boolT ismalloc;
+
+    int numfacets;
+    int numvertices;
+
     DDoubleGDL *yVal, *xVal;
     int npts;
     SizeT nParam=e->NParam();
     if( nParam < 3)
     {
       e->Throw("Incorrect number of arguments.");
-    }
+    } else  {
+	  e->AssureGlobalPar(2); //since we return values in it?  
+	} 
     yVal = e->GetParAs< DDoubleGDL > (0);
     if (yVal->Rank() == 0) e->Throw("Expression must be an array in this context: " + e->GetParString(0));
     npts=yVal->N_Elements();
     xVal = e->GetParAs< DDoubleGDL > (1);
     if (xVal->Rank() == 0) e->Throw("Expression must be an array in this context: " + e->GetParString(1));
     if (xVal->N_Elements()!=npts) e->Throw("X & Y arrays must have same number of points.");
-    e->Throw("Writing in progress.");
+
+    /* init QHULL */
+    sprintf (flags, "qdelaunay i Qt");
+    qh_meminit(NULL);
+    qh NOerrexit = False;
+    qh_init_A(stdin, stdout, stderr, 0, NULL);
+    qh_option("delaunay", NULL, NULL);
+    qh DELAUNAY= True;     /* 'd'   */
+    qh SCALElast= True;    /* 'Qbb' */
+    qh KEEPcoplanar= True; /* 'Qc', to keep coplanars in 'p' */
+    qh_checkflags(flags, hidden_options);
+    qh_initflags(flags);
+
+    /* assign X/Y coordinates to QHULL points structure */
+    /* QHULL requires a vector of points including the squared sum of X/Y points */
+    ismalloc=True;
+    points= (coordT*)qh_malloc((npts)*(dimqhull)*sizeof(coordT));
+
+    for (i=0;i<npts;i++) {
+      points[i*3]   = (*yVal)[i]; 
+      points[i*3+1] = (*xVal)[i];
+      points[i*3+2] = (*yVal)[i] * (*yVal)[i] + (*xVal)[i] * (*xVal)[i];
+    }
+
+    /* run QHULL */
+    qh_init_B(points, npts, dimqhull, ismalloc);
+    qh_qhull();
+    qh_check_output();
+    qh_prepare_output();
+
+    /* get QHULL output */
+    facetlist = qh facet_list;
+  
+    numvertices = qh hull_dim;
+    numfacets = 0;
+    FORALLfacet_(facetlist) {
+      if (!qh_skipfacet(facet)) numfacets++;
+    }
+
+    printf("# facets: %i; # vertices: %i \n",numfacets,numvertices);
+    if (numfacets<1) e->Throw("Triangulation failed.");
+    if (numvertices!=3) e->Throw("Invalid Number of Facets returned bu QHULL!");
+    SizeT d[2];
+    d[0]=numvertices;
+    d[1]=numfacets;
+    DLongGDL* returned_triangles=new DLongGDL(dimension(d,2), BaseGDL::NOZERO);
+
+    {
+      SizeT k=0;
+      FORALLfacet_(facetlist) {
+        if (!qh_skipfacet(facet)) {
+          vertices = qh_facet3vertex(facet);
+          FOREACHvertex_(vertices)
+          (*returned_triangles)[k++]=qh_pointid(vertex->point);
+        }
+      }
+    }
+    //pass back to GDL env:
+    e->SetPar(2, returned_triangles);
+    /* free QHULL memory */
+#ifdef qh_NOmem
+  qh_freeqhull(qh_ALL);
+#else
+  qh_freeqhull(!qh_ALL);
+#if 0
+  int curlong, totlong; /* used !qh_NOmem */
+  qh_memfreeshort(&curlong, &totlong);
+  if (curlong || totlong)
+    cerr<<"qhull internal warning (main): did not free "<<totlong<<" bytes of long memory("<<curlong<<" pieces)"<<endl;
+#endif
+#endif
   }
   void qhull ( EnvT* e)
   {
@@ -886,17 +1012,18 @@ namespace lib {
       e->AssureLongScalarPar( 4, nCol);
       e->AssureLongScalarPar( 5, nRow);
     }
-
+    static int CUBICIx=e->KeywordIx("CUBIC");
     DDouble cubic=-0.5;
-    if( e->KeywordSet( "CUBIC")) {
-      e->AssureDoubleScalarKWIfPresent( "CUBIC", cubic);	
+    if( e->KeywordSet( CUBICIx)) {
+      e->AssureDoubleScalarKWIfPresent( CUBICIx, cubic);	
       interp = 2;
     }
-
+    
+    static int MISSINGIx=e->KeywordIx("MISSING");
     DDouble missing=0.0;
-    bool doMissing=( e->KeywordSet( "MISSING"));
+    bool doMissing=( e->KeywordSet( MISSINGIx));
     if(doMissing) {
-      e->AssureDoubleScalarKWIfPresent( "MISSING", missing);	
+      e->AssureDoubleScalarKWIfPresent( MISSINGIx, missing);	
     }
 
     SizeT nEl;
@@ -1657,238 +1784,240 @@ void image_del(image_t * d)
 	free(d) ;
 }
 
-  void executeString( EnvBaseT* caller, istringstream *istr)
-  {
-    // P.S:  I don't know how this works.  Ask Marc.
-
-    RefDNode theAST;
-    GDLLexer lexer(*istr, "",GDLParser::NONE);
-    GDLParser& parser = lexer.Parser();
-    parser.interactive();
-    theAST = parser.getAST();
-    RefDNode trAST;
-    GDLTreeParser treeParser( caller);
-    treeParser.interactive(theAST);
-    trAST = treeParser.getAST();
-    ProgNodeP progAST = ProgNode::NewProgNode( trAST);
-    Guard< ProgNode> progAST_guard( progAST);
-
-	// Marc: necessary for correct FOR loop handling
-	assert( dynamic_cast<EnvUDT*>(caller) != NULL);
-    EnvUDT* env = static_cast<EnvUDT*>(caller);
-    int nForLoopsIn = env->NForLoops();
-    int nForLoops = ProgNode::NumberForLoops( progAST, nForLoopsIn);
-	env->ResizeForLoops( nForLoops);
-
-    RetCode retCode = caller->Interpreter()->execute( progAST);
-  
-  	env->ResizeForLoops( nForLoopsIn);
-}
-
-
-  BaseGDL* rk4jmg_fun(EnvT* e)
-  {  
-    // Get current DOY HR MN SEC and form unique tag
-    struct tm *curtime;
-    time_t bintime;
-    char time_str[128];
-    time( &bintime);
-    curtime = gmtime( &bintime);
-    strftime( time_str, 128, "%j%H%M%S", curtime);
-    DString tag = time_str;
-
-    SizeT nParam = e->NParam(5);
-    // Result = RK4( Y, Dydx, X, H, Derivs [, /GDL_DOUBLE] )
-
-    BaseGDL* par = e->GetParDefined( 0);
-
-    // Get # of y-elements
-    SizeT nEy = par->N_Elements();
-    //    cout << "nEy: " << nEy << endl;
-
-    bool doubleFlag = false;
-    if ( par->Type() == GDL_DOUBLE) doubleFlag = true;
-    if ( e->KeywordSet( "DOUBLE")) doubleFlag = true;
-
-    DString retTypeString;
-    if ( doubleFlag) 
-      retTypeString = "DOUBLE (";
-    else
-      retTypeString = "FLOAT (";
-    //    cout << doubleFlag << endl;
-
-    // Get Name of GDL-code derivative function
-    DString derivName;
-    e->AssureScalarPar<DStringGDL>( 4, derivName); 
+// used in rk4jmg_fun below only
+//  void executeString( EnvBaseT* caller, istringstream *istr)
+//  {
+//    // P.S:  I don't know how this works.  Ask Marc.
+//
+//    RefDNode theAST;
+//    GDLLexer lexer(*istr, "",GDLParser::NONE);
+//    GDLParser& parser = lexer.Parser();
+//    parser.interactive();
+//    theAST = parser.getAST();
+//    RefDNode trAST;
+//    GDLTreeParser treeParser( caller);
+//    treeParser.interactive(theAST);
+//    trAST = treeParser.getAST();
+//    ProgNodeP progAST = ProgNode::NewProgNode( trAST);
+//    Guard< ProgNode> progAST_guard( progAST);
+//
+//	// Marc: necessary for correct FOR loop handling
+//	assert( dynamic_cast<EnvUDT*>(caller) != NULL);
+//    EnvUDT* env = static_cast<EnvUDT*>(caller);
+//    int nForLoopsIn = env->NForLoops();
+//    int nForLoops = ProgNode::NumberForLoops( progAST, nForLoopsIn);
+//	env->ResizeForLoops( nForLoops);
+//
+//    RetCode retCode = caller->Interpreter()->execute( progAST);
+//  
+//  	env->ResizeForLoops( nForLoopsIn);
+//}
 
 
-    // Check if GDL-code derivative function exist
-    vector<DString> fList;
-    bool found = false;
-    for( FunListT::iterator i=funList.begin(); i != funList.end(); i++) {
-      fList.push_back((*i)->ObjectName());
-    }
-    for( SizeT i = 0; i<funList.size(); ++i) {
-	if ( StrUpCase(derivName) == fList[ i]) {
-	  found = true;
-	  break;
-	}
-    }
-    if ( found == false) {
-      return NULL;
-    }
-
-
-    ostringstream ostr;
-    int xI;
-
-    // Get current level of calling stack
-    EnvStackT& callStack = e->Interpreter()->CallStack();
-    DLong curlevnum = callStack.size()-1;
-
-    // Get calling procedure
-    DSubUD* pro = static_cast<DSubUD*>(callStack[curlevnum-1]->GetPro());
-
-    // Get total number of current variables & keywords at calling level
-    SizeT nVar = pro->Size();
-    SizeT nKey = pro->NKey();
-
-    // Get GDL variable names for y, dydx, x, h
-    DString varName[4];
-    DLong nTemp = 0;
-    // For each RK4 function parameter 
-    for( SizeT i = 0; i<4; ++i) {
-      BaseGDL *val = e->GetPar( i);
-      // Loop through all variables
-      found = false;
-      for( SizeT j = 0; j<nVar; ++j) {
-	par = ((EnvT*)(callStack[curlevnum-1]))->GetPar( j-nKey);
-
-	// If match then get and save variable name
-	if ( par == val) {
-	  varName[i] = pro->GetVarName( j);
-	  found = true;
-	  break;
-	}
-      }
-
-      // If variable name not found then make temp variable
-      if ( !found) {
-	if ( i == 0) varName[i] = "TEMP_Y_" + tag;
-	if ( i == 1) varName[i] = "TEMP_DYDX_" + tag;
-	if ( i == 2) varName[i] = "TEMP_X_" + tag;
-	if ( i == 3) varName[i] = "TEMP_H_" + tag;
-
-	SizeT u = pro->AddVar(StrUpCase(varName[i]));
-	SizeT s = callStack[curlevnum-1]->AddEnv();
-
-	BaseGDL*& par = ((EnvT*)(callStack[curlevnum-1]))->GetPar( s-nKey);
-	BaseGDL* res = e->GetPar( i)->Dup();
-	memcpy(&par, &res, 4);
-
-	nTemp++;
-      }
-    }
-
-
-    // Form input variable names
-    DString Y    = varName[0];
-    DString DYDX = varName[1];
-    DString X    = varName[2];
-    DString H    = varName[3];
-
-    DString H_2    = "0.5 * "        + varName[3];
-    DString H_1_6  = "(1.D0 / 6) * " + varName[3];
-
-    // Form output variable names
-    DString varName_K2 = "K2_" + tag;
-    DString varName_K3 = "K3_" + tag;
-    DString varName_K4 = "K4_" + tag;
-    DString varName_Y1 = "Y1_" + tag;
-
-    // Build execution string for: k2 = f(x + h/2, y + h * k1/2)
-    ostr << varName_K2.c_str() << " = " << derivName.c_str() << "(" ;
-    ostr << X.c_str() << " + " << H_2.c_str() << ", ";
-    ostr << Y.c_str() << " + " << H_2.c_str() << " * " << DYDX.c_str();
-    ostr << ") & ";
-
-    // Build execution string for: k3 = f(x + h/2, y + h * k2/2)
-    ostr << varName_K3.c_str() << " = " << derivName.c_str() << "(" ;
-    ostr << X.c_str() << " + " << H_2.c_str() << ", ";
-    ostr << Y.c_str() << " + " << H_2.c_str() << " * " << varName_K2.c_str();
-    ostr << ") & ";
-
-    // Build execution string for: k4 = f(x + h, y + h * k3)
-    ostr << varName_K4.c_str() << " = " << derivName.c_str() << "(" ;
-    ostr << X.c_str() << " + " << H.c_str() << ", ";
-    ostr << Y.c_str() << " + " << H.c_str() << " * " << varName_K3.c_str();
-    ostr << ") & ";
-
-    // Build exec string for: yi+1 = yi + (1/6) * h * [k1 + 2k2 + 2k3 + k4]
-    ostr << varName_Y1.c_str() << " = " << retTypeString.c_str() << Y.c_str();
-    ostr << " + " << H_1_6.c_str() << " * (";
-    ostr << DYDX.c_str() << " + 2 * " << varName_K2.c_str(); 
-    ostr << " + 2 * " << varName_K3.c_str() << " + " << varName_K4.c_str();
-    ostr << ") )";
-
-    DString line = ostr.rdbuf()->str();
-    istringstream istr;
-    istr.str(line+"\n");
-    //    cout << line.c_str() << endl;
-
-    // Execute command string
-    EnvBaseT* caller;
-    caller = e->Caller();
-// ms: commented out to comply with new stack handling
-//     e->Interpreter()->CallStack().pop_back();
-
-    executeString( caller, &istr);
-
-    // Retrieve return values for Y_N+1
-    xI = pro->FindVar(StrUpCase( varName_Y1));
-    par = ((EnvT*)(callStack[curlevnum-1]))->GetPar( xI-nKey);
-
-    DFloatGDL*  res_f;
-    DDoubleGDL* res_d;
-
-    if ( doubleFlag) {
-      res_d = new DDoubleGDL(nEy, BaseGDL::NOZERO);
-
-      for( SizeT i = 0; i<nEy; ++i) {
-	(*res_d)[i] = (*(DDoubleGDL*) par)[i];
-	//	cout << "y1 " << i << ": " << (*res_d)[i] << endl;
-      }
-    } else {
-      res_f = new DFloatGDL(nEy, BaseGDL::NOZERO);
-
-      for( SizeT i = 0; i<nEy; ++i) {
-	(*res_f)[i] = (*(DFloatGDL*) par)[i];
-	//	cout << "y1 " << i << ": " << (*res_f)[i] << endl;
-      }
-    }
-
-    // Delete temporary output variables
-    for( SizeT i = 0; i<nTemp; ++i) {
-      pro->DelVar( xI--);
-      callStack[curlevnum-1]->DelEnv();
-    }
-
-    pro->DelVar( xI--);
-    callStack[curlevnum-1]->DelEnv();
-
-    pro->DelVar( xI--);
-    callStack[curlevnum-1]->DelEnv();
-
-    pro->DelVar( xI--);
-    callStack[curlevnum-1]->DelEnv();
-
-    pro->DelVar( xI);
-    callStack[curlevnum-1]->DelEnv();
-
-    if ( doubleFlag) 
-      return res_d;
-    else
-      return res_f;
-  }
+//  BaseGDL* rk4jmg_fun(EnvT* e)
+//  {  
+//    // Get current DOY HR MN SEC and form unique tag
+//    struct tm *curtime;
+//    time_t bintime;
+//    char time_str[128];
+//    time( &bintime);
+//    curtime = gmtime( &bintime);
+//    strftime( time_str, 128, "%j%H%M%S", curtime);
+//    DString tag = time_str;
+//
+//    SizeT nParam = e->NParam(5);
+//    // Result = RK4( Y, Dydx, X, H, Derivs [, /GDL_DOUBLE] )
+//
+//    BaseGDL* par = e->GetParDefined( 0);
+//
+//    // Get # of y-elements
+//    SizeT nEy = par->N_Elements();
+//    //    cout << "nEy: " << nEy << endl;
+//
+//    bool doubleFlag = false;
+//    if ( par->Type() == GDL_DOUBLE) doubleFlag = true;
+//    static int DOUBLEIx = e->KeywordIx("DOUBLE");
+//    if ( e->KeywordSet( DOUBLEIx)) doubleFlag = true;
+//
+//    DString retTypeString;
+//    if ( doubleFlag) 
+//      retTypeString = "DOUBLE (";
+//    else
+//      retTypeString = "FLOAT (";
+//    //    cout << doubleFlag << endl;
+//
+//    // Get Name of GDL-code derivative function
+//    DString derivName;
+//    e->AssureScalarPar<DStringGDL>( 4, derivName); 
+//
+//
+//    // Check if GDL-code derivative function exist
+//    vector<DString> fList;
+//    bool found = false;
+//    for( FunListT::iterator i=funList.begin(); i != funList.end(); i++) {
+//      fList.push_back((*i)->ObjectName());
+//    }
+//    for( SizeT i = 0; i<funList.size(); ++i) {
+//	if ( StrUpCase(derivName) == fList[ i]) {
+//	  found = true;
+//	  break;
+//	}
+//    }
+//    if ( found == false) {
+//      return NULL;
+//    }
+//
+//
+//    ostringstream ostr;
+//    int xI;
+//
+//    // Get current level of calling stack
+//    EnvStackT& callStack = e->Interpreter()->CallStack();
+//    DLong curlevnum = callStack.size()-1;
+//
+//    // Get calling procedure
+//    DSubUD* pro = static_cast<DSubUD*>(callStack[curlevnum-1]->GetPro());
+//
+//    // Get total number of current variables & keywords at calling level
+//    SizeT nVar = pro->Size();
+//    SizeT nKey = pro->NKey();
+//
+//    // Get GDL variable names for y, dydx, x, h
+//    DString varName[4];
+//    DLong nTemp = 0;
+//    // For each RK4 function parameter 
+//    for( SizeT i = 0; i<4; ++i) {
+//      BaseGDL *val = e->GetPar( i);
+//      // Loop through all variables
+//      found = false;
+//      for( SizeT j = 0; j<nVar; ++j) {
+//	par = ((EnvT*)(callStack[curlevnum-1]))->GetPar( j-nKey);
+//
+//	// If match then get and save variable name
+//	if ( par == val) {
+//	  varName[i] = pro->GetVarName( j);
+//	  found = true;
+//	  break;
+//	}
+//      }
+//
+//      // If variable name not found then make temp variable
+//      if ( !found) {
+//	if ( i == 0) varName[i] = "TEMP_Y_" + tag;
+//	if ( i == 1) varName[i] = "TEMP_DYDX_" + tag;
+//	if ( i == 2) varName[i] = "TEMP_X_" + tag;
+//	if ( i == 3) varName[i] = "TEMP_H_" + tag;
+//
+//	SizeT u = pro->AddVar(StrUpCase(varName[i]));
+//	SizeT s = callStack[curlevnum-1]->AddEnv();
+//
+//	BaseGDL*& par = ((EnvT*)(callStack[curlevnum-1]))->GetPar( s-nKey);
+//	BaseGDL* res = e->GetPar( i)->Dup();
+//	memcpy(&par, &res, 4);
+//
+//	nTemp++;
+//      }
+//    }
+//
+//
+//    // Form input variable names
+//    DString Y    = varName[0];
+//    DString DYDX = varName[1];
+//    DString X    = varName[2];
+//    DString H    = varName[3];
+//
+//    DString H_2    = "0.5 * "        + varName[3];
+//    DString H_1_6  = "(1.D0 / 6) * " + varName[3];
+//
+//    // Form output variable names
+//    DString varName_K2 = "K2_" + tag;
+//    DString varName_K3 = "K3_" + tag;
+//    DString varName_K4 = "K4_" + tag;
+//    DString varName_Y1 = "Y1_" + tag;
+//
+//    // Build execution string for: k2 = f(x + h/2, y + h * k1/2)
+//    ostr << varName_K2.c_str() << " = " << derivName.c_str() << "(" ;
+//    ostr << X.c_str() << " + " << H_2.c_str() << ", ";
+//    ostr << Y.c_str() << " + " << H_2.c_str() << " * " << DYDX.c_str();
+//    ostr << ") & ";
+//
+//    // Build execution string for: k3 = f(x + h/2, y + h * k2/2)
+//    ostr << varName_K3.c_str() << " = " << derivName.c_str() << "(" ;
+//    ostr << X.c_str() << " + " << H_2.c_str() << ", ";
+//    ostr << Y.c_str() << " + " << H_2.c_str() << " * " << varName_K2.c_str();
+//    ostr << ") & ";
+//
+//    // Build execution string for: k4 = f(x + h, y + h * k3)
+//    ostr << varName_K4.c_str() << " = " << derivName.c_str() << "(" ;
+//    ostr << X.c_str() << " + " << H.c_str() << ", ";
+//    ostr << Y.c_str() << " + " << H.c_str() << " * " << varName_K3.c_str();
+//    ostr << ") & ";
+//
+//    // Build exec string for: yi+1 = yi + (1/6) * h * [k1 + 2k2 + 2k3 + k4]
+//    ostr << varName_Y1.c_str() << " = " << retTypeString.c_str() << Y.c_str();
+//    ostr << " + " << H_1_6.c_str() << " * (";
+//    ostr << DYDX.c_str() << " + 2 * " << varName_K2.c_str(); 
+//    ostr << " + 2 * " << varName_K3.c_str() << " + " << varName_K4.c_str();
+//    ostr << ") )";
+//
+//    DString line = ostr.rdbuf()->str();
+//    istringstream istr;
+//    istr.str(line+"\n");
+//    //    cout << line.c_str() << endl;
+//
+//    // Execute command string
+//    EnvBaseT* caller;
+//    caller = e->Caller();
+//// ms: commented out to comply with new stack handling
+////     e->Interpreter()->CallStack().pop_back();
+//
+//    executeString( caller, &istr);
+//
+//    // Retrieve return values for Y_N+1
+//    xI = pro->FindVar(StrUpCase( varName_Y1));
+//    par = ((EnvT*)(callStack[curlevnum-1]))->GetPar( xI-nKey);
+//
+//    DFloatGDL*  res_f;
+//    DDoubleGDL* res_d;
+//
+//    if ( doubleFlag) {
+//      res_d = new DDoubleGDL(nEy, BaseGDL::NOZERO);
+//
+//      for( SizeT i = 0; i<nEy; ++i) {
+//	(*res_d)[i] = (*(DDoubleGDL*) par)[i];
+//	//	cout << "y1 " << i << ": " << (*res_d)[i] << endl;
+//      }
+//    } else {
+//      res_f = new DFloatGDL(nEy, BaseGDL::NOZERO);
+//
+//      for( SizeT i = 0; i<nEy; ++i) {
+//	(*res_f)[i] = (*(DFloatGDL*) par)[i];
+//	//	cout << "y1 " << i << ": " << (*res_f)[i] << endl;
+//      }
+//    }
+//
+//    // Delete temporary output variables
+//    for( SizeT i = 0; i<nTemp; ++i) {
+//      pro->DelVar( xI--);
+//      callStack[curlevnum-1]->DelEnv();
+//    }
+//
+//    pro->DelVar( xI--);
+//    callStack[curlevnum-1]->DelEnv();
+//
+//    pro->DelVar( xI--);
+//    callStack[curlevnum-1]->DelEnv();
+//
+//    pro->DelVar( xI--);
+//    callStack[curlevnum-1]->DelEnv();
+//
+//    pro->DelVar( xI);
+//    callStack[curlevnum-1]->DelEnv();
+//
+//    if ( doubleFlag) 
+//      return res_d;
+//    else
+//      return res_f;
+//  }
 
 } // namespace

@@ -52,18 +52,6 @@
 // for extensions
 #include "new.hpp"
 
-// for sorting lists by name
-struct CompLibFunName: public std::binary_function< DLibFun*, DLibFun*, bool>
-{
-  bool operator() ( DLibFun* f1, DLibFun* f2) const
-  { return f1->ObjectName() < f2->ObjectName();}
-};
-
-struct CompLibProName: public std::binary_function< DLibPro*, DLibPro*, bool>
-{
-  bool operator() ( DLibPro* f1, DLibPro* f2) const
-  { return f1->ObjectName() < f2->ObjectName();}
-};
 
 using namespace std;
 
@@ -145,7 +133,7 @@ void LibInit()
   const string obj_classKey[]={"COUNT","SUPERCLASS",KLISTEND};
   new DLibFunRetNew(lib::obj_class,string("OBJ_CLASS"),1,obj_classKey);
 
-  new DLibFunRetNew(lib::obj_isa,string("OBJ_ISA"),2);
+  new DLibFunRetNew(lib::obj_isa,string("OBJ_ISA"),2,NULL,NULL,false,2);
 
   const string rebinKey[]={"SAMPLE",KLISTEND};
   new DLibFunRetNew(lib::rebin_fun,string("REBIN"),9,rebinKey);
@@ -218,6 +206,7 @@ void LibInit()
   new DLibPro(lib::file_mkdir,string("FILE_MKDIR"),-1,file_mkdirKey);
 
   new DLibFunRetNew(lib::shift_fun,string("SHIFT"),9,NULL,NULL,true);
+  new DLibFunRetNew(lib::ishft_fun,string("ISHFT"),2,NULL,NULL,true);
 
   const string sortKey[]={"L64",KLISTEND};
   new DLibFunRetNew(lib::sort_fun,string("SORT"),1,sortKey,NULL,true);
@@ -241,8 +230,9 @@ void LibInit()
   const string helpKey[]={"ALL_KEYS","BRIEF","FULL","CALLS","DEVICE","FUNCTIONS","HELP","INFO",
 			  "INTERNAL_LIB_GDL","KEYS","LAST_MESSAGE","LIB","MEMORY","NAMES",
 			  "OUTPUT","PATH_CACHE","PREFERENCES","PROCEDURES",
-			  "RECALL_COMMANDS","ROUTINES","SOURCE_FILES","STRUCTURES","SYSTEM_VARIABLES","TRACEBACK", KLISTEND};
-  const string helpWarnKey[]={"BREAKPOINTS","DLM","FILES","HEAP_VARIABLES","LEVEL","MESSAGES",
+			  "RECALL_COMMANDS","ROUTINES","SOURCE_FILES","STRUCTURES",
+              "SYSTEM_VARIABLES","TRACEBACK", "COMMON","LEVEL", KLISTEND};
+  const string helpWarnKey[]={"BREAKPOINTS","DLM","FILES","HEAP_VARIABLES","MESSAGES",
 			      "OBJECTS","SHARED_MEMORY", KLISTEND};
   new DLibPro(lib::help_pro,string("HELP"),-1,helpKey,helpWarnKey);
   
@@ -342,7 +332,7 @@ void LibInit()
 
   new DLibFunRetNew(lib::n_elements,string("N_ELEMENTS"),1,NULL,NULL,true,1);
 
-  new DLibFun(lib::execute,string("EXECUTE"),2);
+  new DLibFun(lib::execute_fun,string("EXECUTE"),3);
 
   const string openKey[]={"APPEND","COMPRESS","BUFSIZE",
 			  "DELETE","ERROR","F77_UNFORMATTED",
@@ -368,11 +358,13 @@ void LibInit()
 
   new DLibPro(lib::flush_lun,string("FLUSH"),-1);
 
-  const string closeKey[]={"EXIT_STATUS","FORCE","FILE","ALL",KLISTEND};
-  new DLibPro(lib::close_lun,string("CLOSE"),-1,closeKey);
+  const string close_lunKey[]={"FORCE","FILE","ALL",KLISTEND};
+  const string close_lunWarnKey[]={"EXIT_STATUS",KLISTEND};
+  new DLibPro(lib::close_lun,string("CLOSE"),-1,close_lunKey,close_lunWarnKey);
   
-  const string free_lunKey[]={"EXIT_STATUS","FORCE",KLISTEND};
-  new DLibPro(lib::free_lun,string("FREE_LUN"),-1,free_lunKey);
+  const string free_lunKey[]={"FORCE",KLISTEND};
+  const string free_lunWarnKey[]={"EXIT_STATUS",KLISTEND};
+  new DLibPro(lib::free_lun,string("FREE_LUN"),-1,free_lunKey,free_lunWarnKey);
 
   const string writeuKey[]={"TRANSFER_COUNT",KLISTEND};
   new DLibPro(lib::writeu,string("WRITEU"),-1,writeuKey);
@@ -552,27 +544,80 @@ void LibInit()
   
   const string deviceKey[]=
     {
-      "CLOSE_FILE", "FILENAME", "LANDSCAPE", "PORTRAIT",
+      "CLOSE_FILE", "FILENAME", "LANDSCAPE", "PORTRAIT",  //there is a "CLOSE" for device Z defined... and a CLOSE_DOCUMENT for printer 
       "DECOMPOSED","GET_DECOMPOSED","Z_BUFFERING","SET_RESOLUTION",
-      "SET_CHARACTER_SIZE","XSIZE","YSIZE",
+      "XSIZE","YSIZE",
       "COLOR","GET_PAGE_SIZE","GET_SCREEN_SIZE","INCHES","WINDOW_STATE","SCALE_FACTOR", 
       "XOFFSET", "YOFFSET", "ENCAPSULATED", "GET_GRAPHICS_FUNCTION", 
       "SET_GRAPHICS_FUNCTION", "CURSOR_STANDARD", "CURSOR_ORIGINAL",
       "CURSOR_CROSSHAIR","RETAIN", "BITS_PER_PIXEL", 
-      "GET_WINDOW_POSITION","GET_PIXEL_DEPTH","GET_VISUAL_DEPTH","GET_VISUAL_NAME","GET_WRITE_MASK", "COPY", KLISTEND
+      "GET_WINDOW_POSITION","GET_PIXEL_DEPTH","GET_VISUAL_DEPTH","GET_VISUAL_NAME",
+      "GET_WRITE_MASK", "COPY","GET_FONTNAMES","SET_FONT","GET_CURRENT_FONT","GET_FONTNUM",
+      "SET_PIXEL_DEPTH", //Z
+      KLISTEND
     };
-  const string deviceWarnKey[] = {"FONT","GET_CURRENT_FONT","GET_FONTNAMES","GET_FONTNUM","SET_FONT", "HELVETICA", 
-    "AVANTGARDE", "BKMAN", "COURIER", "PALATINO", 
-    "SCHOOLBOOK", "TIMES", "ZAPFCHANCERY", "ZAPFDINGBATS",
-    "ITALIC", "BOLD", "TRUE_COLOR", "CURSOR_IMAGE","CURSOR_MASK","CURSOR_XY","TT_FONT","USER_FONT","FONT_INDEX","FONT_SIZE", KLISTEND};
+  const string deviceWarnKey[] = {
+    "AVANTGARDE","BKMAN","COURIER","HELVETICA","ISOLATIN","PALATINO","SCHOOLBOOK","SYMBOL","TIMES","ZAPFCHANCERY","ZAPFDINGBATS", //PS
+  //"AVERAGE_LINES", (REGIS)
+  //"BINARY","NCAR","TEXT", (CGM)
+  "BOLD", //PS
+  "BOOK", //PS
+  "BYPASS_TRANSLATION", //(WIN,X)
+  "CMYK", //PS
+  "CURSOR_IMAGE", //WIN,X
+  "CURSOR_MASK",  //WIN,X
+  "CURSOR_XY",  //WIN,X
+  "DIRECT_COLOR", //X
+  //"EJECT", (HP)
+  //"ENCODING", (CGM)
+  "FLOYD", //(PCL,X)
+  "FONT_INDEX", //PS
+  "FONT_SIZE", //PS
+  //"GIN_CHARS", (TEX)
+  "GLYPH_CACHE", //PRINTER,PS,WIN,Z,METAFILE
+  //"INDEX_COLOR", (METAFILE, PRINTER)
+  "ITALIC", //PS
+  "LANGUAGE_LEVEL" //PS,
+  "DEMI","LIGHT","MEDIUM","NARROW","OBLIQUE", //PS
+  //"OPTIMIZE", (PCL)
+  "ORDERED", //(PCL,X)
+  "OUTPUT", //(HP,PS)
+  //"PIXELS", (PCL)
+  //"PLOT_TO", (REGIS,TEK)
+  //"PLOTTER_ON_OFF", "POLYFILL", (HP)
+  "PRE_DEPTH","PRE_XSIZE","PRE_YSIZE","PREVIEW", //PS
+  "PRINT_FILE",// WIN
+  "PSEUDO_COLOR",//X
+  //"RESET_STRING", (TEK)
+  //"RESOLUTION", (PCL)
+  //"SET_COLORMAP",(PCL)
+  "SET_CHARACTER_SIZE", //(all)
+  "SET_COLORS", //Z
+  //"SET_STRING", (TEK)
+  "SET_TRANSLATION", //X
+  "SET_WRITE_MASK", //(X,Z)
+  "STATIC_COLOR",//X
+  "STATIC_GRAY",//X
+  //"TEK4014","TEK4100", (TEK)
+  "THRESHOLD", //X
+  "TRANSLATION", //(WIN,X)
+  "TRUE_COLOR", //(METAFILE, PRINTER, X)
+  "TT_FONT", //(METAFILE, PRINTER, X, PS, WIN, Z)
+  //"TTY", (REGIS, TEK)
+  //"VT240","VT241","VT340","VT341",(REGIS)
+  //"XON_XOFF" (HP)
+   KLISTEND};
   new DLibPro(lib::device,string("DEVICE"),0, deviceKey, deviceWarnKey);
 
   const string usersymKey[]= 
   {
-    "COLOR","FILL","THICK",
-    KLISTEND
+    "FILL", KLISTEND
    };
-  new DLibPro(lib::usersym,string("USERSYM"),2, usersymKey);
+    const string usersymWarnKey[]= 
+  {
+    "COLOR","THICK", KLISTEND
+   };
+  new DLibPro(lib::usersym,string("USERSYM"),2, usersymKey, usersymWarnKey);
 
   const string plotKey[]=
     {
@@ -687,7 +732,7 @@ void LibInit()
       // ([xyz]type undocumented but still existing in SHADE_SURF ...)
       "XLOG", "YLOG", "ZLOG", "XTYPE", "YTYPE", "ZTYPE", 
       //General Graphics KW
-      "BACKGROUND", "NOERASE", "CLIP",
+      "BACKGROUND", "NOERASE", "CLIP", "NOCLIP",
       "CHARSIZE", "CHARTHICK", "COLOR", "DATA", "DEVICE", "NORMAL", "FONT",
       "NODATA", "POSITION", "SUBTITLE", "THICK", "TICKLEN", "TITLE",
       //Axis KW
@@ -837,6 +882,8 @@ void LibInit()
   const string eraseKey[]= {"CHANNEL","COLOR",KLISTEND};
   new DLibPro(lib::erase,string("ERASE"),1, eraseKey);
   
+  new DLibFunRetNew(lib::format_axis_values,string("FORMAT_AXIS_VALUES"),1);
+  
   const string laguerreKey[]={"DOUBLE","COEFFICIENTS",KLISTEND};
   new DLibFunRetNew(lib::laguerre,string("LAGUERRE"),3,laguerreKey);
 
@@ -852,9 +899,10 @@ void LibInit()
   const string newtonKey[] = {"DOUBLE", "ITMAX", "TOLF", "TOLX", "HYBRID", KLISTEND };
   const string newtonWarnKey[] = {"CHECK", "STEPMAX", "TOLMIN", KLISTEND};
   new DLibFunRetNew(lib::newton_broyden, string("NEWTON"), 2, newtonKey, newtonWarnKey);
-
-  const string broydenKey[] = {"DOUBLE", "ITMAX", "TOLF", "TOLX", KLISTEND };
-  const string broydenWarnKey[] = {"CHECK", "EPS", "STEPMAX", "TOLMIN", KLISTEND};
+  //WARNING: THESE FUNCTIONS MUST HAVE THE SAME OPTION LIST. NOTE THAT /HYBRID is not part of either functions,
+  //it is used by imsl_zerosys.pro
+  const string broydenKey[] = {"DOUBLE", "ITMAX", "TOLF", "TOLX", "HYBRID", KLISTEND };
+  const string broydenWarnKey[] = {"CHECK", "STEPMAX", "TOLMIN",  "EPS",  KLISTEND};
   new DLibFunRetNew(lib::newton_broyden, string("BROYDEN"), 2, broydenKey, broydenWarnKey);
 
   new DLibFunRetNew(lib::parse_url, string("PARSE_URL"), 1);
@@ -917,9 +965,5 @@ void LibInit()
   new DLibPro(lib::sem_delete, string("SEM_DELETE"), 1);
   new DLibFunRetNew(lib::sem_lock, string("SEM_LOCK"), 1);
   new DLibPro(lib::sem_release, string("SEM_RELEASE"), 1);
-
-  // sort lists
-  sort( libFunList.begin(), libFunList.end(), CompLibFunName());
-  sort( libProList.begin(), libProList.end(), CompLibProName());
 }
 

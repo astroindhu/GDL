@@ -18,6 +18,7 @@
 #cmakedefine HAVE_LIBNCURSES 1
 #cmakedefine HAVE_LIBPLPLOTCXXD 1
 #cmakedefine HAVE_LIBREADLINE 1
+#cmakedefine HAVE_LIBEDITLINE 1
 #cmakedefine HAVE_LIBWXWIDGETS 1
 #cmakedefine HAVE_LIBZ 1
 #cmakedefine HAVE_LOCALE_H 1
@@ -34,6 +35,7 @@
 #cmakedefine PLPLOT_PRIVATE_NOT_HIDDEN 1
 #cmakedefine PLPLOT_HAS_LEGEND
 #cmakedefine PLPLOT_HAS_PLCALLBACK
+#define _WCHAR_H_CPLUSPLUS_98_CONFORMANCE_ 1
 
 #ifndef HAVE_STDINT_H
 #cmakedefine HAVE_STDINT_H 1

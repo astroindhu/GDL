@@ -38,20 +38,23 @@ namespace lib {
     bool handle_args(EnvT* e) {
 
       trueColor = 0;
+      static int TRUEIx=e->KeywordIx("TRUE");
+      static int ORDERIx=e->KeywordIx("ORDER");
+      static int CHANNELIx=e->KeywordIx("CHANNEL");
 
       image = e->GetParDefined(0);
       rank = image->Rank();
-      e->AssureLongScalarKWIfPresent("TRUE", trueColor);
+      e->AssureLongScalarKWIfPresent(TRUEIx, trueColor);
       if (rank < 1 || rank > 3) e->Throw("Image array must have rank 1, 2 or 3");
       if (rank <= 2 && trueColor != 0) e->Throw("Array must have 3 dimensions: " + e->GetParString(0));
       if (trueColor < 0 || trueColor > 3) e->Throw("Value of TRUE keyword is out of allowed range.");
       // to be changed    if (trueColor == 1 && xwd->depth < 24) e->Throw("Device depth must be 24 or greater for trueColor color display");
       DLong orderVal = SysVar::TV_ORDER();
-      e->AssureLongScalarKWIfPresent("ORDER", orderVal);
+      e->AssureLongScalarKWIfPresent(ORDERIx, orderVal);
       
       channel = 0;
       if (e->NParam(0) == 4) e->AssureLongScalarPar(3, channel);
-      e->AssureLongScalarKWIfPresent("CHANNEL", channel);
+      e->AssureLongScalarKWIfPresent(CHANNELIx, channel);
       if (channel < 0 || channel > 3) e->Throw("Value of Channel is out of allowed range.");
       
       if (rank == 1) {
@@ -149,10 +152,18 @@ namespace lib {
         DEVICE,
         NONE
       } coordinateSystem = NONE;
-      //check presence of DATA,DEVICE and NORMAL options
-      if (e->KeywordSet("DATA")) coordinateSystem = DATA;
-      if (e->KeywordSet("DEVICE")) coordinateSystem = DEVICE;
-      if (e->KeywordSet("NORMAL")) coordinateSystem = NORMAL;
+      static int DATAIx=e->KeywordIx("DATA");
+      static int DEVICEIx=e->KeywordIx("DEVICE");
+      static int NORMALIx=e->KeywordIx("NORMAL");
+      static int INCHES=e->KeywordIx("INCHES");
+      static int XSIZE=e->KeywordIx("XSIZE");
+      static int YSIZE=e->KeywordIx("YSIZE");
+      static int CENTIMETERS=e->KeywordIx("CENTIMETERS");
+    
+    //check presence of DATA,DEVICE and NORMAL options
+      if (e->KeywordSet(DATAIx)) coordinateSystem = DATA;
+      if (e->KeywordSet(DEVICEIx)) coordinateSystem = DEVICE;
+      if (e->KeywordSet(NORMALIx)) coordinateSystem = NORMAL;
 
       bool mapSet = false;
       
@@ -188,10 +199,10 @@ namespace lib {
       bool xSizeGiven, ySizeGiven;
       double aspect=static_cast<double>(imageWidth)/static_cast<double>(imageHeight);
 
-        xSizeGiven=e->KeywordPresent("XSIZE");
-        if (xSizeGiven) e->AssureDoubleScalarKWIfPresent("XSIZE", devx);
-        ySizeGiven=e->KeywordPresent("YSIZE");
-        if (ySizeGiven) e->AssureDoubleScalarKWIfPresent("YSIZE", devy);
+        xSizeGiven=e->KeywordPresent(XSIZE);
+        if (xSizeGiven) e->AssureDoubleScalarKWIfPresent(XSIZE, devx);
+        ySizeGiven=e->KeywordPresent(YSIZE);
+        if (ySizeGiven) e->AssureDoubleScalarKWIfPresent(YSIZE, devy);
 
         //interpret size:
         if (xSizeGiven || ySizeGiven) {
@@ -208,13 +219,13 @@ namespace lib {
             devy=(y2-y1);
           } else if (coordinateSystem == DEVICE) {
           } else {
-            if (e->KeywordSet("INCHES")) {
+            if (e->KeywordSet(INCHES)) {
               devx *= (10 * 2.54);
               devy *= (10 * 2.54);
               actStream->mm2device(devx, devy, x,y);
               devx=x;
               devy=y;
-            } else if (e->KeywordSet("CENTIMETERS")) {
+            } else if (e->KeywordSet(CENTIMETERS)) {
               devx *= (10.);
               devy *= (10.);
               actStream->mm2device(devx, devy, x,y);
@@ -244,10 +255,10 @@ namespace lib {
         // AC 2011/11/06, bug 3433502
         if (nPerPageX > 0) {
           ix = positionOnPage % nPerPageX;
-        } else ix = 0;
+        } else {nPerPageX = 1; ix = 0;}
         if (nPerPageY > 0) {
           iy = (positionOnPage / nPerPageX) % nPerPageY;
-        } else iy = 0;
+        } else {nPerPageY=1; iy = 0;}
         botLeftPixelX = imageWidth*ix;
         botLeftPixelY = yPageSize - imageHeight * (iy + 1);
       } else if (nParam >= 3) {
@@ -268,13 +279,13 @@ namespace lib {
           botLeftPixelX = xLLf;
           botLeftPixelY = yLLf;
         } else {
-          if (e->KeywordSet("INCHES")) {
+          if (e->KeywordSet(INCHES)) {
             xLLf *= (10 * 2.54);
             yLLf *= (10 * 2.54);
             actStream->mm2device(xLLf, yLLf, x,y);
             botLeftPixelX=x;
             botLeftPixelY=y;
-          } else if (e->KeywordSet("CENTIMETERS")) {
+          } else if (e->KeywordSet(CENTIMETERS)) {
             xLLf *= (10.);
             yLLf *= (10.);
             actStream->mm2device(xLLf, yLLf, x,y);
@@ -315,7 +326,7 @@ namespace lib {
 //  cout << devicebox[0] << "," << devicebox[1] << "," << devicebox[2] << ","<< devicebox[3] << endl;
 
       Guard<BaseGDL> chan_guard;
-      actStream->flush();
+//      actStream->flush();
       if (channel == 0) {
         if (!actStream->PaintImage(&(*byteImage)[0], imageWidth, imageHeight, devicebox, trueColor, channel)) e->Throw("device does not support Paint");
       } else if (rank == 3) {

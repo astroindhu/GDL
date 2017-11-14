@@ -145,27 +145,17 @@ namespace lib
       DDouble xAxisStart, xAxisEnd, yAxisStart, yAxisEnd;
       bool setx=gdlGetDesiredAxisRange(e, "X", xAxisStart, xAxisEnd);
       bool sety=gdlGetDesiredAxisRange(e, "Y", yAxisStart, yAxisEnd);
-      if(setx && sety)
+      if (setx)
       {
         xStart=xAxisStart;
         xEnd=xAxisEnd;
-        yStart=yAxisStart;
-        yEnd=yAxisEnd;
       }
-      else if (sety)
+      if (sety)
       {
         yStart=yAxisStart;
         yEnd=yAxisEnd;
       }
-      else if (setx)
-      {
-        xStart=xAxisStart;
-        xEnd=xAxisEnd;
-        //must compute min-max for other axis!
-        {
-          gdlDoRangeExtrema(xVal,yVal,yStart,yEnd,xStart,xEnd);
-        }
-      }
+      else 
   #undef UNDEF_RANGE_VALUE
       // z range
       datamax=0.0;
@@ -186,7 +176,7 @@ namespace lib
     {
       //T3D
       static int t3dIx = e->KeywordIx( "T3D");
-      bool doT3d=(e->KeywordSet(t3dIx)|| T3Denabled(e));
+      bool doT3d=(e->KeywordSet(t3dIx)|| T3Denabled());
       //ZVALUE
       static int zvIx = e->KeywordIx( "ZVALUE");
       DDouble zValue=0.0;
@@ -202,7 +192,7 @@ namespace lib
       static int shadesIx = e->KeywordIx( "SHADES");
       BaseGDL* shadevalues=e->GetKW ( shadesIx );
       bool doShade=(shadevalues != NULL); //... But 3d mesh will be colorized anyway!
-      if (doShade) Warning ( "SHADE_SURF: Using Fixed (Z linear) Shade Values Only (FIXME)." );
+      if (doShade) Warning ( "SURFACE: Using Fixed (Z linear) Shade Values Only (FIXME)." );
 
       // [XYZ]STYLE
       DLong xStyle=0, yStyle=0, zStyle=0; ;
@@ -235,12 +225,15 @@ namespace lib
         PLFLT intv=gdlAdjustAxisRange ( yStart, yEnd, yLog );
       }
 
-      bool hasMinVal=e->KeywordPresent("MIN_VALUE");
-      bool hasMaxVal=e->KeywordPresent("MAX_VALUE");
+      static int MIN_VALUEIx = e->KeywordIx( "MIN_VALUE");
+      static int MAX_VALUEIx = e->KeywordIx( "MAX_VALUE");
+
+      bool hasMinVal=e->KeywordPresent(MIN_VALUEIx);
+      bool hasMaxVal=e->KeywordPresent(MAX_VALUEIx);
       DDouble minVal=datamin;
       DDouble maxVal=datamax;
-      e->AssureDoubleScalarKWIfPresent ( "MIN_VALUE", minVal );
-      e->AssureDoubleScalarKWIfPresent ( "MAX_VALUE", maxVal );
+      e->AssureDoubleScalarKWIfPresent ( MIN_VALUEIx, minVal );
+      e->AssureDoubleScalarKWIfPresent ( MAX_VALUEIx, maxVal );
 
       if (!setZrange) {
         zStart=max(minVal,zStart);
@@ -266,7 +259,8 @@ namespace lib
       PLFLT az=30.0;
       //set az and ax (alt)
       DFloat alt_change=alt;
-      e->AssureFloatScalarKWIfPresent("AX", alt_change);
+      static int AXIx=e->KeywordIx("AX");
+      e->AssureFloatScalarKWIfPresent(AXIx, alt_change);
       alt=alt_change;
 
       alt=fmod(alt,360.0); //restrict between 0 and 90 for plplot!
@@ -275,7 +269,8 @@ namespace lib
         e->Throw ( "SURFACE: AX restricted to [0-90] range by plplot (fix plplot!)" );
       }
       DFloat az_change=az;
-      e->AssureFloatScalarKWIfPresent("AZ", az_change);
+      static int AZIx=e->KeywordIx("AZ");
+      e->AssureFloatScalarKWIfPresent(AZIx, az_change);
       az=az_change;
 
       //now we are in plplot different kind of 3d
@@ -300,7 +295,7 @@ namespace lib
         {
           DDoubleGDL* t3dMatrix=plplot3d->Dup();
           SelfTranspose3d(t3dMatrix);
-          static DStructGDL* pStruct=SysVar::P();
+          DStructGDL* pStruct=SysVar::P();   //MUST NOT BE STATIC, due to .reset 
           static unsigned tTag=pStruct->Desc()->TagIndex("T");
           for (int i=0; i<t3dMatrix->N_Elements(); ++i )(*static_cast<DDoubleGDL*>(pStruct->GetTag(tTag, 0)))[i]=(*t3dMatrix)[i];
           GDLDelete(t3dMatrix);
@@ -321,13 +316,15 @@ namespace lib
                      xStart, xEnd, yStart, yEnd, zStart, zEnd,
                      alt, az);
 
-
-      bool up=e->KeywordSet ( "UPPER_ONLY" );
-      bool low=e->KeywordSet ( "LOWER_ONLY" );
+      static int UPPER_ONLYIx = e->KeywordIx( "UPPER_ONLY");
+      static int LOWER_ONLYIx = e->KeywordIx( "LOWER_ONLY");
+      bool up=e->KeywordSet ( UPPER_ONLYIx );
+      bool low=e->KeywordSet ( LOWER_ONLYIx );
       if (up && low) nodata=true; //IDL behaviour
 
       DLong bottomColorIndex=-1;
-      e->AssureLongScalarKWIfPresent("BOTTOM", bottomColorIndex);
+      static int BOTTOMIx = e->KeywordIx( "BOTTOM");
+      e->AssureLongScalarKWIfPresent(BOTTOMIx, bottomColorIndex);
 
       //Draw 3d mesh before axes
       // PLOT ONLY IF NODATA=0
@@ -378,16 +375,20 @@ namespace lib
         if (yLog) for ( SizeT i=0; i<cgrid1.ny; i++ ) cgrid1.yg[i] = cgrid1.yg[i]>0?log10(cgrid1.yg[i]):1E-12;
 
         // Important: make all clipping computations BEFORE setting graphic properties (color, size)
-        bool doClip=(e->KeywordSet("CLIP")||e->KeywordSet("NOCLIP"));
+        static int NOCLIPIx = e->KeywordIx("NOCLIP");
+        static int CLIPIx = e->KeywordIx("CLIP");
+        bool doClip=(e->KeywordSet(CLIPIx)||e->KeywordSet(NOCLIPIx));
         bool stopClip=false;
-        if ( doClip )  if ( startClipping(e, actStream, false)==TRUE ) stopClip=true;
+        if ( doClip )  if ( startClipping(e, actStream)==true ) stopClip=true;
 
         gdlSetGraphicsForegroundColorFromKw ( e, actStream );
         //mesh option
         PLINT meshOpt;
         meshOpt=DRAW_LINEXY;
-        if (e->KeywordSet ( "HORIZONTAL" )) meshOpt=DRAW_LINEX;
-        if (e->KeywordSet ( "SKIRT" )) meshOpt+=DRAW_SIDES;
+        static int HORIZONTALIx = e->KeywordIx("HORIZONTAL");
+        if (e->KeywordSet ( HORIZONTALIx )) meshOpt=DRAW_LINEX;
+        static int SKIRTIx = e->KeywordIx("SKIRT");
+        if (e->KeywordSet ( SKIRTIx )) meshOpt+=DRAW_SIDES;
         //mesh plots both sides, so use it when UPPER_ONLY is not set.
         //if UPPER_ONLY is set, use plot3d/plot3dc
         //if LOWER_ONLY is set, use mesh/meshc and remove by plot3d!
@@ -420,7 +421,7 @@ namespace lib
            //redraw upper part with background color to remove it... Not 100% satisfying though.
            if (low)
            {
-            if (e->KeywordSet ( "SKIRT" )) meshOpt-=DRAW_SIDES;
+            if (e->KeywordSet ( SKIRTIx )) meshOpt-=DRAW_SIDES;
             gdlSetGraphicsPenColorToBackground(actStream);
             actStream->plot3dc(xg1,yg1,map,cgrid1.nx,cgrid1.ny,meshOpt,NULL,0);
             gdlSetGraphicsForegroundColorFromKw ( e, actStream );
@@ -428,7 +429,7 @@ namespace lib
         }
 
         if (stopClip) stopClipping(actStream);
-//Clean alllocated data struct
+//Clean allocated data struct
         delete[] xg1;
         delete[] yg1;
         actStream->Free2dGrid(map, xEl, yEl);

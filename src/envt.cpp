@@ -915,7 +915,7 @@ void EnvT::Help(const std::string s_help[], int size_of_s)
     throw GDLException( CallingNode(), pro->ObjectName()+": call to inline help");
   }
 }
-
+//TODO: variant enabling static ints in lieu of const string& (speedup!)
 void EnvBaseT::SetKeyword( const string& k, BaseGDL* const val) // value
 {
   int varIx=GetKeywordIx( k);
@@ -943,6 +943,7 @@ void EnvBaseT::SetKeyword( const string& k, BaseGDL* const val) // value
 
   env.Set( varIx,val);
 }
+//TODO: variant enabling static ints in lieu of const string& (speedup!)
 
 void EnvBaseT::SetKeyword( const string& k, BaseGDL** const val) // reference
 {
@@ -1098,35 +1099,29 @@ void EnvBaseT::AssureGlobalKW( SizeT ix)
   }
 }
 
-DStructGDL* EnvT::GetObjectPar( SizeT pIx)
-{
-  BaseGDL* p1= GetParDefined( pIx);
-  
-  if( p1->Type() != GDL_OBJ)
-    {
-      Throw( "Parameter must be an object reference"
-	     " in this context: "+
-	     GetParString(pIx));
+DStructGDL* EnvT::GetObjectPar( SizeT pIx) {
+  BaseGDL* p1 = GetParDefined(pIx);
+
+  if (p1->Type() != GDL_OBJ) {
+    Throw("Parameter must be an object reference in this context: " +
+      GetParString(pIx));
+  } else {
+    DObjGDL* oRef = static_cast<DObjGDL*> (p1);
+    DObj objIx;
+    if (!oRef->Scalar(objIx))
+      Throw("Parameter must be a scalar or 1 element array in this context: " +
+      GetParString(pIx));
+    if (objIx == 0)
+      Throw("Unable to invoke method"
+      " on NULL object reference: " + GetParString(pIx));
+
+    try {
+      return GetObjHeap(objIx);
+    } catch (GDLInterpreter::HeapException) {
+      Throw("Object not valid: " + GetParString(pIx));
     }
-  else
-    {
-      DObjGDL* oRef = static_cast<DObjGDL*>(p1);
-      DObj objIx;
-      if( !oRef->Scalar( objIx))
-	Throw( "Parameter must be a scalar or 1 element array in this context: "+
-	       GetParString(pIx));
-      if( objIx == 0)
-	Throw( "Unable to invoke method"
-	       " on NULL object reference: "+GetParString(pIx));
-      
-      try {
-	return GetObjHeap( objIx);
-      }
-      catch ( GDLInterpreter::HeapException)
-	{
-	  Throw( "Object not valid: "+GetParString(pIx));
-	}
-    }
+  }
+  return NULL; //keep clang happy.
 }
 
 // for exclusive use by lib::catch_pro
@@ -1171,8 +1166,9 @@ int EnvT::KeywordIx( const std::string& k)
 {
   //  cout << pro->ObjectName() << "  Key: " << k << endl;
   assert( pro != NULL);
-  assert( pro->FindKey( k) != -1);
-  return pro->FindKey( k);
+  int val=pro->FindKey( k);
+  assert( val != -1);
+  return val;
 }
 
 bool EnvT::KeywordPresent( const std::string& kw)

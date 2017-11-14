@@ -38,6 +38,10 @@ namespace lib {
 
   BaseGDL* dialog_pickfile_wxwidgets(EnvT* e)
   {
+    if (!GDLWidget::wxIsStarted()){
+      if( ! wxInitialize( ) ) e->Throw("Unable to initialize wxWidgets");
+      GDLWidget::SetWxStarted();
+    }
     /*
       results = DIALOG_PICKFILE_WXWIDGETS(DEFAULT_EXTENSION=default_extension, $
       DIRECTORY=directory, DIALOG_PARENT=dialog_parent, $
@@ -189,7 +193,7 @@ namespace lib {
     wxString wxpathstr = wxT("");
     DString pathstr;
     if (ispath) {
-      e->AssureStringScalarKW("PATH", pathstr);
+      e->AssureStringScalarKW(pathIx, pathstr);
     } else {
       pathstr=GetCWD();
     }
@@ -244,7 +248,7 @@ namespace lib {
 	wxString wxfilestr;
 	if (isfile) {
 	  DString filestr;
-	  e->AssureStringScalarKW("FILE", filestr);
+	  e->AssureStringScalarKW(fileIx, filestr);
 	  wxfilestr = wxString(filestr.c_str(), wxConvUTF8);
 	}
 
@@ -338,6 +342,12 @@ namespace lib {
 
   BaseGDL* dialog_message_wxwidgets(EnvT* e)
   {
+    
+    if (!GDLWidget::wxIsStarted()){
+      if( ! wxInitialize( ) ) e->Throw("Unable to initialize wxWidgets");
+      GDLWidget::SetWxStarted();
+    }
+
     DStringGDL* messagestr;
     bool iscancel = false;
     bool iscenter = false;

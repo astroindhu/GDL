@@ -29,7 +29,7 @@ class GDLXStream: public GDLGStream
   Window term_window;
 public:
   GDLXStream( int nx, int ny)
-    : GDLGStream( nx, ny, "xwin")
+    : GDLGStream( nx, ny, "xwin",XOpenDisplay(NULL)==NULL?":0":NULL) //IDL also opens :0 when DISPLAY is not set.
     , term_window(0)
   {
   }
@@ -40,12 +40,28 @@ public:
   void Init();
   void EventHandler();
 
-  static int   GetImageErrorHandler(Display *display, XErrorEvent *error);
-
-  void GetGeometry( long& xSize, long& ySize, long& xoff, long& yoff);
+  /*------------------------------------------------------------------------*\
+   * GetImageErrorHandler()
+   *
+   * Error handler used in XGetImage() to catch errors when pixmap or window
+   * are not completely viewable.
+   \*-----------------------------------------------------------------------*/
+  static int   GetImageErrorHandler(Display *display, XErrorEvent *error)
+  {
+    if (error->error_code != BadMatch) {
+      char buffer[256];
+      XGetErrorText(display, error->error_code, buffer, 256);
+      std::cerr << "xwin: Error in XGetImage: " << buffer << std::endl;
+    }
+    return 1;
+  }
+  void Update();
+  void GetGeometry( long& xSize, long& ySize);
   unsigned long GetWindowDepth();
   DLong GetVisualDepth();
   DString GetVisualName();
+  BaseGDL* GetFontnames(DString pattern);
+  DLong GetFontnum(DString pattern);
   bool setFocus(bool value);
 
   bool UnsetFocus();
@@ -65,13 +81,29 @@ public:
   void Flush();
   void SetDoubleBuffering();
   void UnSetDoubleBuffering();
-  bool HasDoubleBuffering();
   bool HasSafeDoubleBuffering();
   bool PaintImage(unsigned char *idata, PLINT nx, PLINT ny,  DLong *pos, DLong tru, DLong chan);
   virtual bool HasCrossHair() {return true;}
   void UnMapWindow();
   DByteGDL* GetBitmapData();
   void Color( ULong color, DLong decomposed);
+//  void Update(){plstream::cmd(PLESC_EXPOSE, NULL);}
+  
+  //GD: overloading scmap0 to accelerate plots for X11 and possibly others
+
+ void SetColorMap0(const PLINT *r, const PLINT *g, const PLINT *b, PLINT ncol0) {
+ } //DO NOTHING!
+ //GD probably impossible to avoid plplot's XAllocColor for contours (since plcol is called inside driver) unless
+ //we make our own contouring function (quite easy in fact). 
+// void SetColorMap1(const PLINT *r, const PLINT *g, const PLINT *b, PLINT ncol1) {
+// } //DO NOTHING!
+//
+// void SetColorMap1l(bool itype, PLINT npts, const PLFLT *intensity, const PLFLT *coord1, 
+//   const PLFLT *coord2, const PLFLT *coord3, const bool *rev = NULL) {
+// } //DO NOTHING
+//
+// void SetColorMap1n(PLINT ncol1) {
+// } //DO NOTHING
 };
 
 #endif

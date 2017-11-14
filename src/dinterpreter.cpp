@@ -356,7 +356,7 @@ bool GDLInterpreter::SearchCompilePro(const string& pro, bool searchForPro)
   if( !found) return false;
   
   // file already opened?
-  for( StrArr::iterator i=openFiles.begin(); i != openFiles.end(); i++)
+  for( StrArr::iterator i=openFiles.begin(); i != openFiles.end(); ++i)
     {
       if( proFile == *i) return false;
     }
@@ -791,7 +791,7 @@ DInterpreter::CommandCode DInterpreter::CmdRun( const string& command)
 
   // actual run is perfomed in InterpreterLoop()
   RetAll( RetAllException::RUN); // throws (always)
-  //  return CC_OK;
+  return CC_OK; //avoid warnings
 }
 
 // execute GDL command (.run, .step, ...)
@@ -1270,11 +1270,23 @@ void inputThread() {
 void *inputThread(void*) {
 #endif
     while (1) {
-        char ch = getchar();
-        inputstr += ch;
-        if (ch == '\n')
-            break;
+      // patch by Ole, 2017-01-06
+      //char ch = getchar(); if (ch==EOF) return NULL;
+      char ch = getchar();
+      if (ch==EOF) {
+#ifdef HAVE_CXX11THREAD
+	return;
+#else
+	return NULL;
+#endif
+      }        
+      inputstr += ch;
+      if (ch == '\n')
+	break;
     }
+#ifndef HAVE_CXX11THREAD
+    return NULL;
+#endif
 }
 
 // if readline is not available or !EDIT_INPUT set to zero
@@ -1332,7 +1344,7 @@ string DInterpreter::GetLine()
 {
   clog << flush; cout << flush;
 
-#ifdef HAVE_LIBREADLINE
+#if defined(HAVE_LIBREADLINE) || defined(HAVE_LIBEDITLINE)
   int edit_input = SysVar::Edit_Input() && isatty(0);
 #endif
 
@@ -1345,7 +1357,7 @@ string DInterpreter::GetLine()
 
     lineEdit = true;
 
-#ifdef HAVE_LIBREADLINE
+#if defined(HAVE_LIBREADLINE) || defined(HAVE_LIBEDITLINE)
     
     if( edit_input != 0)
       cline = readline(const_cast<char*>(actualPrompt.c_str()));
@@ -1381,7 +1393,7 @@ string DInterpreter::GetLine()
   } while( line == "" 
 	|| line[0] == ';'); // skip also comment lines (bug #663)
   
-#ifdef HAVE_LIBREADLINE
+#if defined(HAVE_LIBREADLINE) || defined(HAVE_LIBEDITLINE)
   // SA: commented out to comply with IDL behaviour- allowing to 
   //     set the history-file length only in the startup file
   //if( edit_input > 20)
@@ -1578,112 +1590,91 @@ void DInterpreter::RunDelTree()
 
 // reads user input and executes it
 // the main loop
-RetCode DInterpreter::InterpreterLoop( const string& startup,
-  vector<string>& batch_files, const std::string& statement)
-{
+
+RetCode DInterpreter::InterpreterLoop(const string& startup,
+  vector<string>& batch_files, const std::string& statement) {
   // process startup file
-  if( startup != "")
-    {
-      ifstream in(startup.c_str());
+  if (startup != "") {
+    ifstream in(startup.c_str());
 
-      if( in.fail())
-	Warning( "Error opening startup file: "+startup);
+    if (in.fail())
+      Warning("Error opening startup file: " + startup);
 
-      ValueGuard<bool> guard( interruptEnable);
-      interruptEnable = false;
+    ValueGuard<bool> guard(interruptEnable);
+    interruptEnable = false;
 
-      bool runCmd = false;
-      try
-	{
-	  while( in.good())
-	    {
+    bool runCmd = false;
+    try {
+      while (in.good()) {
 #if defined (_MSC_VER) && _MSC_VER < 1800
-		  _clearfp();
+        _clearfp();
 #else
-	      feclearexcept(FE_ALL_EXCEPT);
+        feclearexcept(FE_ALL_EXCEPT);
 #endif
 
-	      try
-		{
-		  if( runCmd)
-		    {
-		      runCmd = false;
-		      RunDelTree();
-		    }
-		  else
-		    {		  
-		      DInterpreter::CommandCode ret=ExecuteLine( &in);
-	      
-		      if( debugMode != DEBUG_CLEAR)
-			{
-			  debugMode = DEBUG_CLEAR;
-			  Warning( "Prematurely closing batch file: "+startup);
-			  break;
-			}
-		    }
-		}
-	      catch( RetAllException& retAllEx)
-		{
-		  runCmd = (retAllEx.Code() == RetAllException::RUN);
-		  if( !runCmd) throw;
-		}
-	      catch( exception& e)
-		{
-		  cerr << startup << ": Exception: " << e.what() << endl;
-		}
-	      catch (...)
-		{	
-		  cerr << startup << ": Unhandled Error." << endl;
-		}
-	    } // while
-	}
-      catch( RetAllException& retAllEx)
-	{
-	}
-    } // if( startup...
+        try {
+          if (runCmd) {
+            runCmd = false;
+            RunDelTree();
+          } else {
+            DInterpreter::CommandCode ret = ExecuteLine(&in);
+
+            if (debugMode != DEBUG_CLEAR) {
+              debugMode = DEBUG_CLEAR;
+              Warning("Prematurely closing batch file: " + startup);
+              break;
+            }
+          }
+        } catch (RetAllException& retAllEx) {
+          runCmd = (retAllEx.Code() == RetAllException::RUN);
+          if (!runCmd) throw;
+        } catch (exception& e) {
+          cerr << startup << ": Exception: " << e.what() << endl;
+        } catch (...) {
+          cerr << startup << ": Unhandled Error." << endl;
+        }
+      } // while
+    } catch (RetAllException& retAllEx) {
+    }
+  } // if( startup...
 
 #ifdef USE_MPI
   int myrank = 0;
   int tag = 0;
   char mpi_procedure[256];
   MPI_Status status;
-  MPI_Comm_rank( MPI_COMM_WORLD, &myrank);
-  int size; 
+  MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+  int size;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
   if (size > 1) {
     MPI_Recv(mpi_procedure, 256, MPI_CHAR, 0, tag, MPI_COMM_WORLD, &status);
 
     istringstream istr(StrUpCase(mpi_procedure) + "\n");
-    DInterpreter::CommandCode ret=ExecuteLine( &istr);
+    DInterpreter::CommandCode ret = ExecuteLine(&istr);
 
     MPI_Finalize();
-    exit( EXIT_SUCCESS);
+    exit(EXIT_SUCCESS);
   }
 #endif
 
-  if (statement.length() > 0) 
-  {
+  if (statement.length() > 0) {
     // execute single statement and exit (a new-line is added to statement in gdl.cpp)
     // (e.g. $ gdl -e "print, 'hello world'")
     istringstream iss(statement, ios_base::out);
     try {
-		ExecuteLine(&iss);
+      ExecuteLine(&iss);
+    } catch (RetAllException& retAllEx) {
     }
-      catch( RetAllException& retAllEx)
-	{
-	}
     return RC_OK;
-  }
-  else
-  {
+  } else {
     // execute batch files (e.g. $ gdl script.pro)
     // before entering the interactive mode
-    for (vector<string>::iterator it = batch_files.begin(); it < batch_files.end(); it++) 
+    for (vector<string>::iterator it = batch_files.begin(); it < batch_files.end(); ++it)
       ExecuteFile(*it);
     batch_files.clear(); // not needed anymore...
   }
 
-#ifdef HAVE_LIBREADLINE
+#if defined(HAVE_LIBREADLINE) || defined(HAVE_LIBEDITLINE)
 
   // initialize readline (own version - not pythons one)
   // in includefirst.hpp readline is disabled for python_module
@@ -1698,36 +1689,34 @@ RetCode DInterpreter::InterpreterLoop( const string& startup,
     int edit_input = SysVar::Edit_Input();
     stifle_history(edit_input == 1 || edit_input < 0 ? 200 : edit_input);
   }
-  
+
   // Eventually read back the ".gdl" path in user $HOME
   // we do not make one commun function with the save side
   // because on the save side we may need to create the .gdl/ PATH ...
-  int result, debug=0;
+  int result, debug = 0;
 #ifdef _WIN32
-  char *homeDir = getenv( "HOMEPATH");
+  char *homeDir = getenv("HOMEPATH");
 #else
-  char *homeDir = getenv( "HOME");
+  char *homeDir = getenv("HOME");
 #endif
-  if (homeDir != NULL)
-  {
+  if (homeDir != NULL) {
     string pathToGDL_history;
-    pathToGDL_history=homeDir;
+    pathToGDL_history = homeDir;
     AppendIfNeeded(pathToGDL_history, "/");
-    pathToGDL_history=pathToGDL_history+".gdl";
+    pathToGDL_history = pathToGDL_history + ".gdl";
     string history_filename;
     AppendIfNeeded(pathToGDL_history, "/");
-    history_filename=pathToGDL_history+"history";
-    if (debug) cout << "History file name: " <<history_filename << endl;
+    history_filename = pathToGDL_history + "history";
+    if (debug) cout << "History file name: " << history_filename << endl;
 
-    result=read_history(history_filename.c_str());
-    if (debug) 
-    { 
-      if (result == 0) cout<<"Successfull reading of ~/.gdl/history"<<endl;
-      else cout<<"Fail to read back ~/.gdl/history"<<endl;
+    result = read_history(history_filename.c_str());
+    if (debug) {
+      if (result == 0) cout << "Successfull reading of ~/.gdl/history" << endl;
+      else cout << "Fail to read back ~/.gdl/history" << endl;
     }
   }
 
-historyIntialized = true;
+  historyIntialized = true;
 
 #endif
 
@@ -1743,88 +1732,115 @@ historyIntialized = true;
     feclearexcept(FE_ALL_EXCEPT);
 #endif
 
-    try
-      {
-	if( runCmd)
-	  {
-	    runCmd = false;
-	    continueCmd = false;
-	    RunDelTree();
-	  }
-	else
-	  {
-	    DInterpreter::CommandCode ret=ExecuteLine();
+    try {
+      if (runCmd) {
+        runCmd = false;
+        continueCmd = false;
+        RunDelTree();
+      } else {
+        DInterpreter::CommandCode ret = ExecuteLine();
 
-	    // stop steppig when at main level
-	    stepCount = 0;
-	    debugMode = DEBUG_CLEAR;
+        // stop steppig when at main level
+        stepCount = 0;
+        debugMode = DEBUG_CLEAR;
 
-	    if( ret == CC_SKIP)
-	    {
-	      Message( "Can't continue from this point.");
-	    }		    
-	    else if( ret == CC_CONTINUE)
-	      {
-		if( static_cast<DSubUD*>
-		    (callStack.back()->GetPro())->GetTree() != NULL)
-		  {
-		    if( continueCmd) 
-		      runCmd = true;
-		    else
-		      {
-			cout << SysVar::MsgPrefix() << 
-			  "Starting at: $MAIN$" << endl;
-			continueCmd = true;
-		      }
-		  }
-		else
-		  cout << SysVar::MsgPrefix() << 
-		    "Cannot continue from this point." << endl;
-	      }
-	  }
+        if (ret == CC_SKIP) {
+          Message("Can't continue from this point.");
+        }
+        else if (ret == CC_CONTINUE) {
+          if (static_cast<DSubUD*>
+            (callStack.back()->GetPro())->GetTree() != NULL) {
+            if (continueCmd)
+              runCmd = true;
+            else {
+              cout << SysVar::MsgPrefix() <<
+                "Starting at: $MAIN$" << endl;
+              continueCmd = true;
+            }
+          } else
+            cout << SysVar::MsgPrefix() <<
+            "Cannot continue from this point." << endl;
+        }
       }
-    catch( RetAllException& retAllEx)
-      {
-	runCmd = (retAllEx.Code() == RetAllException::RUN);
-	bool resetCmd = (retAllEx.Code() == RetAllException::RESET);
-	bool fullResetCmd = (retAllEx.Code() == RetAllException::FULL_RESET);
-	if( resetCmd || fullResetCmd)
-	{
-	  // remove $MAIN$
-	  delete callStack.back();
-	  callStack.pop_back();
-	  assert( callStack.empty());
-	  
-	  ResetObjects();
-	  ResetHeap();
-	  if( fullResetCmd)
-	  {
-	    PurgeContainer(libFunList);
-	    PurgeContainer(libProList);
-	  }
-	  // initially done in InitGDL()
-	  // initializations
-	  InitObjects();
-	  // init library functions
-	  if( fullResetCmd)
-	  {
-	      LibInit(); 
-	  }
-	  
-	  // initially done in constructor: setup main level environment
-	  DPro* mainPro=new DPro();        // $MAIN$  NOT inserted into proList
-	  EnvUDT* mainEnv=new EnvUDT(NULL, mainPro);
-	  callStack.push_back(mainEnv);   // push main environment (necessary)
-	}
+    }    catch (RetAllException& retAllEx) {
+      runCmd = (retAllEx.Code() == RetAllException::RUN);
+      bool resetCmd = (retAllEx.Code() == RetAllException::RESET);
+      bool fullResetCmd = (retAllEx.Code() == RetAllException::FULL_RESET);
+      if (resetCmd || fullResetCmd) {
+        // remove $MAIN$
+        delete callStack.back();
+        callStack.pop_back();
+        assert(callStack.empty());
+
+        ResetObjects();
+        ResetHeap();
+        if (fullResetCmd) {
+          PurgeContainer(libFunList);
+          PurgeContainer(libProList);
+        }
+        // initially done in InitGDL()
+        // initializations
+        InitObjects();
+        // init library functions
+        if (fullResetCmd) {
+          LibInit();
+        }
+
+        // initially done in constructor: setup main level environment
+        DPro* mainPro = new DPro(); // $MAIN$  NOT inserted into proList
+        EnvUDT* mainEnv = new EnvUDT(NULL, mainPro);
+        callStack.push_back(mainEnv); // push main environment (necessary)
+
+        // re-process startup file
+        if (startup != "") {
+          ifstream in(startup.c_str());
+
+          if (in.fail())
+            Warning("Error opening startup file: " + startup);
+
+          ValueGuard<bool> guard(interruptEnable);
+          interruptEnable = false;
+
+          bool runCmd = false;
+          try {
+            while (in.good()) {
+#if defined (_MSC_VER) && _MSC_VER < 1800
+              _clearfp();
+#else
+              feclearexcept(FE_ALL_EXCEPT);
+#endif
+
+              try {
+                if (runCmd) {
+                  runCmd = false;
+                  RunDelTree();
+                } else {
+                  DInterpreter::CommandCode ret = ExecuteLine(&in);
+
+                  if (debugMode != DEBUG_CLEAR) {
+                    debugMode = DEBUG_CLEAR;
+                    Warning("Prematurely closing batch file: " + startup);
+                    break;
+                  }
+                }
+              } catch (RetAllException& retAllEx) {
+                runCmd = (retAllEx.Code() == RetAllException::RUN);
+                if (!runCmd) throw;
+              } catch (exception& e) {
+                cerr << startup << ": Exception: " << e.what() << endl;
+              } catch (...) {
+                cerr << startup << ": Unhandled Error." << endl;
+              }
+            } // while
+          } catch (RetAllException& retAllEx) {
+          }
+        } // if( startup...
       }
-    catch( exception& e)
-      {
-	cerr << "InterpreterLoop: Exception: " << e.what() << endl;
-      }
-    catch (...)
-      {	
-	cerr << "InterpreterLoop: Unhandled Error." << endl;
-      }
+    }    catch (exception& e) {
+      cerr << "InterpreterLoop: Exception: " << e.what() << endl;
+    }    catch (...) {
+      cerr << "InterpreterLoop: Unhandled Error." << endl;
+    }
   }
 }
 

@@ -17,9 +17,6 @@
 
 #include "includefirst.hpp"
 
-// should (Makefile.am) not be used anyway for the python module
-#ifndef PYTHON_MODULE
-
 // #ifndef VERSION
 // #define VERSION "0.9"
 // #endif
@@ -34,7 +31,10 @@
 #include <unistd.h> // isatty
 #endif
 #include <climits> // PATH_MAX
-
+//patch #90
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 #ifndef _WIN32
 #include <sys/resource.h> //rlimits to augment stack size (needed fot DICOM objects)
 #endif
@@ -106,7 +106,8 @@ void InitOpenMP() {
 
 void AtExit()
 {
-//   cerr << "AtExit()" << endl;
+  //this function probably cleans otherwise cleaned objets and should be called only for debugging purposes.
+  cerr << "Using AtExit() for debugging" << endl;
   cerr << flush; cout << flush; clog << flush;
   // clean up everything
   // (for debugging memory leaks)
@@ -133,7 +134,7 @@ void InitGDL()
 #ifndef _WIN32
   GDLSetLimits();
 #endif
-#ifdef HAVE_LIBREADLINE
+#if defined(HAVE_LIBREADLINE) || defined(HAVE_LIBEDITLINE)
   // initialize readline (own version - not pythons one)
   // in includefirst.hpp readline is disabled for python_module
   rl_initialize();
@@ -174,13 +175,14 @@ void InitGDL()
 
 // SA: for use in COMMAND_LINE_ARGS()
 namespace lib {
-  std::vector<char*> command_line_args;
+  extern std::vector<char*> command_line_args;
 }
 
 int main(int argc, char *argv[])
 {
+#if GDL_DEBUG
   if( atexit( AtExit) != 0) cerr << "atexit registration failed." << endl;
-
+#endif
   // indicates if the user wants to see the welcome message
   bool quiet = false;
   bool gdlde = false;
@@ -190,6 +192,8 @@ int main(int argc, char *argv[])
   vector<string> batch_files;
   string statement;
   string pretendRelease;
+  bool strict_syntax=false;
+  bool syntaxOptionSet=false;
 
   for( SizeT a=1; a< argc; ++a)
     {
@@ -202,6 +206,12 @@ int main(int argc, char *argv[])
 	  cout << "  --help (-h)        display this message" << endl;
 	  cout << "  --version (-V, -v) show version information" << endl;
 	  cout << "  --fakerelease X.y  pretend that !VERSION.RELEASE is X.y" << endl;
+	  cout << "  --fussy            implies that procedures adhere with modern IDL, where \"()\" are for functions and \"[]\" are for arrays." <<endl;
+      cout << "                     This speeds up (sometimes terribly) compilation but choke on every use of \"()\" with arrays." << endl;
+      cout << "                     Conversion of procedures to modern IDL can be done with D. Landsman's idlv4_to_v5 procedure." << endl;
+      cout << "                     Use enviromnment variable \"GDL_IS_FUSSY\" to set up permanently this feature." << endl;
+	  cout << "  --sloppy           Sets the traditional (default) compiling option where \"()\"  can be used both with functions and arrays." << endl;
+      cout << "                     Needed to counteract temporarily the effect of the enviromnment variable \"GDL_IS_FUSSY\"." << endl;
           cout << endl;
 	  cout << "IDL-compatible options:" << endl;
 	  cout << "  -arg value tells COMMAND_LINE_ARGS() to report" << endl;
@@ -281,6 +291,16 @@ int main(int argc, char *argv[])
       {
           gdlde = true;
       }
+      else if (string(argv[a]) == "--fussy")
+      {
+          strict_syntax = true;
+          syntaxOptionSet = true;
+      }
+      else if (string(argv[a]) == "--sloppy")
+      {
+          strict_syntax = false;
+          syntaxOptionSet = true;
+      }      
       else if (string(argv[a]) == "--fakerelease")
       {
         if (a == argc - 1)
@@ -326,9 +346,18 @@ int main(int argc, char *argv[])
         "- Default library routine search path used (GDL_PATH/IDL_PATH env. var. not set): " << endl << 
         "  " << gdlPath << endl;
     }
+  std::string useWX=GetEnvString("GDL_USE_WX");
+  if (useWX == "YES" || useWX == "yes") cerr << "- Using WxWidgets as graphics library (windows and widgets)." <<endl;
   SysVar::SetGDLPath( gdlPath);
   
   if (!pretendRelease.empty()) SysVar::SetFakeRelease(pretendRelease);
+  //fussyness setup and change if switch at start
+  if (syntaxOptionSet) { //take it no matters any env. var.
+    if (strict_syntax == true) SetStrict(true);
+  } else {
+    if (GetEnvString("GDL_IS_FUSSY").size()> 0) SetStrict(true);
+  }
+  
   
   string startup=GetEnvString("GDL_STARTUP");
   if( startup == "") startup=GetEnvString("IDL_STARTUP");
@@ -386,5 +415,3 @@ int main(int argc, char *argv[])
 
   return 0;
 }
-
-#endif

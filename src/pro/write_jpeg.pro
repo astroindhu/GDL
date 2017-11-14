@@ -21,12 +21,6 @@
 ;     TRUE        ; 1=pixel interleaving, 2=row, 3=column interleaving
 ;           
 ;
-; OPTIONAL INPUTS: For pseudocolor only
-;        red  : the Red colormap vector (for PseudoColor images)
-;        green: the Green colormap vector (for PseudoColor images)
-;        blue : the Blue colormap vector (for PseudoColor images)
-;
-;
 ; RESTRICTIONS:
 ;         Requires ImageMagick (tested)
 ;
@@ -127,7 +121,7 @@ if (nb_dims EQ 2) then begin
 endif
 ;
 if (nb_dims EQ 3) and ~KEYWORD_SET(true) then begin
-   MESSAGE, /cont, "The Keyword True) is not set but the Image array is 3D."
+   MESSAGE, /cont, "The Keyword /TRUE is not set but the Image array is 3D."
    MESSAGE, /cont, "You must provide a adequate value for True Keyword"
    MESSAGE, "if image is (3,n,m): true=1; (n,3,m): true=2; (n,m,3): true=3."
 endif

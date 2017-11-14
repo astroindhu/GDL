@@ -123,8 +123,9 @@ void LibInit_jmg()
 
   const string randomKey[]={"DOUBLE","GAMMA","LONG","NORMAL",
 			    "BINOMIAL","POISSON","UNIFORM",KLISTEND};
-  new DLibFunRetNew(lib::random_fun,string("RANDOMU"),MAXRANK+1,randomKey);
-  new DLibFunRetNew(lib::random_fun,string("RANDOMN"),MAXRANK+1,randomKey);
+  const string randomWarnKey[]={"RAN1", KLISTEND}; //since IDL 8.2, change of random algo (we used already the good one).
+  new DLibFunRetNew(lib::random_fun,string("RANDOMU"),MAXRANK+1,randomKey,randomWarnKey);
+  new DLibFunRetNew(lib::random_fun,string("RANDOMN"),MAXRANK+1,randomKey,randomWarnKey);
 
   const string checkmathKey[]={"MASK","NOCLEAR","PRINT",KLISTEND};
   new DLibFunRetNew(lib::check_math_fun,string("CHECK_MATH"),2,checkmathKey);
@@ -145,16 +146,17 @@ void LibInit_jmg()
   const string macharKey[]={"DOUBLE",KLISTEND};
   new DLibFunRetNew(lib::machar_fun,string("MACHAR"),0,macharKey);
 
-  const string rk4Key[]={"DOUBLE",KLISTEND};
-  new DLibFunRetNew(lib::rk4jmg_fun,string("RK4JMG"),5,rk4Key);
+// crashes on my machine (GD) and is not used.  
+//  const string rk4Key[]={"DOUBLE",KLISTEND};
+//  new DLibFunRetNew(lib::rk4jmg_fun,string("RK4JMG"),5,rk4Key);
 
 
 #if defined(USE_LIBPROJ4)||defined(USE_LIBPROJ4_NEW)
-  const string map_proj_forwardKey[]={"MAP_STRUCTURE","RADIANS","POLYGONS","POLYLINES","CONNECTIVITY","FILL",KLISTEND};
+  const string map_proj_forwardKey[]={"MAP_STRUCTURE","RADIANS","POLYGONS","POLYLINES","CONNECTIVITY","FILL",KLISTEND};  //WARNING FIXED ORDER for GetMapAsMapStructureKeyword()
   new DLibFunRetNew(lib::map_proj_forward_fun,
 	      string("MAP_PROJ_FORWARD"),2,map_proj_forwardKey,NULL);
 
-  const string map_proj_inverseKey[]={"RADIANS","MAP_STRUCTURE",KLISTEND};
+  const string map_proj_inverseKey[]={"MAP_STRUCTURE","RADIANS",KLISTEND}; //WARNING FIXED ORDER for GetMapAsMapStructureKeyword()
   new DLibFunRetNew(lib::map_proj_inverse_fun,
 	      string("MAP_PROJ_INVERSE"),2,map_proj_inverseKey);
 //dummy functions for compatibility support of GCTP projections 
@@ -162,10 +164,9 @@ void LibInit_jmg()
   new DLibPro(lib::map_proj_gctp_revinit,string("MAP_PROJ_GCTP_REVINIT"),4);
 
   // SA: GSHHS dataset
-  // TODO: USA, ORIENTATION, LIMIT,
-  //       , MLINESTYLE, MLINETHICK, SPACING, T3D, ZVALUE
-  const string map_continentsKey[] = {"COLOR", "RIVERS", "COUNTRIES", "COASTS", "CONTINENTS", "USA", 
-    "HIRES", "FILL_CONTINENTS", "MAP_STRUCTURE",KLISTEND};
+  // TODO: USA, ORIENTATION, LIMIT, MLINESTYLE, MLINETHICK, SPACING, T3D, ZVALUE
+  const string map_continentsKey[] = { "MAP_STRUCTURE", "COLOR", "RIVERS", "COUNTRIES", "COASTS", "CONTINENTS", "USA", 
+    "HIRES", "FILL_CONTINENTS",KLISTEND};//WARNING FIXED ORDER for GetMapAsMapStructureKeyword()
   const string map_continentsWarnKey[] = {"ORIENTATION", "LIMIT",
          "MLINESTYLE", "MLINETHICK", "SPACING", "T3D", "ZVALUE", KLISTEND};
   new DLibPro(lib::map_continents, string("MAP_CONTINENTS"), 0, 
@@ -202,10 +203,11 @@ void LibInit_jmg()
   const string qgrid3Key[]={"DELTA", "DIMENSION", "MISSING", "START", KLISTEND};
   new DLibFunRetNew(lib::qgrid3_fun,string("QGRID3"),5,qgrid3Key);
 #endif
-
-  const string trigridKey[]={"MAX_VALUE","MISSING","NX","NY","MAP",
+  const string trigridWarnKey[]={"EXTRAPOLATE", "INPUT", "QUINTIC",KLISTEND}; //not really dangerous
+  // "XGRID", "XOUT", "YGRID", "YOUT" , "SPHERE","DEGREES", should not be warnings since not implemented and dangerous 
+  const string trigridKey[]={ "MIN_VALUE","MAX_VALUE","MISSING","NX","NY","MAP",
 			     KLISTEND};
-  new DLibFunRetNew(lib::trigrid_fun,string("TRIGRID"),6,trigridKey);
+  new DLibFunRetNew(lib::trigrid_fun,string("TRIGRID"),6,trigridKey,trigridWarnKey);
 
   const string poly_2dKey[]={"CUBIC","MISSING",KLISTEND};
   new DLibFunRetNew(lib::poly_2d_fun,string("POLY_2D"),6,poly_2dKey);
@@ -350,9 +352,10 @@ void LibInit_jmg()
   const string widget_baseWarnKey[] = {"TLB_FRAME_ATTR",  "TOOLBAR", "BITMAP", KLISTEND};
   new DLibFunRetNew(lib::widget_base,string("WIDGET_BASE"),1,widget_baseKey,widget_baseWarnKey);
 //BUTTON
-  const string widget_buttonKey[] = {WIDGET_COMMON_KEYWORDS,"MENU","VALUE","HELP","SEPARATOR","INPUT_FOCUS","BITMAP","TOOLTIP", "TRACKING_EVENTS","DYNAMIC_RESIZE",KLISTEND};
+  const string widget_buttonKey[] = {WIDGET_COMMON_KEYWORDS,"MENU","VALUE","HELP","SEPARATOR","INPUT_FOCUS","BITMAP","TOOLTIP",
+  "TRACKING_EVENTS","DYNAMIC_RESIZE","X_BITMAP_EXTRA",KLISTEND};
   const string widget_buttonWarnKey[] ={"ACCELERATOR","CHECKED_MENU",
- "X_BITMAP_EXTRA","TAB_MODE","NO_RELEASE",KLISTEND};
+ "TAB_MODE","NO_RELEASE",KLISTEND};
   new DLibFunRetNew(lib::widget_button,string("WIDGET_BUTTON"),1,widget_buttonKey,widget_buttonWarnKey);
 //COMBOBOX
   const string widget_comboboxKey[] = {WIDGET_COMMON_KEYWORDS,"EDITABLE","TITLE","VALUE","TRACKING_EVENTS","DYNAMIC_RESIZE",KLISTEND};
@@ -360,7 +363,7 @@ void LibInit_jmg()
   new DLibFunRetNew(lib::widget_combobox,string("WIDGET_COMBOBOX"),1,widget_comboboxKey);//,widget_comboboxWarnKey);
 //CONTROL
   const string widget_ControlKey[] = {"REALIZE","MANAGED","EVENT_FUNC","EVENT_PRO",
-  "XMANAGER_ACTIVE_COMMAND","DESTROY","DELAY_DESTROY",
+  "XMANAGER_ACTIVE_COMMAND","DESTROY",
   "GET_UVALUE","SET_UVALUE","SET_VALUE",
   "MAP","FUNC_GET_VALUE","PRO_SET_VALUE",
   "SET_UNAME","NO_COPY","SET_BUTTON",
@@ -382,9 +385,9 @@ void LibInit_jmg()
   "AM_PM", "DAYS_OF_WEEK", "MONTHS",  "SET_TABLE_SELECT","SET_TABLE_VIEW",
   "UPDATE","FORMAT","EDIT_CELL",  "TABLE_XSIZE","TABLE_YSIZE","SEND_EVENT","BAD_ID",
   "GROUP_LEADER", "COMBOBOX_ADDITEM" ,"COMBOBOX_DELETEITEM" ,"COMBOBOX_INDEX", 
-  "GET_DRAW_VIEW","SET_TAB_CURRENT", "UNITS","DYNAMIC_RESIZE",
-  KLISTEND};
-  const string widget_WarnControlKey[] ={"DEFAULT_FONT",
+  "GET_DRAW_VIEW","SET_TAB_CURRENT", "UNITS","DYNAMIC_RESIZE","SET_SLIDER_MIN","SET_SLIDER_MAX",
+  "X_BITMAP_EXTRA",KLISTEND};
+  const string widget_WarnControlKey[] ={"DELAY_DESTROY", "DEFAULT_FONT",
   "PUSHBUTTON_EVENTS","TABLE_BLANK","TAB_MODE","SET_TAB_MULTILINE",KLISTEND}; //LIST NOT CLOSE!!!  
   //IMPORTANT :   
   new DLibPro(lib::widget_control,string("WIDGET_CONTROL"),1, 
@@ -423,7 +426,7 @@ void LibInit_jmg()
   const string widget_eventKey[] = {"XMANAGER_BLOCK","DESTROY","SAVE_HOURGLASS","NOWAIT","BAD_ID",KLISTEND};
   new DLibFunRetNew(lib::widget_event,string("WIDGET_EVENT"),1,widget_eventKey); //complete!!
 //INFO
-  const string widget_infoKey[] = {  "ACTIVE","VALID_ID","MODAL","MANAGED",
+  const string widget_infoKey[] = {  "DEBUG","ACTIVE","VALID_ID","MODAL","MANAGED",
   "XMANAGER_BLOCK", //only GDL, used in xmanager.pro , may even not be useful now.
   "CHILD","VERSION","GEOMETRY","UNAME",
   "FONTNAME",//not really supported - returns "".

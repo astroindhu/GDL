@@ -64,7 +64,7 @@ namespace lib {
 
   BaseGDL* n_elements( EnvT* e);
 
-  BaseGDL* execute( EnvT* e);
+  BaseGDL* execute_fun( EnvT* e);
 
   BaseGDL* assoc( EnvT* e);
   
@@ -114,6 +114,8 @@ namespace lib {
   BaseGDL* median( EnvT* e);
 
   BaseGDL* shift_fun( EnvT* e);
+
+  BaseGDL* ishft_fun( EnvT* e);
 
   BaseGDL* arg_present( EnvT* e);
 

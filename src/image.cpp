@@ -4,7 +4,7 @@
     begin                : Jul 20 2004
     copyright            : (C) 2004 by Joel Gales
     email                : jomoga@users.sourceforge.net
- ***************************************************************************/
+***************************************************************************/
 
 /***************************************************************************
  *                                                                         *
@@ -30,30 +30,34 @@ using namespace std;
 namespace lib {
 
 
-//  BaseGDL* tvrd( EnvT* e)
-//  {
-//      // when !d.name == Null  we do nothing !
-//      GDLGStream* actStream = GraphicsDevice::GetDevice()->GetStream();
-//      if (actStream == NULL) e->Throw("Unable to create window.");
-//
-//#ifdef HAVE_LIBWXWIDGETS
-//      if (actStream->HasImage()) 
-//        return GetImage(e);
-//      else
-//#endif
-//        return GraphicsDevice::GetDevice()->TVRD( e);
-//  }
+  //  BaseGDL* tvrd( EnvT* e)
+  //  {
+  //      // when !d.name == Null  we do nothing !
+  //      GDLGStream* actStream = GraphicsDevice::GetDevice()->GetStream();
+  //      if (actStream == NULL) e->Throw("Unable to create window.");
+  //
+  //#ifdef HAVE_LIBWXWIDGETS
+  //      if (actStream->HasImage()) 
+  //        return GetImage(e);
+  //      else
+  //#endif
+  //        return GraphicsDevice::GetDevice()->TVRD( e);
+  //  }
 
-BaseGDL* tvrd( EnvT* e){
+  BaseGDL* tvrd( EnvT* e){
     GDLGStream* actStream = GraphicsDevice::GetDevice()->GetStream();
     if (actStream == NULL) e->Throw("Unable to create window.");
  
-    if (e->KeywordSet("WORDS")) e->Throw( "WORDS keyword not yet supported.");
+    static int wordsIx=e->KeywordIx("WORDS");
+    static int orderIx=e->KeywordIx("ORDER");
+    static int trueIx=e->KeywordIx("TRUE");
+    static int channelIx=e->KeywordIx("CHANNEL");
+    if (e->KeywordSet(wordsIx)) e->Throw( "WORDS keyword not yet supported.");
     DLong orderVal=SysVar::TV_ORDER();
-    e->AssureLongScalarKWIfPresent( "ORDER", orderVal);
+    e->AssureLongScalarKWIfPresent(orderIx, orderVal);
 
     DLong tru=0;
-    e->AssureLongScalarKWIfPresent( "TRUE", tru);
+    e->AssureLongScalarKWIfPresent( trueIx, tru);
     if (tru > 3 || tru < 0) e->Throw("Value of TRUE keyword is out of allowed range.");
     //GetBitMapData is device-dependent and insures that image is by default ORDER=0 now.
     DByteGDL *bitmap = static_cast<DByteGDL*>(actStream->GetBitmapData());
@@ -93,7 +97,7 @@ BaseGDL* tvrd( EnvT* e){
       DLongGDL* ChannelGdl = e->GetParAs<DLongGDL>(4);
       channel=(*ChannelGdl)[0]; 
     }
-    e->AssureLongScalarKWIfPresent( "CHANNEL", channel);
+    e->AssureLongScalarKWIfPresent( channelIx, channel);
     if (channel > 3) {GDLDelete(bitmap); e->Throw("Value of Channel is out of allowed range.");}
 
     if (!(hasXsize))nx_gdl-=x_gdl; 
@@ -115,76 +119,76 @@ BaseGDL* tvrd( EnvT* e){
     if (ymin11 < 0 || ymin11 > ny-1) error=true;
     if (error)  {GDLDelete(bitmap); e->Throw("Value of Area is out of allowed range.");}
 
-  SizeT dims[3];
-  DByteGDL* res;
+    SizeT dims[3];
+    DByteGDL* res;
 
-  if ( tru == 0 ) {
-    dims[0] = nx_gdl;
-    dims[1] = ny_gdl;
-    dimension dim( dims, (SizeT) 2 );
-    res = new DByteGDL( dim, BaseGDL::ZERO );
-//set again dimension since tvrd does not want the 1-sized dimensions purged! (like in a=tvrd(0,0,1,1) a=Array[1,1]
-    static_cast<BaseGDL*>(res)->SetDim(dim);
-    if ( channel <= 0 ) { //channel not given, return max of the 3 channels
-      DByte mx, mx1;
-      for ( SizeT i =0; i < nx_gdl ; ++i ) {
-        for ( SizeT j = 0; j < ny_gdl ; ++j ) {
-         mx = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 0]; 
-         mx1 = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 1];
-         if ( mx1 > mx ) mx = mx1;
-         mx1 = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 2];
-         if ( mx1 > mx ) mx = mx1;
-         (*res)[j * nx_gdl + i] = mx;         
-        }
+    if ( tru == 0 ) {
+      dims[0] = nx_gdl;
+      dims[1] = ny_gdl;
+      dimension dim( dims, (SizeT) 2 );
+      res = new DByteGDL( dim, BaseGDL::ZERO );
+      //set again dimension since tvrd does not want the 1-sized dimensions purged! (like in a=tvrd(0,0,1,1) a=Array[1,1]
+      static_cast<BaseGDL*>(res)->SetDim(dim);
+      if ( channel <= 0 ) { //channel not given, return max of the 3 channels
+	DByte mx, mx1;
+	for ( SizeT i =0; i < nx_gdl ; ++i ) {
+	  for ( SizeT j = 0; j < ny_gdl ; ++j ) {
+	    mx = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 0]; 
+	    mx1 = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 1];
+	    if ( mx1 > mx ) mx = mx1;
+	    mx1 = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + 2];
+	    if ( mx1 > mx ) mx = mx1;
+	    (*res)[j * nx_gdl + i] = mx;         
+	  }
+	}
+      } else {
+	for ( SizeT i =0; i < nx_gdl ; ++i ) {
+	  for ( SizeT j = 0; j < ny_gdl ; ++j ) {
+	    (*res)[j * nx_gdl + i] = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + channel]; 
+	  }
+	}
       }
-    } else {
-      for ( SizeT i =0; i < nx_gdl ; ++i ) {
-        for ( SizeT j = 0; j < ny_gdl ; ++j ) {
-         (*res)[j * nx_gdl + i] = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + channel]; 
-        }
-      }
-    }
-    GDLDelete(bitmap);
-    // Reflect about y-axis
-    if ( orderVal == 1 ) res->Reverse( 1 );
-    return res;
-
-  } else {
-    dims[0] = 3;
-    dims[1] = nx_gdl;
-    dims[2] = ny_gdl;
-    dimension dim( dims, (SizeT) 3 );
-    res = new DByteGDL( dim, BaseGDL::NOZERO );
-//set again dimension since tvrd does not want the 1-sized dimensions purged! (like in a=tvrd(0,0,1,1,/tru) a=Array[3,1,1]
-    static_cast<BaseGDL*>(res)->SetDim(dim);
-    for ( SizeT i =0; i < nx_gdl ; ++i ) {
-      for ( SizeT j = 0; j < ny_gdl ; ++j ) {
-       for ( SizeT k = 0 ; k < 3 ; ++k) (*res)[3 * (j * nx_gdl + i) + k] = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + k]; 
-      }
-    }
-    GDLDelete(bitmap);
-    // Reflect about y-axis
-    if ( orderVal == 1 ) res->Reverse( 2 );
-
-    if ( tru == 1 ) {
+      GDLDelete(bitmap);
+      // Reflect about y-axis
+      if ( orderVal == 1 ) res->Reverse( 1 );
       return res;
-    } else if ( tru == 2 ) {
-      DUInt* perm = new DUInt[3];
-      perm[0] = 1;
-      perm[1] = 0;
-      perm[2] = 2;
-      return res->Transpose( perm );
-    } else if ( tru == 3 ) {
-      DUInt* perm = new DUInt[3];
-      perm[0] = 1;
-      perm[1] = 2;
-      perm[2] = 0;
-      return res->Transpose( perm );
+
+    } else {
+      dims[0] = 3;
+      dims[1] = nx_gdl;
+      dims[2] = ny_gdl;
+      dimension dim( dims, (SizeT) 3 );
+      res = new DByteGDL( dim, BaseGDL::NOZERO );
+      //set again dimension since tvrd does not want the 1-sized dimensions purged! (like in a=tvrd(0,0,1,1,/tru) a=Array[3,1,1]
+      static_cast<BaseGDL*>(res)->SetDim(dim);
+      for ( SizeT i =0; i < nx_gdl ; ++i ) {
+	for ( SizeT j = 0; j < ny_gdl ; ++j ) {
+	  for ( SizeT k = 0 ; k < 3 ; ++k) (*res)[3 * (j * nx_gdl + i) + k] = (*bitmap)[3 * ((j+y_11) * nx + (i+x_11)) + k]; 
+	}
+      }
+      GDLDelete(bitmap);
+      // Reflect about y-axis
+      if ( orderVal == 1 ) res->Reverse( 2 );
+
+      if ( tru == 1 ) {
+	return res;
+      } else if ( tru == 2 ) {
+	DUInt* perm = new DUInt[3];
+	perm[0] = 1;
+	perm[1] = 0;
+	perm[2] = 2;
+	return res->Transpose( perm );
+      } else if ( tru == 3 ) {
+	DUInt* perm = new DUInt[3];
+	perm[0] = 1;
+	perm[1] = 2;
+	perm[2] = 0;
+	return res->Transpose( perm );
+      }
     }
+    assert( false );
+    return NULL;
   }
-  assert( false );
-  return NULL;
-}
 
   void loadct( EnvT* e) // = LOADCT_INTERNALGDL for exclusive use by LOADCT
   {
@@ -193,16 +197,16 @@ BaseGDL* tvrd( EnvT* e){
     static int get_namesIx = e->KeywordIx( "GET_NAMES"); 
     bool get_names = e->KeywordPresent( get_namesIx);
     if( get_names)
-    {
-      e->AssureGlobalKW( get_namesIx);
+      {
+	e->AssureGlobalKW( get_namesIx);
 
-      DStringGDL* names = new DStringGDL( nCT, BaseGDL::NOZERO);
-      for( SizeT i=0; i<nCT; ++i)
-        (*names)[ i] = GraphicsDevice::GetCT( i)->Name();
+	DStringGDL* names = new DStringGDL( nCT, BaseGDL::NOZERO);
+	for( SizeT i=0; i<nCT; ++i)
+	  (*names)[ i] = GraphicsDevice::GetCT( i)->Name();
 
-      e->SetKW( get_namesIx, names);
-      return; //correct behaviour.
-    }
+	e->SetKW( get_namesIx, names);
+	return; //correct behaviour.
+      }
 
     if( e->NParam() == 0) return; //FIXME should list tables names, promt for number and load it!
 
@@ -228,8 +232,10 @@ BaseGDL* tvrd( EnvT* e){
     //actually update colors in col0 if needed:
     DLong bottom=0;
     DLong ncolors=ctSize;
-    if ( e->KeywordSet ( "BOTTOM" ) ) e->AssureLongScalarKWIfPresent ( "BOTTOM", bottom );
-    if ( e->KeywordSet ( "NCOLORS" ) ) e->AssureLongScalarKWIfPresent ( "NCOLORS", ncolors );
+    static int bottomIx=e->KeywordIx("BOTTOM");
+    static int ncolorsIx=e->KeywordIx("NCOLORS");
+    if ( e->KeywordSet ( bottomIx ) ) e->AssureLongScalarKWIfPresent ( bottomIx, bottom );
+    if ( e->KeywordSet ( ncolorsIx ) ) e->AssureLongScalarKWIfPresent ( ncolorsIx, ncolors );
     if (bottom < 0) bottom=0;
     if (bottom > ctSize-1) bottom=ctSize-1;
     if (ncolors < 1) ncolors=1;
@@ -245,23 +251,28 @@ BaseGDL* tvrd( EnvT* e){
 
     static int rgbtableIx = e->KeywordIx( "RGB_TABLE");
     if( e->KeywordPresent( rgbtableIx) )
-    {
-      e->AssureGlobalKW( rgbtableIx);
-      DByteGDL* rgbtable = new DByteGDL( dimension(ncolors, 3), BaseGDL::NOZERO);
-      for( SizeT i=0, j=bottom ; j<bottom+ncolors; ++i, ++j)
       {
-        (*rgbtable)[i] = rint[j];
-        (*rgbtable)[i+ncolors] = gint[j];
-        (*rgbtable)[i+2*ncolors] = bint[j];
-      }
-      e->SetKW( rgbtableIx, rgbtable);
-      return; //correct behaviour.
+	e->AssureGlobalKW( rgbtableIx);
+	DByteGDL* rgbtable = new DByteGDL( dimension(ncolors, 3), BaseGDL::NOZERO);
+	for( SizeT i=0, j=bottom ; j<bottom+ncolors; ++i, ++j)
+	  {
+	    (*rgbtable)[i] = rint[j];
+	    (*rgbtable)[i+ncolors] = gint[j];
+	    (*rgbtable)[i+2*ncolors] = bint[j];
+	  }
+	e->SetKW( rgbtableIx, rgbtable);
+	return; //correct behaviour.
     }
-      int nbActiveStreams=actDevice->MaxWin(); //new colormap must be given to *all* streams.
-      for (int i=0; i<nbActiveStreams; ++i) {
-        actStream = actDevice->GetStreamAt(i);
-      if (actStream != NULL) actStream->scmap0( rint, gint, bint, ctSize);
-      }
+    // GD:
+    // new colormap must be given to *all* streams since plplot has a colormap PER STREAM.
+    // (IDL has a colormap PER Device, i.e., all Windows of multiWindow devices.)
+    // However plplot using the crazy old rw color scheme, uses heavily XAllocColor which is a killer for X11 speed.
+    // SetColorMap0() is thus overloaded for X11 devices to *do nothing* (devicex do tricks behind plplot's back most of the time)
+    int nbActiveStreams = actDevice->MaxWin();
+    for (int i = 0; i < nbActiveStreams; ++i) {
+      actStream = actDevice->GetStreamAt(i);
+      if (actStream != NULL) actStream->SetColorMap0(rint, gint, bint, ctSize);
     }
+  }
 } // namespace
-
+     

@@ -43,6 +43,8 @@
 #include "typedefs.hpp"
 #include "gdlexception.hpp"
 
+#include "initsysvar.hpp"
+
 #ifdef _MSC_VER
 #include <algorithm>
 #endif
@@ -52,30 +54,30 @@ const double MMToINCH = 0.039370078 ; // 1./2.54;
 using namespace std;
 
 // Graphic Structures:
-  typedef struct _P_GRAPHICS {
-    DLong background;
-    DFloat charSize;
-    DFloat charThick;
-    DLong clip[6];
-    DLong color;
-    DLong font;
-    DLong lineStyle;
-    DLong multi[5];
-    DLong noClip;
-    DLong noErase;
-    DLong nsum;
-    DFloat position[4];
-    DLong psym;
-    DFloat region[4];
-    DString subTitle;
-    DFloat symSize;
-    DDouble t[4][4];
-    DLong t3d;
-    DFloat thick;
-    DString title;
-    DFloat ticklen;
-    DLong channel;
-  } pstruct ;
+//  typedef struct _P_GRAPHICS {
+//    DLong background;
+//    DFloat charSize;
+//    DFloat charThick;
+//    DLong clip[6];
+//    DLong color;
+//    DLong font;
+//    DLong lineStyle;
+//    DLong multi[5];
+//    DLong noClip;
+//    DLong noErase;
+//    DLong nsum;
+//    DFloat position[4];
+//    DLong psym;
+//    DFloat region[4];
+//    DString subTitle;
+//    DFloat symSize;
+//    DDouble t[4][4];
+//    DLong t3d;
+//    DFloat thick;
+//    DString title;
+//    DFloat ticklen;
+//    DLong channel;
+//  } pstruct ;
 
   typedef struct GDL_BOX {
     bool initialized;
@@ -136,6 +138,8 @@ using namespace std;
     DDouble mmsy; //
     PLFLT wsx;  //in current world coordinates
     PLFLT wsy;
+    PLFLT convx; //symbol size conversion factor, (for PSYMs, not characters: PSYMs are handled by GDL, CHARS by plplot)
+    PLFLT convy; //set only while in 2D mode, used in 2D or 3D mode.
   } gdlCharInfo;
 
 class GDLGStream: public plstream
@@ -155,18 +159,26 @@ protected:
   gdlpage thePage;
   PLStream* pls;
   DFloat thickFactor;
-  
+  PLFLT theCurrentSymSize;
+  bool usedAsPixmap; //for WINDOW,/PIXMAP retains the fact that this is a pixmap (invisible) window.
 public:
 
    GDLGStream( int nx, int ny, const char *driver, const char *file=NULL)
-    : plstream( nx, ny, driver, file), valid( true), thickFactor(1.0)
+    : plstream( nx, ny, driver, file), valid( true), thickFactor(1.0), usedAsPixmap(false)
   {
     if (!checkPlplotDriver(driver))
       ThrowGDLException(std::string("PLplot installation lacks the requested driver: ") + driver);
     gdlDefaultCharInitialized=0;
     thePage.nbPages=0;
+    thePage.length=0;
+    thePage.height=0;
+    thePage.plxoff=0;
+    thePage.plyoff=0;
     theBox.initialized=false;
     plgpls( &pls);
+    //you can debug plplot things with
+    //    pls->verbose=1;
+
 	if (GDL_DEBUG_PLSTREAM) printf(" new GDLGstream( %d , %d , %s ):pls=%p \n", nx, ny, driver, (void *)pls);
 
   }
@@ -221,9 +233,6 @@ public:
       free(devnames);
     }
 
-    // for debug
-    std::vector<std::string> devnamesDbg = devNames;
-
     return std::find( devNames.begin(), devNames.end(), std::string( driver)) != devNames.end();
   }
 
@@ -232,14 +241,17 @@ public:
   virtual void Init()=0;
 
   // called after draw operation
-  virtual void Update() {}
+  //virtual void Update() {}
+  virtual void Update(){plstream::cmd(PLESC_EXPOSE, NULL);}
   
   virtual void EventHandler() {}
 
-  virtual void GetGeometry( long& xSize, long& ySize, long& xoff, long& yoff);
+  virtual void GetGeometry( long& xSize, long& ySize);
   virtual unsigned long GetWindowDepth () {return 0;}
   virtual DLong GetVisualDepth() {return -1;}
   virtual DString GetVisualName() {return "";}
+  virtual BaseGDL* GetFontnames(DString pattern) {return NULL;}
+  virtual DLong GetFontnum(DString pattern) {return -1;}
   virtual bool UnsetFocus(){return false;}
   virtual bool SetBackingStore(int value){return false;}
   virtual bool SetGraphicsFunction(long value ){return false;}
@@ -249,7 +261,7 @@ public:
   virtual void eop()          { plstream::eop();}
   virtual void SetDoubleBuffering() {}
   virtual void UnSetDoubleBuffering() {}
-  virtual bool HasDoubleBuffering() {return false;}
+  virtual bool HasDoubleBuffering() {return pls->db;}
   virtual bool HasSafeDoubleBuffering() {return false;}
   virtual void Raise()         {}
   virtual void Lower()        {}
@@ -262,8 +274,10 @@ public:
   virtual void Clear( DLong chan)          {}
   virtual bool PaintImage(unsigned char *idata, PLINT nx, PLINT ny, DLong *pos, DLong tru, DLong chan){return false;}
   virtual bool HasCrossHair() {return false;}
-  virtual void UnMapWindow() {}
+  virtual void UnMapWindow() {usedAsPixmap=true;} 
+  bool IsPixmapWindow() {return usedAsPixmap;}
   virtual BaseGDL* GetBitmapData(){return NULL;}
+  virtual void SetCurrentFont(std::string fontname){}//do nothing
   bool GetRegion(DLong& xs, DLong& ys, DLong& nx, DLong& ny);//{return false;}
   bool SetRegion(DLong& xd, DLong& yd, DLong& nx, DLong& ny);//{return false;}
 
@@ -280,6 +294,16 @@ public:
     if (((theBox.nx1==0) && (theBox.nx2==0)) 
 	|| ((theBox.ny1==0) && (theBox.ny2==0))) return false; else return true;
   }
+  inline PLFLT getPsymConvX(){return theCurrentChar.convx;}
+  inline PLFLT getPsymConvY(){return theCurrentChar.convy;}
+  inline void setSymbolSizeConversionFactors(){
+    PLFLT symsize=this->getSymbolSize();
+    theCurrentChar.convx=(0.5*symsize*(this->wCharLength()/this->charScale())); //be dependent only on symsize!
+    theCurrentChar.convy=(0.5*symsize*(this->wCharHeight()/this->charScale()));
+    PLFLT wun, wdeux, wtrois, wquatre; //take care of axes world orientation!
+    this->pageWorldCoordinates(wun, wdeux, wtrois, wquatre);
+    if ((wdeux-wun)<0) theCurrentChar.convx*=-1.0;
+    if ((wquatre-wtrois)<0) theCurrentChar.convy*=-1.0;} 
   inline PLFLT charScale(){return theCurrentChar.scale;}
   inline PLFLT nCharWidth(){return theCurrentChar.ndsx;}
   inline PLFLT nCharHeight(){return theCurrentChar.ndsy;}
@@ -586,12 +610,15 @@ public:
   {
     if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"updatePageInfo():\n");
     if (thePage.nbPages==0) {if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"            FAILED\n");return false;}
-    long xsize,ysize,xoff,yoff;
-    GetGeometry(xsize,ysize,xoff,yoff);
+    long xsize,ysize;
+    GetGeometry(xsize,ysize);
+    if (thePage.length==xsize && thePage.height==ysize ) return true;
     thePage.length=xsize;
     thePage.height=ysize;
-    thePage.plxoff=xoff;
-    thePage.plyoff=yoff;
+    (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("X_SIZE"), 0)))[0] = xsize;
+    (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("Y_SIZE"), 0)))[0] = ysize;
+    (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("X_VSIZE"), 0)))[0] = xsize;
+    (*static_cast<DLongGDL*>(SysVar::D()->GetTag(SysVar::D()->Desc()->TagIndex("Y_VSIZE"), 0)))[0] = ysize;
     if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"             %fx%f device units.\n",thePage.length, thePage.height);
     return true;
   }
@@ -778,6 +805,8 @@ public:
   // SA: overloading plplot methods in order to handle IDL-plplot extended
   // text formating syntax conversion
   bool TranslateFormatCodes(const char *text, std::string &out);
+  void setSymbolSize( PLFLT scale );
+  PLFLT getSymbolSize();
   void mtex( const char *side, PLFLT disp, PLFLT pos, PLFLT just,
                          const char *text);
   void ptex( PLFLT x, PLFLT y, PLFLT dx, PLFLT dy, PLFLT just,
@@ -812,7 +841,7 @@ public:
         thePage.xsizemm=thePage.length/thePage.xdpmm;
         thePage.ysizemm=thePage.height/thePage.ydpmm;
         if (GDL_DEBUG_PLSTREAM) fprintf(stderr,"         device resolution [%f,%f]mm^-1, device size [%f,%f], [%f,%f] mm\n",
-                thePage.xdpmm,thePage.ydpmm,thePage.length,thePage.height,thePage.xsizemm,thePage.ysizemm);
+         thePage.xdpmm,thePage.ydpmm,thePage.length,thePage.height,thePage.xsizemm,thePage.ysizemm);
         thePage.subpage.dxoff=offx_mm*thePage.xdpmm;
         thePage.subpage.dyoff=offy_mm*thePage.ydpmm;
         thePage.subpage.dxsize=bxsize_mm*thePage.xdpmm;
@@ -839,6 +868,26 @@ public:
   {
       thickFactor=tf;
   }
+
+  //GD: enables overloading scmap0,1... to accelerate plots for X11 and possibly others
+  // Set color map 0 colors by 8 bit RGB values
+  virtual void SetColorMap0( const PLINT *r, const PLINT *g, const PLINT *b, PLINT ncol0 ) {
+   plstream::scmap0( r, g, b, ncol0);
+  }
+  // Set color map 1 colors by 8 bit RGB values
+  virtual void SetColorMap1( const PLINT *r, const PLINT *g, const PLINT *b, PLINT ncol1 ) {
+   plstream::scmap1( r, g, b, ncol1);
+  }
+  // Set color map 1 colors using a piece-wise linear relationship between
+  // intensity [0,1] (cmap 1 index) and position in HLS or RGB color space.
+  virtual void SetColorMap1l( bool itype, PLINT npts, const PLFLT *intensity, const PLFLT *coord1, const PLFLT *coord2, const PLFLT *coord3, const bool *rev = NULL ) {
+   plstream::scmap1l(itype,npts,intensity,coord1,coord2,coord3,rev);
+  }
+  // Set number of colors in cmap 1
+  virtual void SetColorMap1n( PLINT ncol1 ){
+   plstream::scmap1n(ncol1);
+  }
+
 
 };
 
